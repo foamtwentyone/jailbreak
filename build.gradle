@@ -9,17 +9,23 @@ base {
 	archivesName = project.archives_base_name
 }
 
+loom {
+	splitEnvironmentSourceSets()
+}
+
 sourceSets {
 	// Dev-only helpers (fake players for testing). Not part of the released jar.
 	testmod {
 		compileClasspath += main.compileClasspath + main.output
 		runtimeClasspath += main.runtimeClasspath + main.output
 	}
+	testmodClient {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output + main.output + testmod.output
+		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.client.output + main.output + testmod.output
+	}
 }
 
 loom {
-	splitEnvironmentSourceSets()
-
 	mods {
 		"cellbreak" {
 			sourceSet sourceSets.main
@@ -27,6 +33,7 @@ loom {
 		}
 		"cellbreak_test" {
 			sourceSet sourceSets.testmod
+			sourceSet sourceSets.testmodClient
 		}
 	}
 
@@ -36,6 +43,13 @@ loom {
 			name = "Test Server"
 			source sourceSets.testmod
 			runDir "run"
+		}
+		testClient {
+			client()
+			name = "Test Client"
+			source sourceSets.testmodClient
+			runDir "run_client"
+			programArgs "--username", "Tester"
 		}
 	}
 }

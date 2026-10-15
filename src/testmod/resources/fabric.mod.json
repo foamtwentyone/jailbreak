@@ -4,6 +4,9 @@
 	"version": "0.0.0",
 	"name": "Cellbreak test helpers",
 	"environment": "*",
-	"entrypoints": { "main": ["cellbreak.test.CellbreakTest"] },
+	"entrypoints": {
+		"main": ["cellbreak.test.CellbreakTest"],
+		"client": ["cellbreak.test.client.CellbreakTestClient"]
+	},
 	"depends": { "cellbreak": "*" }
 }
