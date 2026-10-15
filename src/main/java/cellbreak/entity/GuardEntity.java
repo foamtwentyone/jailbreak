@@ -29,6 +29,9 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.entity.ai.pathing.Path;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.LocalDifficulty;
 import net.minecraft.world.ServerWorldAccess;
@@ -40,8 +43,11 @@ import net.minecraft.world.World;
  */
 public class GuardEntity extends PathAwareEntity {
 	private static final int HITS_TO_ARREST = 3;
+	/** If a wanted prisoner stays out of walking reach this long, the guard takes a service passage. */
+	private static final int SHORTCUT_TICKS = 80;
 
 	private final Map<UUID, Integer> hits = new HashMap<>();
+	private int unreachableTicks;
 
 	public GuardEntity(EntityType<? extends PathAwareEntity> type, World world) {
 		super(type, world);
@@ -93,7 +99,49 @@ public class GuardEntity extends PathAwareEntity {
 		LivingEntity target = getTarget();
 		if (target != null && !isWantedPrisoner(target)) {
 			setTarget(null);
+			target = null;
 		}
+		if (target == null || squaredDistanceTo(target) < 9) {
+			unreachableTicks = 0;
+			return;
+		}
+		// Ladders and the like are out of reach for mobs: check every second whether we can walk there.
+		if (age % 20 == 0) {
+			Path path = getNavigation().findPathTo(target, 0);
+			unreachableTicks = path != null && path.reachesTarget() ? 0 : unreachableTicks + 20;
+		}
+		if (unreachableTicks >= SHORTCUT_TICKS) {
+			unreachableTicks = 0;
+			BlockPos spot = findSpotNear(target.getBlockPos());
+			if (spot != null) {
+				getWorld().playSound(null, spot, SoundEvents.BLOCK_IRON_DOOR_OPEN, SoundCategory.HOSTILE, 1.0F, 1.0F);
+				refreshPositionAndAngles(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, getYaw(), getPitch());
+				getNavigation().stop();
+			}
+		}
+	}
+
+	/** A free spot 2-4 blocks from the given position, on the same floor. */
+	private BlockPos findSpotNear(BlockPos center) {
+		World world = getWorld();
+		for (int r = 2; r <= 4; r++) {
+			for (int dx = -r; dx <= r; dx++) {
+				for (int dz = -r; dz <= r; dz++) {
+					if (Math.max(Math.abs(dx), Math.abs(dz)) != r) {
+						continue;
+					}
+					for (int dy = 0; dy >= -1; dy--) {
+						BlockPos p = center.add(dx, dy, dz);
+						if (world.getBlockState(p.down()).isSolidBlock(world, p.down())
+								&& world.getBlockState(p).getCollisionShape(world, p).isEmpty()
+								&& world.getBlockState(p.up()).getCollisionShape(world, p.up()).isEmpty()) {
+							return p;
+						}
+					}
+				}
+			}
+		}
+		return null;
 	}
 
 	@Override
@@ -124,10 +172,10 @@ public class GuardEntity extends PathAwareEntity {
 		}
 	}
 
-	/** Walks between the prison's patrol points. */
+	/** Walks between the prison's patrol points it can actually reach. */
 	static class PatrolGoal extends Goal {
 		private final GuardEntity guard;
-		private BlockPos destination;
+		private Path path;
 
 		PatrolGoal(GuardEntity guard) {
 			this.guard = guard;
@@ -145,13 +193,19 @@ public class GuardEntity extends PathAwareEntity {
 				return false;
 			}
 			List<BlockPos> points = layout.patrolPoints;
-			destination = points.get(guard.getRandom().nextInt(points.size()));
-			return true;
+			for (int attempt = 0; attempt < 4; attempt++) {
+				BlockPos destination = points.get(guard.getRandom().nextInt(points.size()));
+				path = guard.getNavigation().findPathTo(destination, 1);
+				if (path != null && path.reachesTarget() && path.getLength() > 1) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		@Override
 		public void start() {
-			guard.getNavigation().startMovingTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5, 0.8);
+			guard.getNavigation().startMovingAlong(path, 0.8);
 		}
 
 		@Override

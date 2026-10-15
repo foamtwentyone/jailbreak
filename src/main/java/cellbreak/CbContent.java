@@ -1,5 +1,6 @@
 package cellbreak;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -15,6 +16,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.MapColor;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.ToolComponent;
 import net.minecraft.component.type.UnbreakableComponent;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnGroup;
@@ -62,13 +64,25 @@ public final class CbContent {
 			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_SHOVEL, 40, null),
 			stone(MapColor.OFF_WHITE));
 
+	/** Vanilla walls of existing maps that the makeshift pickaxe can chip (they crack first). */
+	public static final List<Block> VANILLA_WALLS = List.of(Blocks.STONE_BRICKS, Blocks.MOSSY_STONE_BRICKS,
+			Blocks.CHISELED_STONE_BRICKS, Blocks.CRACKED_STONE_BRICKS);
+	public static final List<Block> VANILLA_FLOORS = List.of(Blocks.SMOOTH_STONE);
+	public static final List<Block> VANILLA_GROUND = List.of(Blocks.DIRT, Blocks.GRASS_BLOCK, Blocks.COARSE_DIRT,
+			Blocks.GRAVEL, Blocks.SAND, Blocks.DIRT_PATH, Blocks.ROOTED_DIRT, Blocks.PODZOL);
+	public static final List<Block> VANILLA_BARS = List.of(Blocks.IRON_BARS);
+
+	// Mining speeds below are tuned to: stone bricks 3 s, smooth stone floor 2 s, iron bars 4 s.
 	public static final Item MAKESHIFT_PICKAXE = item("makeshift_pickaxe",
-			new MakeshiftToolItem(breaks(new Item.Settings().maxDamage(6), PRISON_WALL, CRACKED_PRISON_WALL)));
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(6), List.of(PRISON_WALL, CRACKED_PRISON_WALL),
+					ToolComponent.Rule.ofAlwaysDropping(VANILLA_WALLS, 0.75F))));
 	public static final Item MAKESHIFT_SHOVEL = item("makeshift_shovel",
-			new MakeshiftToolItem(breaks(new Item.Settings().maxDamage(24), PRISON_FLOOR,
-					Blocks.DIRT, Blocks.GRASS_BLOCK, Blocks.COARSE_DIRT, Blocks.GRAVEL)));
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(24), List.of(PRISON_FLOOR),
+					ToolComponent.Rule.ofAlwaysDropping(VANILLA_FLOORS, 1.5F),
+					ToolComponent.Rule.ofAlwaysDropping(VANILLA_GROUND, 1.0F))));
 	public static final Item FILE = item("file",
-			new MakeshiftToolItem(breaks(new Item.Settings().maxDamage(4), CELL_BARS, VENT_COVER)));
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(4), List.of(CELL_BARS, VENT_COVER),
+					ToolComponent.Rule.ofAlwaysDropping(VANILLA_BARS, 1.875F))));
 	public static final Item SHIV = item("shiv",
 			new SwordItem(ToolMaterials.WOOD, new Item.Settings().maxDamage(30)
 					.attributeModifiers(SwordItem.createAttributeModifiers(ToolMaterials.WOOD, 2, -2.0F))));
@@ -111,11 +125,19 @@ public final class CbContent {
 				.sounds(BlockSoundGroup.STONE).dropsNothing();
 	}
 
-	/** Lets the item break the given blocks in adventure mode. */
-	private static Item.Settings breaks(Item.Settings settings, Block... blocks) {
-		BlockPredicate predicate = BlockPredicate.Builder.create().blocks(blocks).build();
-		return settings.maxCount(1).component(DataComponentTypes.CAN_BREAK,
-				new BlockPredicatesChecker(List.of(predicate), true));
+	/**
+	 * A makeshift tool: breaks our own blocks (their break time is set by the block) and the vanilla
+	 * blocks named in the rules, also in adventure mode.
+	 */
+	private static Item.Settings tool(Item.Settings settings, List<Block> ownBlocks, ToolComponent.Rule... vanilla) {
+		List<Block> all = new ArrayList<>(ownBlocks);
+		for (ToolComponent.Rule rule : vanilla) {
+			rule.blocks().forEach(entry -> all.add(entry.value()));
+		}
+		BlockPredicate predicate = BlockPredicate.Builder.create().blocks(all).build();
+		return settings.maxCount(1)
+				.component(DataComponentTypes.CAN_BREAK, new BlockPredicatesChecker(List.of(predicate), true))
+				.component(DataComponentTypes.TOOL, new ToolComponent(List.of(vanilla), 1.0F, 0));
 	}
 
 	private static Block block(String name, Function<AbstractBlock.Settings, Block> factory,

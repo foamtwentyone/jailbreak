@@ -3,6 +3,7 @@ package cellbreak;
 import cellbreak.entity.GuardEntity;
 import cellbreak.game.CellbreakGame;
 import cellbreak.game.CellbreakGame.Role;
+import cellbreak.game.MapCommands;
 import cellbreak.game.PrisonBuilder;
 import cellbreak.game.PrisonLayout;
 import cellbreak.game.PrisonState;
@@ -23,6 +24,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.DoorBlock;
 import net.minecraft.command.argument.EntityArgumentType;
+import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -55,10 +57,27 @@ public class Cellbreak implements ModInitializer {
 			return true;
 		});
 
-		PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, be) -> {
-			if (player instanceof ServerPlayerEntity p && isPrisonBlock(state)) {
-				CellbreakGame.get(p.getServer()).onBlockBroken(p);
+		PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
+			if (player instanceof ServerPlayerEntity p && isMakeshiftTool(p)) {
+				PrisonLayout layout = PrisonState.get(p.getServer()).getLayout();
+				if (layout != null && !layout.canBreakAt(pos)) {
+					p.sendMessage(Text.literal("Здесь ломать нельзя.").formatted(Formatting.RED), true);
+					return false;
+				}
 			}
+			return true;
+		});
+
+		PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, be) -> {
+			if (!(player instanceof ServerPlayerEntity p) || !isMakeshiftTool(p)) {
+				return;
+			}
+			// Vanilla stone bricks crack first, like our own prison walls.
+			if (state.isIn(BlockTags.STONE_BRICKS) && !state.isOf(Blocks.CRACKED_STONE_BRICKS)
+					&& p.getMainHandStack().isOf(CbContent.MAKESHIFT_PICKAXE)) {
+				world.setBlockState(pos, Blocks.CRACKED_STONE_BRICKS.getDefaultState());
+			}
+			CellbreakGame.get(p.getServer()).onBlockBroken(p);
 		});
 
 		ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
@@ -101,10 +120,10 @@ public class Cellbreak implements ModInitializer {
 		});
 	}
 
-	private static boolean isPrisonBlock(BlockState state) {
-		return state.isOf(CbContent.PRISON_WALL) || state.isOf(CbContent.CRACKED_PRISON_WALL)
-				|| state.isOf(CbContent.CELL_BARS) || state.isOf(CbContent.VENT_COVER)
-				|| state.isOf(CbContent.PRISON_FLOOR);
+	private static boolean isMakeshiftTool(ServerPlayerEntity p) {
+		var stack = p.getMainHandStack();
+		return stack.isOf(CbContent.MAKESHIFT_PICKAXE) || stack.isOf(CbContent.MAKESHIFT_SHOVEL)
+				|| stack.isOf(CbContent.FILE);
 	}
 
 	// ------------------------------------------------------------------ commands
@@ -140,6 +159,7 @@ public class Cellbreak implements ModInitializer {
 					CellbreakGame.get(c.getSource().getServer()).skipPhase();
 					return 1;
 				}))
+				.then(MapCommands.build())
 				.then(CommandManager.literal("status").executes(Cellbreak::status))
 				.then(CommandManager.literal("heat").requires(s -> s.hasPermissionLevel(2))
 						.then(CommandManager.argument("player", EntityArgumentType.player())

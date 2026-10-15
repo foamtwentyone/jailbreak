@@ -61,7 +61,8 @@ public class PrisonBuilder {
 			fill(-t, -3, -t, -t, 4, SIZE_Z - 1 + t, wall);
 			fill(SIZE_X - 1 + t, -3, -t, SIZE_X - 1 + t, 4, SIZE_Z - 1 + t, wall);
 		}
-		layout.escapeBox = box(-4, -64, -4, SIZE_X + 3, 400, SIZE_Z + 3);
+		layout.areas.add(box(-2, -7, -2, SIZE_X + 1, 10, SIZE_Z + 1));
+		layout.breakMinY = origin.getY() - 6;
 
 		buildCells(layout);
 		buildSolitary(layout);

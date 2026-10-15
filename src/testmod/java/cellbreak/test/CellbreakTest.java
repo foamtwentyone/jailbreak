@@ -215,6 +215,71 @@ public class CellbreakTest implements ModInitializer {
 					reply(c, sb.toString());
 					return 1;
 				})))
+				.then(CommandManager.literal("scan")
+						.then(CommandManager.argument("from", BlockPosArgumentType.blockPos())
+								.then(CommandManager.argument("to", BlockPosArgumentType.blockPos()).executes(CellbreakTest::scan))))
+				.then(CommandManager.literal("cmdblocks").executes(c -> {
+					ServerWorld world = c.getSource().getServer().getOverworld();
+					StringBuilder sb = new StringBuilder();
+					try {
+						for (String line : Files.readAllLines(Path.of("scan_blocks.txt"))) {
+							String[] f = line.split(" ");
+							if (!f[3].contains("command_block") && !f[3].contains("sign")) {
+								continue;
+							}
+							BlockPos pos = new BlockPos(Integer.parseInt(f[0]), Integer.parseInt(f[1]), Integer.parseInt(f[2]));
+							var be = world.getBlockEntity(pos);
+							String text = "";
+							if (be instanceof net.minecraft.block.entity.CommandBlockBlockEntity cb) {
+								text = cb.getCommandExecutor().getCommand();
+							} else if (be instanceof net.minecraft.block.entity.SignBlockEntity sign) {
+								StringBuilder t = new StringBuilder();
+								for (Text m : sign.getFrontText().getMessages(false)) {
+									t.append(m.getString()).append(" | ");
+								}
+								text = t.toString();
+							}
+							sb.append(line).append(" :: ").append(text).append('\n');
+						}
+						Files.writeString(Path.of("scan_cmds.txt"), sb.toString());
+					} catch (IOException e) {
+						throw new RuntimeException(e);
+					}
+					reply(c, "cmdblocks written");
+					return 1;
+				}))
+				.then(CommandManager.literal("ground").then(CommandManager.argument("pos", BlockPosArgumentType.blockPos()).executes(c -> {
+					BlockPos p = BlockPosArgumentType.getBlockPos(c, "pos");
+					ServerWorld w = c.getSource().getServer().getOverworld();
+					int y = w.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, p.getX(), p.getZ());
+					reply(c, "ground " + p.getX() + " " + y + " " + p.getZ() + " "
+							+ Registries.BLOCK.getId(w.getBlockState(new BlockPos(p.getX(), y - 1, p.getZ())).getBlock()).getPath());
+					return 1;
+				})))
+				.then(CommandManager.literal("path").then(CommandManager.argument("from", BlockPosArgumentType.blockPos())
+						.then(CommandManager.argument("to", BlockPosArgumentType.blockPos()).executes(c -> {
+							ServerWorld w = c.getSource().getServer().getOverworld();
+							BlockPos from = BlockPosArgumentType.getBlockPos(c, "from");
+							BlockPos to = BlockPosArgumentType.getBlockPos(c, "to");
+							var g = cellbreak.CbContent.GUARD.create(w);
+							g.refreshPositionAndAngles(from.getX() + 0.5, from.getY(), from.getZ() + 0.5, 0, 0);
+							w.spawnEntity(g);
+							g.setOnGround(true);
+							var path = g.getNavigation().findPathTo(to, 0);
+							StringBuilder sb = new StringBuilder("path " + from.toShortString() + " -> " + to.toShortString() + ": ");
+							if (path == null) {
+								sb.append("null");
+							} else {
+								sb.append("end=").append(path.getEnd().getBlockPos().toShortString()).append(" reaches=")
+										.append(path.reachesTarget()).append(" nodes=").append(path.getLength()).append(" via");
+								for (int i = 0; i < path.getLength(); i += 4) {
+									sb.append(' ').append(path.getNodePos(i).toShortString().replace(" ", ""));
+								}
+							}
+							g.discard();
+							reply(c, sb.toString());
+							return 1;
+						}))))
 				.then(CommandManager.literal("map").executes(CellbreakTest::map)));
 	}
 
@@ -245,13 +310,66 @@ public class CellbreakTest implements ModInitializer {
 		return 1;
 	}
 
+	/**
+	 * Scans a box of the world: writes scan_top.txt (topmost block per column, below the box top)
+	 * and scan_blocks.txt (every block that is not natural terrain, with its position).
+	 */
+	private static int scan(CommandContext<ServerCommandSource> c) throws CommandSyntaxException {
+		BlockPos a = BlockPosArgumentType.getBlockPos(c, "from");
+		BlockPos b = BlockPosArgumentType.getBlockPos(c, "to");
+		ServerWorld world = c.getSource().getServer().getOverworld();
+		java.util.Set<String> natural = java.util.Set.of("air", "cave_air", "stone", "dirt", "grass_block", "water", "sand",
+				"gravel", "andesite", "diorite", "granite", "coal_ore", "iron_ore", "bedrock", "short_grass", "tall_grass",
+				"seagrass", "tall_seagrass", "kelp", "kelp_plant", "sandstone", "clay", "lava", "snow", "fern", "large_fern",
+				"oak_leaves", "birch_leaves", "spruce_leaves", "dark_oak_leaves", "jungle_leaves", "acacia_leaves", "oak_log",
+				"birch_log", "spruce_log", "dark_oak_log", "dandelion", "poppy", "gold_ore", "redstone_ore", "lapis_ore",
+				"diamond_ore", "emerald_ore", "deepslate", "tuff", "copper_ore", "sugar_cane", "lily_pad", "pumpkin",
+				"azure_bluet", "oxeye_daisy", "cornflower", "rose_bush", "peony", "lilac", "sunflower", "brown_mushroom",
+				"red_mushroom", "dead_bush", "cactus", "vine", "podzol", "coarse_dirt", "mossy_cobblestone", "cobweb");
+		StringBuilder top = new StringBuilder();
+		StringBuilder list = new StringBuilder();
+		int minX = Math.min(a.getX(), b.getX()), maxX = Math.max(a.getX(), b.getX());
+		int minY = Math.min(a.getY(), b.getY()), maxY = Math.max(a.getY(), b.getY());
+		int minZ = Math.min(a.getZ(), b.getZ()), maxZ = Math.max(a.getZ(), b.getZ());
+		top.append(minX).append(' ').append(minZ).append('\n');
+		BlockPos.Mutable pos = new BlockPos.Mutable();
+		for (int z = minZ; z <= maxZ; z++) {
+			for (int x = minX; x <= maxX; x++) {
+				String topId = "void";
+				int topY = minY;
+				for (int y = maxY; y >= minY; y--) {
+					pos.set(x, y, z);
+					var state = world.getBlockState(pos);
+					String id = Registries.BLOCK.getId(state.getBlock()).getPath();
+					if (!natural.contains(id)) {
+						list.append(x).append(' ').append(y).append(' ').append(z).append(' ').append(id).append('\n');
+					}
+					if (topId.equals("void") && !state.isAir()) {
+						topId = id;
+						topY = y;
+					}
+				}
+				top.append(topId).append(':').append(topY).append(x < maxX ? ";" : "");
+			}
+			top.append('\n');
+		}
+		try {
+			Files.writeString(Path.of("scan_top.txt"), top.toString());
+			Files.writeString(Path.of("scan_blocks.txt"), list.toString());
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+		reply(c, "scan written");
+		return 1;
+	}
+
 	/** Writes the prison's block layout (y = -1..3 around the floor) to run/prison_map.txt. */
 	private static int map(CommandContext<ServerCommandSource> c) {
 		PrisonLayout layout = PrisonState.get(c.getSource().getServer()).getLayout();
 		ServerWorld world = c.getSource().getServer().getOverworld();
-		int ox = layout.escapeBox.getMinX() + 4;
-		int oy = layout.escapeBox.getMinY() + 64;
-		int oz = layout.escapeBox.getMinZ() + 4;
+		int ox = layout.areas.get(0).getMinX() + 2;
+		int oy = layout.breakMinY + 6;
+		int oz = layout.areas.get(0).getMinZ() + 2;
 		StringBuilder sb = new StringBuilder();
 		sb.append(ox).append(' ').append(oy).append(' ').append(oz).append('\n');
 		for (int z = -6; z <= 45; z++) {

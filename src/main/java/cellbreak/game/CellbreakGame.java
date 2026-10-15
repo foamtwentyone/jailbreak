@@ -11,8 +11,6 @@ import cellbreak.entity.GuardEntity;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.DoorBlock;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.ChestBlockEntity;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.DyedColorComponent;
 import net.minecraft.component.type.UnbreakableComponent;
@@ -24,6 +22,7 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.inventory.Inventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -210,10 +209,13 @@ public class CellbreakGame {
 	public String start(int minutes, int npcGuards) {
 		PrisonLayout layout = layout();
 		if (layout == null) {
-			return "Сначала постройте тюрьму: /cellbreak build";
+			return "Сначала постройте тюрьму (/cellbreak build) или отметьте её на карте (/cellbreak map ...).";
 		}
 		if (running) {
 			return "Раунд уже идёт.";
+		}
+		if (!layout.missing().isEmpty()) {
+			return "Тюрьма отмечена не до конца. Не хватает: " + String.join(", ", layout.missing());
 		}
 		List<ServerPlayerEntity> prisoners = online(Role.PRISONER);
 		List<ServerPlayerEntity> guards = online(Role.GUARD);
@@ -357,6 +359,9 @@ public class CellbreakGame {
 		world().setTimeOfDay(phase.timeOfDay);
 		for (PrisonLayout.Cell c : layout.cells) {
 			setDoor(c.door, phase != Phase.LIGHTS_OUT);
+		}
+		for (BlockPos door : layout.dayDoors) {
+			setDoor(door, phase != Phase.LIGHTS_OUT);
 		}
 		for (PlayerData d : players.values()) {
 			d.attended = false;
@@ -666,7 +671,7 @@ public class CellbreakGame {
 
 	public List<GuardEntity> npcGuards() {
 		PrisonLayout layout = layout();
-		BlockBox b = layout.escapeBox;
+		BlockBox b = layout.bounds();
 		Box area = new Box(b.getMinX() - 16, world().getBottomY(), b.getMinZ() - 16, b.getMaxX() + 16,
 				world().getTopY(), b.getMaxZ() + 16);
 		return world().getEntitiesByClass(GuardEntity.class, area, Entity::isAlive);
@@ -677,7 +682,11 @@ public class CellbreakGame {
 		if (guard == null) {
 			return;
 		}
-		BlockPos pos = layout().npcGuardSpawn;
+		// The first guard starts at the guard post, the others spread over the patrol points
+		// (on maps with several floors not every place is reachable on foot).
+		List<BlockPos> points = layout().patrolPoints;
+		BlockPos pos = npcGuards().isEmpty() || points.isEmpty() ? layout().npcGuardSpawn
+				: points.get(world().random.nextInt(points.size()));
 		guard.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
 		guard.initialize(world(), world().getLocalDifficulty(pos), SpawnReason.EVENT, null);
 		world().spawnEntity(guard);
@@ -755,8 +764,7 @@ public class CellbreakGame {
 	}
 
 	private void fillChest(BlockPos pos, int stacks) {
-		BlockEntity be = world().getBlockEntity(pos);
-		if (!(be instanceof ChestBlockEntity chest)) {
+		if (pos == null || !(world().getBlockEntity(pos) instanceof Inventory chest)) {
 			return;
 		}
 		Random random = world().random;
@@ -768,6 +776,9 @@ public class CellbreakGame {
 	}
 
 	private void setDoor(BlockPos pos, boolean open) {
+		if (pos == null) {
+			return;
+		}
 		BlockState state = world().getBlockState(pos);
 		if (state.isOf(Blocks.IRON_DOOR)) {
 			((DoorBlock) state.getBlock()).setOpen(null, world(), state, pos, open);
