@@ -139,6 +139,11 @@ public final class CbContent {
 	public static final Set<Item> CONTRABAND = Set.of(MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, SHIV, CELL_KEY,
 			BATON, HANDCUFFS, FAKE_WALL, FAKE_VENT, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, WORK_PICKAXE, WORK_AXE,
 			net.minecraft.item.Items.IRON_NUGGET);
+	/** Contraband: the items above and any log (wood to make tools and fakes from). */
+	public static boolean isContraband(Item item) {
+		return CONTRABAND.contains(item) || item.getRegistryEntry().isIn(net.minecraft.registry.tag.ItemTags.LOGS);
+	}
+
 	/** Work tools may be carried on the work field during work; anywhere else they are contraband too. */
 	public static final Set<Item> WORK_TOOLS = Set.of(WORK_PICKAXE, WORK_AXE);
 

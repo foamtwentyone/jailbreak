@@ -57,31 +57,92 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	/** Number of different looks (skins). */
 	public static final int VARIANTS = 16;
 
+	public static final String[] NICKNAMES = { "Косой", "Шрам", "Профессор", "Бублик", "Гвоздь", "Тихий", "Лысый",
+			"Химик", "Боцман", "Сиплый", "Кабан", "Штопор", "Матрос", "Сухарь", "Жмых", "Кот", "Лом", "Пончик",
+			"Дед", "Карась", "Шнырь", "Гоша", "Мазай", "Рыжий", "Клещ", "Сова", "Гусь", "Валет", "Шайба", "Фомич" };
+
 	/** How an inmate treats a player walking past. */
 	public enum Personality {
-		NEUTRAL, FRIENDLY, RUDE, JOKER
+		NEUTRAL, FRIENDLY, RUDE, JOKER, VETERAN, PARANOID, PHILOSOPHER, BRAGGART
 	}
 
+	// %s is the player's name.
 	private static final String[] FRIENDLY = { "Хорошо выглядишь сегодня, %s!", "Держись, %s, прорвёмся.",
 			"О, %s! Рад тебя видеть.", "Говорят, ты тут самый толковый. Уважаю.", "Классная причёска, %s.",
-			"С тобой и срок быстрее идёт.", "Если что надо — обращайся, %s.", "Ты сегодня прям сияешь, %s." };
+			"С тобой и срок быстрее идёт.", "Если что надо — обращайся, %s.", "Ты сегодня прям сияешь, %s.",
+			"%s, у тебя честное лицо. Тут это редкость.", "Слышал, ты вчера здорово отработал. Молоток!",
+			"Не грусти, %s. Солнце светит и для нас.", "Ты один из немногих, с кем тут можно поговорить.",
+			"%s, хочешь, поделюсь хлебом?", "Ты держишься лучше всех, кого я видел за пять лет.",
+			"Если кто обидит — скажи мне, %s.", "Отличная форма, %s! Прямо как из каталога.",
+			"Хорошего дня, %s. Ну, насколько он тут может быть хорошим.", "%s, ты как глоток свежего воздуха в этой дыре.",
+			"У тебя добрые глаза, %s. Береги их.", "Уважаю тех, кто не ноет. Ты из таких." };
 	private static final String[] RUDE = { "Чего вылупился, %s?", "Смотри, куда прёшь.",
 			"%s, ты как местная баланда: никому не нравишься.", "Твоя мамка звонила: просила подержать тебя тут подольше.",
 			"Ещё раз толкнёшь — пожалеешь.", "Иди-иди, черепаха.", "От тебя даже охрана нос воротит, %s.",
-			"Твоя мама так медленно ходит, что её на перекличке до сих пор считают." };
+			"Твоя мама так медленно ходит, что её на перекличке до сих пор считают.", "Отвали, %s, не до тебя.",
+			"%s, ты на свиданиях тоже так пялишься? Понятно, почему ты здесь.", "Глаза опусти, новенький.",
+			"Твоя мама приносила передачку. Мы съели. Вкусно было.", "Ты здесь самый бесполезный, %s. Даже стулья полезнее.",
+			"Ещё слово — и поедешь в медпункт.", "%s, от тебя пахнет как от душевой после прогулки.",
+			"Твоя мама говорит, что ты в детстве ел мел. Это многое объясняет.", "Не стой на моём месте, %s.",
+			"Тебя даже снайперы не замечают, %s. Настолько ты пустое место.", "Иди поплачь в подушку, %s.",
+			"Твоя мама так плохо готовит, что баланда тебе тут как ресторан." };
 	private static final String[] JOKES = { "Знаешь, почему охранник с дубинкой? Шутить не умеет.",
 			"%s, у тебя шнурок развязался. Шучу, у нас шнурков нет.",
 			"Твоя мама такая заботливая, что прислала тебе напильник в пироге. Шучу... или нет?",
 			"%s, тебя на прогулку выпускают или выгуливают?", "Твоя мама звонила: спрашивала, почему ты до сих пор не сбежал. Стыдно ей.",
-			"Ты в зеркало смотрелся, %s? Вот и охрана испугалась.", "Сидел тут один умник с ложкой. Говорят, до сих пор копает." };
-
-	public static final String[] NICKNAMES = { "Косой", "Шрам", "Профессор", "Бублик", "Гвоздь", "Тихий", "Лысый",
-			"Химик", "Боцман", "Сиплый", "Кабан", "Штопор", "Матрос", "Сухарь", "Жмых", "Кот", "Лом", "Пончик",
-			"Дед", "Карась", "Шнырь", "Гоша", "Мазай", "Рыжий" };
-	private static final String[] CHATTER = { "Чего уставился?", "Не мешай, у меня тут дела.",
-			"Говорят, в вентиляции кто-то ползает...", "Ещё два дня, и я отсюда свалю.",
-			"Обед сегодня опять мерзкий.", "За стенами море. Плавать умеешь?",
-			"Охрана на перекличке шмонает, имей в виду.", "Металлодетектор в мастерской злой, осторожнее." };
+			"Ты в зеркало смотрелся, %s? Вот и охрана испугалась.", "Сидел тут один умник с ложкой. Говорят, до сих пор копает.",
+			"Что общего у тебя и решётки, %s? Вы оба тут надолго.", "Как называется заключённый с лопатой? Оптимист.",
+			"Твоя мама так любит тебя, что даже срок тебе выбила побольше.", "Охранник спрашивает: «Почему ты не спишь?» А я: «Сторожу вас».",
+			"%s, говорят, у тебя золотые руки. Вот их и посадили вместе с тобой.",
+			"Почему снайперы не играют в прятки? Потому что всегда находят. Ха!",
+			"Знаешь, как тут называют оптимиста? Новенький. Как тебя, %s.", "У нас тут как в санатории. Только выйти нельзя.",
+			"Твоя мама прислала письмо: «Сынок, учись хорошо». Я ей ответил: «Учится — копать».",
+			"%s, если увидишь мою свободу — передай привет.", "Повар сказал, что это котлета. Мы до сих пор спорим, чья.",
+			"Что сказал кирпич, когда я его ударил? Ничего. Он кирпич.", "Твоя мама — единственная, кто верит, что ты тут случайно." };
+	private static final String[] VETERAN = { "Слушай старика, %s: не спорь с охраной на перекличке.",
+			"Я тут двадцать лет. Стены везде одинаковые, а вот решётки — нет.", "Напильник держи в тумбочке, а не в кармане.",
+			"Металлодетектор в мастерской ловит даже самородки. Проверено мной.", "Ночью держись в тени, %s. Прожекторы не спят.",
+			"Охрана заделывает дыры, если увидит. А если не увидит — нет.", "Торговцы дерут втридорога. Работай на поле, копи.",
+			"Вентиляция — дорога для худых и терпеливых.", "Снайпер днём стреляет, только если копаешь у него на глазах.",
+			"Когда-то тут были женские душевые. Теперь медпункт. Времена меняются.",
+			"Если охранник смотрит — делай вид, что ты мебель.", "Не рисуй на стенах, %s. Это всегда находят.",
+			"Самодельная кирка ломается в самый неподходящий момент. Носи запасную.", "Не дерись при охране. Это быстрый путь в карцер.",
+			"Перекличку пропускать — себе дороже.", "Я видел, как отсюда сбегали. Видел и как возвращали.",
+			"Муляж стены спасёт тебе жизнь. Ну, или срок.", "Ключ из глины — лучший друг заключённого.",
+			"Ночью двери запирают через полминуты после звонка. Не опаздывай.", "Терпение, %s. Стены тоже стареют." };
+	private static final String[] PARANOID = { "%s, ты тоже слышишь, как стены шепчут?", "Охрана читает наши мысли. Думай тише.",
+			"Не смотри на снайпера! Он это чувствует.", "Они кладут что-то в баланду. Я точно знаю.",
+			"Этот сканер видит сквозь кожу, %s. Я тебе говорю.", "Тот новенький — подсадной. Не верь ему.",
+			"Каждую ночь кто-то двигает мою кровать на сантиметр.", "%s, ты за мной не следишь? Точно?",
+			"Голуби на стене — с камерами. Все до одного.", "Если охранник улыбается — значит, что-то знает.",
+			"Я не сплю уже три дня. Так безопаснее.", "Говорят, под тюрьмой есть ещё одна тюрьма.",
+			"Не пей воду из душа, %s. Просто не пей.", "Они пересчитывают нас, потому что кого-то подменили.",
+			"Мои тапки пропали. Это заговор.", "Тсс! Деревья на поле подслушивают.", "Почему у охраны все шапки одинаковые? Подозрительно.",
+			"%s, если я пропаду — ищи в вентиляции.", "Начальник тюрьмы — робот. Я видел, как он не моргал.",
+			"Мне кажется, моя тень работает на охрану." };
+	private static final String[] PHILOSOPHER = { "Свобода, %s, — это когда решётка только снаружи.",
+			"Мы все в тюрьме. Просто у некоторых стены красивее.", "Время здесь течёт иначе. Как баланда — медленно и вязко.",
+			"Что такое побег, %s? Возвращение к себе.", "Стена — это всего лишь вопрос, на который ещё не ответили киркой.",
+			"Каждый кирпич — урок терпения.", "Охранники тоже заключённые. Только по ту сторону.",
+			"Ночь длинная, а мысли ещё длиннее.", "Человек — это то, что он делает, когда никто не смотрит.",
+			"Если снайпер не видит тебя — существуешь ли ты?", "Счастье — это когда тебя не обыскали на перекличке.",
+			"Мы сами строим свои стены, %s. Эти, правда, построил кто-то другой.", "Тишина в камере громче любого крика.",
+			"Даже трещина в стене — это начало пути.", "Ложка в руках мудреца — инструмент. В руках глупца — ложка.",
+			"Дорога в тысячу шагов начинается с одного удара кирки.", "Всё проходит. Срок тоже.",
+			"Мел на стене смывают, а мысль — нет.", "Не бойся темноты, %s. Бойся прожектора.", "Кто знает себя, тот знает выход." };
+	private static final String[] BRAGGART = { "Я отсюда уже трижды сбегал. Просто возвращаюсь — скучно на воле.",
+			"Видел мою кирку? Сам сделал. Из ложки и характера.", "Охранники меня боятся, %s. Ну, уважают.",
+			"Я тут самый сильный. Спроси любого. Только не охрану.", "Мне торговцы сами приплачивают, чтобы я у них покупал.",
+			"Я как-то голыми руками решётку согнул. Ну, почти.", "На поле я добываю больше всех. Руда меня любит.",
+			"Знаешь, кто придумал вентиляцию? Не я, но я её улучшил.", "Меня даже снайпер ни разу не заметил. Я тень.",
+			"%s, хочешь автограф? Потом дорого продашь.", "Я в карцере сидел столько, что там табличку с моим именем повесили.",
+			"Мой рекорд: восемь блоков за одну ночь. Никто не побьёт.", "Начальник тюрьмы со мной здоровается за руку.",
+			"Я бы давно ушёл, но кто тогда будет вас учить?", "Мой муляж стены даже охрана хвалила. Не зная, что это муляж.",
+			"Я дерусь так, что медпункт для меня отдельную койку держит.", "Меня сюда посадили, потому что на воле я всех обыгрывал.",
+			"Видишь этот шрам? Это я спас охранника. Он, правда, не помнит.", "Я читал все книги в библиотеке. Обе.",
+			"%s, держись рядом — научу жизни." };
+	private static final String[] NEUTRAL_LINES = { "Угу.", "Привет.", "...", "Ну и денёк.", "Скорей бы ужин.",
+			"Опять дождь, что ли?", "Ты не видел мои носки?", "Мм." };
 
 	/** What the black-market traders can have on offer: price in money, item, count. */
 	private static final Object[][] BLACK_MARKET = {
@@ -131,7 +192,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				.add(EntityAttributes.GENERIC_MAX_HEALTH, 20.0)
 				.add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.3)
 				.add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 2.0)
-				.add(EntityAttributes.GENERIC_FOLLOW_RANGE, 96.0);
+				.add(EntityAttributes.GENERIC_FOLLOW_RANGE, 160.0);
 	}
 
 	@Override
@@ -192,30 +253,51 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	/** Says something to a player prisoner walking right past: a compliment, a jibe or a joke. */
 	private void talkToPasserby() {
 		CellbreakGame game = game();
-		if (game == null || !game.isRunning() || personality == Personality.NEUTRAL || getTarget() != null || hasCustomer()) {
+		if (game == null || !game.isRunning() || getTarget() != null || hasCustomer()
+				|| personality == Personality.NEUTRAL && random.nextInt(4) != 0) {
 			return;
 		}
 		PlayerEntity near = getWorld().getClosestPlayer(this, 3.0);
 		if (!(near instanceof ServerPlayerEntity p) || !game.isPrisoner(p) || !canSee(p) || !game.mayTalkTo(p)) {
 			return;
 		}
+		say(p, true);
+		getLookControl().lookAt(p);
+		talkCooldown = 20 * (40 + random.nextInt(40));
+	}
+
+	/** One line in this inmate's manner to the player (and everybody near, if out loud). */
+	private void say(PlayerEntity p, boolean outLoud) {
 		String[] lines = switch (personality) {
 			case FRIENDLY -> FRIENDLY;
 			case RUDE -> RUDE;
-			default -> JOKES;
+			case JOKER -> JOKES;
+			case VETERAN -> VETERAN;
+			case PARANOID -> PARANOID;
+			case PHILOSOPHER -> PHILOSOPHER;
+			case BRAGGART -> BRAGGART;
+			default -> NEUTRAL_LINES;
 		};
 		String line = String.format(lines[random.nextInt(lines.length)], p.getName().getString());
-		Formatting color = personality == Personality.FRIENDLY ? Formatting.GREEN
-				: personality == Personality.RUDE ? Formatting.RED : Formatting.YELLOW;
+		Formatting color = switch (personality) {
+			case FRIENDLY -> Formatting.GREEN;
+			case RUDE -> Formatting.RED;
+			case JOKER -> Formatting.YELLOW;
+			case VETERAN -> Formatting.AQUA;
+			case PARANOID -> Formatting.LIGHT_PURPLE;
+			case PHILOSOPHER -> Formatting.DARK_AQUA;
+			case BRAGGART -> Formatting.GOLD;
+			default -> Formatting.GRAY;
+		};
 		Text msg = Text.literal(getName().getString() + ": ").formatted(Formatting.GOLD)
 				.append(Text.literal(line).formatted(color));
 		for (PlayerEntity other : getWorld().getPlayers()) {
 			if (other.squaredDistanceTo(this) < 12 * 12) {
-				other.sendMessage(msg, false);
+				if (outLoud || other == p) {
+					other.sendMessage(msg, false);
+				}
 			}
 		}
-		getLookControl().lookAt(p);
-		talkCooldown = 20 * (40 + random.nextInt(40));
 	}
 
 	@Override
@@ -233,8 +315,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			return ActionResult.SUCCESS;
 		}
 		if (!isTrader()) {
-			player.sendMessage(Text.literal(getName().getString() + ": ").formatted(Formatting.GOLD)
-					.append(Text.literal(CHATTER[random.nextInt(CHATTER.length)]).formatted(Formatting.WHITE)), false);
+			say(player, false);
 			return ActionResult.SUCCESS;
 		}
 		if (!hasCustomer() && !getOffers().isEmpty()) {
@@ -312,6 +393,17 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		private int waitTicks;
 		/** The destination cannot be reached on foot: the inmate does not try, it takes a side door. */
 		private boolean unreachable;
+		/** On the way through this waypoint. */
+		private BlockPos via;
+
+		/** A path that gets (nearly) to the point, or null. */
+		private Path goodPath(BlockPos to) {
+			Path path = npc.getNavigation().findPathTo(to, 0);
+			if (path == null || path.getEnd() == null) {
+				return null;
+			}
+			return path.reachesTarget() || path.getEnd().getBlockPos().getSquaredDistance(to) <= 4 ? path : null;
+		}
 
 		RoutineGoal(PrisonerNpcEntity npc) {
 			this.npc = npc;
@@ -356,13 +448,23 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			if (wanted == null) {
 				return;
 			}
-			if (!wanted.equals(destination)) {
+			if (!wanted.equals(destination) || via != null && npc.getBlockPos().getSquaredDistance(via) <= 4) {
 				destination = wanted;
 				travelTicks = 0;
-				Path path = npc.getNavigation().findPathTo(destination, 0);
-				// A path that stops short (in a cell corner, under the canteen) is not worth walking.
-				unreachable = path == null || !path.reachesTarget()
-						&& path.getEnd() != null && path.getEnd().getBlockPos().getSquaredDistance(destination) > 9;
+				via = null;
+				Path path = goodPath(destination);
+				if (path == null) {
+					// Too far for one path: walk to the waypoint closest to the goal that can be reached.
+					for (BlockPos w : game.waypointsToward(npc.getBlockPos(), destination)) {
+						path = goodPath(w);
+						if (path != null) {
+							via = w;
+							break;
+						}
+					}
+				}
+				// No way at all (a path would stop in a cell corner or under the canteen): side door.
+				unreachable = path == null;
 				if (unreachable) {
 					npc.getNavigation().stop();
 				} else {

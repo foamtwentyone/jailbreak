@@ -83,7 +83,7 @@ public class GuardEntity extends PathAwareEntity {
 				.add(EntityAttributes.GENERIC_MAX_HEALTH, 40.0)
 				.add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.3)
 				.add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 3.0)
-				.add(EntityAttributes.GENERIC_FOLLOW_RANGE, 64.0);
+				.add(EntityAttributes.GENERIC_FOLLOW_RANGE, 160.0);
 	}
 
 	@Override
@@ -111,16 +111,32 @@ public class GuardEntity extends PathAwareEntity {
 
 	/** Goes to look at what made a noise, then gets back to what they were doing. */
 	public void checkNoise(BlockPos pos) {
-		if (sniper || checkUntil >= 0) {
+		if (checkUntil < 0) {
+			goCheck(pos, pos, 20);
+		}
+	}
+
+	/** Goes to a place and watches a spot for a while, then gets back to the usual duty. */
+	public void goCheck(BlockPos pos, BlockPos look, int seconds) {
+		if (sniper) {
 			return;
 		}
-		savedDuty = duty;
-		savedLook = dutyLook;
-		savedLoop = dutyLoop;
+		if (checkUntil < 0) {
+			savedDuty = duty;
+			savedLook = dutyLook;
+			savedLoop = dutyLoop;
+		}
 		duty = List.of(pos);
-		dutyLook = pos;
+		dutyLook = look;
 		dutyLoop = false;
-		checkUntil = age + 20 * 20;
+		checkUntil = age + seconds * 20;
+	}
+
+	/** The check is over early (the prisoner did what they were told). */
+	public void endCheck() {
+		if (checkUntil >= 0) {
+			checkUntil = age;
+		}
 	}
 
 	/** A prisoner was seen fighting: run there and stop them with the baton. */

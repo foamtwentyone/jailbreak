@@ -245,7 +245,10 @@ public final class MapCommands {
 		BlockPos findContainer(ServerWorld world) {
 			for (BlockPos p : BlockPos.iterate(box.getMinX() - 1, box.getMinY(), box.getMinZ() - 1, box.getMaxX() + 1,
 					box.getMinY() + 1, box.getMaxZ() + 1)) {
-				if (world.getBlockEntity(p) instanceof Inventory) {
+				// Only a chest or a barrel: droppers and hoppers there belong to the door mechanism.
+				var be = world.getBlockEntity(p);
+				if (be instanceof net.minecraft.block.entity.ChestBlockEntity
+						|| be instanceof net.minecraft.block.entity.BarrelBlockEntity) {
 					return p.toImmutable();
 				}
 			}

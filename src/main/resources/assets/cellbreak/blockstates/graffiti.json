@@ -89,6 +89,156 @@
     "facing=west,variant=5": {
       "model": "cellbreak:block/graffiti_5",
       "y": 270
+    },
+    "facing=north,variant=6": {
+      "model": "cellbreak:block/graffiti_6"
+    },
+    "facing=east,variant=6": {
+      "model": "cellbreak:block/graffiti_6",
+      "y": 90
+    },
+    "facing=south,variant=6": {
+      "model": "cellbreak:block/graffiti_6",
+      "y": 180
+    },
+    "facing=west,variant=6": {
+      "model": "cellbreak:block/graffiti_6",
+      "y": 270
+    },
+    "facing=north,variant=7": {
+      "model": "cellbreak:block/graffiti_7"
+    },
+    "facing=east,variant=7": {
+      "model": "cellbreak:block/graffiti_7",
+      "y": 90
+    },
+    "facing=south,variant=7": {
+      "model": "cellbreak:block/graffiti_7",
+      "y": 180
+    },
+    "facing=west,variant=7": {
+      "model": "cellbreak:block/graffiti_7",
+      "y": 270
+    },
+    "facing=north,variant=8": {
+      "model": "cellbreak:block/graffiti_8"
+    },
+    "facing=east,variant=8": {
+      "model": "cellbreak:block/graffiti_8",
+      "y": 90
+    },
+    "facing=south,variant=8": {
+      "model": "cellbreak:block/graffiti_8",
+      "y": 180
+    },
+    "facing=west,variant=8": {
+      "model": "cellbreak:block/graffiti_8",
+      "y": 270
+    },
+    "facing=north,variant=9": {
+      "model": "cellbreak:block/graffiti_9"
+    },
+    "facing=east,variant=9": {
+      "model": "cellbreak:block/graffiti_9",
+      "y": 90
+    },
+    "facing=south,variant=9": {
+      "model": "cellbreak:block/graffiti_9",
+      "y": 180
+    },
+    "facing=west,variant=9": {
+      "model": "cellbreak:block/graffiti_9",
+      "y": 270
+    },
+    "facing=north,variant=10": {
+      "model": "cellbreak:block/graffiti_10"
+    },
+    "facing=east,variant=10": {
+      "model": "cellbreak:block/graffiti_10",
+      "y": 90
+    },
+    "facing=south,variant=10": {
+      "model": "cellbreak:block/graffiti_10",
+      "y": 180
+    },
+    "facing=west,variant=10": {
+      "model": "cellbreak:block/graffiti_10",
+      "y": 270
+    },
+    "facing=north,variant=11": {
+      "model": "cellbreak:block/graffiti_11"
+    },
+    "facing=east,variant=11": {
+      "model": "cellbreak:block/graffiti_11",
+      "y": 90
+    },
+    "facing=south,variant=11": {
+      "model": "cellbreak:block/graffiti_11",
+      "y": 180
+    },
+    "facing=west,variant=11": {
+      "model": "cellbreak:block/graffiti_11",
+      "y": 270
+    },
+    "facing=north,variant=12": {
+      "model": "cellbreak:block/graffiti_12"
+    },
+    "facing=east,variant=12": {
+      "model": "cellbreak:block/graffiti_12",
+      "y": 90
+    },
+    "facing=south,variant=12": {
+      "model": "cellbreak:block/graffiti_12",
+      "y": 180
+    },
+    "facing=west,variant=12": {
+      "model": "cellbreak:block/graffiti_12",
+      "y": 270
+    },
+    "facing=north,variant=13": {
+      "model": "cellbreak:block/graffiti_13"
+    },
+    "facing=east,variant=13": {
+      "model": "cellbreak:block/graffiti_13",
+      "y": 90
+    },
+    "facing=south,variant=13": {
+      "model": "cellbreak:block/graffiti_13",
+      "y": 180
+    },
+    "facing=west,variant=13": {
+      "model": "cellbreak:block/graffiti_13",
+      "y": 270
+    },
+    "facing=north,variant=14": {
+      "model": "cellbreak:block/graffiti_14"
+    },
+    "facing=east,variant=14": {
+      "model": "cellbreak:block/graffiti_14",
+      "y": 90
+    },
+    "facing=south,variant=14": {
+      "model": "cellbreak:block/graffiti_14",
+      "y": 180
+    },
+    "facing=west,variant=14": {
+      "model": "cellbreak:block/graffiti_14",
+      "y": 270
+    },
+    "facing=north,variant=15": {
+      "model": "cellbreak:block/graffiti_15"
+    },
+    "facing=east,variant=15": {
+      "model": "cellbreak:block/graffiti_15",
+      "y": 90
+    },
+    "facing=south,variant=15": {
+      "model": "cellbreak:block/graffiti_15",
+      "y": 180
+    },
+    "facing=west,variant=15": {
+      "model": "cellbreak:block/graffiti_15",
+      "y": 270
     }
   }
 }

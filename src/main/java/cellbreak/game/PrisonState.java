@@ -23,6 +23,8 @@ public class PrisonState extends PersistentState {
 	private final Map<UUID, GameMode> roundModes = new HashMap<>();
 	/** Searchlight lights and graffiti of the running round: removed if the server stopped mid-round. */
 	private final Set<Long> leftovers = new HashSet<>();
+	/** Players who already got the side-choice buttons on joining (they only come once). */
+	private final Set<UUID> menuShown = new HashSet<>();
 
 	public static PrisonState get(MinecraftServer server) {
 		return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE, "cellbreak");
@@ -42,6 +44,10 @@ public class PrisonState extends PersistentState {
 		return roundModes;
 	}
 
+	public Set<UUID> menuShown() {
+		return menuShown;
+	}
+
 	public Set<Long> leftovers() {
 		return leftovers;
 	}
@@ -54,6 +60,9 @@ public class PrisonState extends PersistentState {
 		NbtCompound modes = nbt.getCompound("roundModes");
 		for (String key : modes.getKeys()) {
 			state.roundModes.put(UUID.fromString(key), GameMode.byName(modes.getString(key), GameMode.SURVIVAL));
+		}
+		for (net.minecraft.nbt.NbtElement e : nbt.getList("menuShown", net.minecraft.nbt.NbtElement.INT_ARRAY_TYPE)) {
+			state.menuShown.add(net.minecraft.nbt.NbtHelper.toUuid(e));
 		}
 		for (long p : nbt.getLongArray("leftovers")) {
 			state.leftovers.add(p);
@@ -69,6 +78,9 @@ public class PrisonState extends PersistentState {
 		NbtCompound modes = new NbtCompound();
 		roundModes.forEach((id, mode) -> modes.putString(id.toString(), mode.getName()));
 		nbt.put("roundModes", modes);
+		net.minecraft.nbt.NbtList shown = new net.minecraft.nbt.NbtList();
+		menuShown.forEach(id -> shown.add(net.minecraft.nbt.NbtHelper.fromUuid(id)));
+		nbt.put("menuShown", shown);
 		nbt.putLongArray("leftovers", leftovers.stream().mapToLong(Long::longValue).toArray());
 		return nbt;
 	}

@@ -17,7 +17,7 @@ import net.minecraft.world.WorldAccess;
 /** A chalk drawing on a wall. FACING points away from the wall it is drawn on. */
 public class GraffitiBlock extends Block {
 	public static final DirectionProperty FACING = Properties.HORIZONTAL_FACING;
-	public static final int VARIANTS = 6;
+	public static final int VARIANTS = 16;
 	public static final IntProperty VARIANT = IntProperty.of("variant", 0, VARIANTS - 1);
 
 	public GraffitiBlock(Settings settings) {
