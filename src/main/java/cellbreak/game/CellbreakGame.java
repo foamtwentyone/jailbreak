@@ -680,7 +680,11 @@ public class CellbreakGame {
 		}
 		world().setTimeOfDay(phase.timeOfDay);
 		// At lights out the doors stay open a little longer: everybody walks to their cell first.
-		setDoors(true);
+		// At wake-up everything is still locked; doors to the outside open from the walk until the
+		// evening roll call.
+		boolean outdoors = phase == Phase.EXERCISE || phase == Phase.SHOWER || phase == Phase.DINNER
+				|| phase == Phase.EVENING_FREE;
+		setDoors(phase != Phase.WAKE_UP, outdoors);
 		doorsLocked = false;
 		lockServiceDoors();
 		for (PlayerData d : players.values()) {
@@ -1201,20 +1205,25 @@ public class CellbreakGame {
 		boolean outdoors = world().isSkyVisible(pos.up());
 		if (!snipers.isEmpty() && outdoors) {
 			for (GuardEntity s : snipers) {
-				if (s.squaredDistanceTo(p) >= SNIPER_RANGE * SNIPER_RANGE || !s.canSee(p)) {
+				// Right next to the post the sniper notices you even past the parapet.
+				if (s.squaredDistanceTo(p) >= SNIPER_RANGE * SNIPER_RANGE || !s.canSee(p) && s.squaredDistanceTo(p) > 6 * 6) {
 					continue;
 				}
 				boolean caught;
+				double dist2 = s.squaredDistanceTo(p);
 				if (phase == Phase.LIGHTS_OUT) {
 					Searchlight light = searchlights.get(s.getUuid());
-					caught = phaseElapsed() >= GRACE_SECONDS * 20 && light != null && light.spot != null
+					// In the light, or simply right under the sniper's nose.
+					caught = phaseElapsed() >= GRACE_SECONDS * 20 && (dist2 < 14 * 14 || light != null && light.spot != null
 							&& (p.getUuid().equals(light.lockedOn) || horizontalDistance(p.getPos(), light.spot) < SEARCHLIGHT_RADIUS
-									&& Math.abs(p.getY() - light.spot.y) < 4);
+									&& Math.abs(p.getY() - light.spot.y) < 4));
 					if (caught) {
 						light.lockedOn = p.getUuid();
 					}
 				} else {
-					caught = ticks - d.suspiciousTick < SUSPICIOUS_TICKS;
+					// By day: something suspicious, or climbing up to the sniper's own wall.
+					caught = ticks - d.suspiciousTick < SUSPICIOUS_TICKS
+							|| dist2 < 10 * 10 && p.getY() > s.getY() - 4;
 				}
 				if (caught) {
 					spotter = s;
@@ -1242,7 +1251,7 @@ public class CellbreakGame {
 			d.lastSeenTick = ticks;
 			d.lastSeenPos = p.getBlockPos();
 			title(p, Text.literal("Снайпер!").formatted(Formatting.DARK_RED),
-					Text.literal(phase == Phase.LIGHTS_OUT ? "Ты в луче прожектора. В укрытие!" : "Он видел, что ты делаешь. В укрытие!"));
+					Text.literal(phase == Phase.LIGHTS_OUT ? "Снайпер тебя видит. В укрытие!" : "Он видел, что ты делаешь. В укрытие!"));
 			p.playSoundToPlayer(SoundEvents.ITEM_CROSSBOW_LOADING_END.value(), SoundCategory.HOSTILE, 1.0F, 1.0F);
 		} else if (ticks - d.sniperSpotTick >= SNIPER_AIM_TICKS) {
 			d.sniperSpotTick = 0;
@@ -1504,6 +1513,9 @@ public class CellbreakGame {
 	private final Map<BlockPos, Integer> sirens = new HashMap<>();
 
 	private void startSiren(BlockPos pos) {
+		if (!sirens.containsKey(pos)) {
+			makeNoise(pos, pos);
+		}
 		sirens.put(pos, 60);
 		scannerAlarms++;
 	}
@@ -1637,11 +1649,12 @@ public class CellbreakGame {
 			// Where everybody has to be, some guards watch: two on the work field, one elsewhere.
 			BlockBox zone = zoneBox(phase.zone);
 			if (zone != null) {
-				int watchers = Math.min(phase == Phase.WORK ? 2 : 1, Math.max(0, guards.size() - 1));
+				int watchers = Math.min(phase == Phase.WORK || phase.zone == Zone.CANTEEN ? 2 : 1, Math.max(0, guards.size() - 1));
+				List<BlockPos> spots = watchSpots(phase, zone);
 				for (int i = 0; i < watchers; i++) {
 					List<BlockPos> route = new ArrayList<>();
 					for (int k = 0; k < 4; k++) {
-						route.add(randomSpotIn(zone));
+						route.add(spots.isEmpty() ? randomSpotIn(zone) : spots.get(world().random.nextInt(spots.size())));
 					}
 					BlockPos center = new BlockPos(zone.getCenter().getX(), zone.getMinY(), zone.getCenter().getZ());
 					guards.get(guards.size() - 1 - i).setDuty(route, center, true);
@@ -1671,6 +1684,30 @@ public class CellbreakGame {
 				g.setDuty(List.of(posts.get(post++ % posts.size())), center);
 			}
 		}
+	}
+
+	/**
+	 * Where guards on watch walk in a zone. In the canteen: the food queue and the aisles behind the
+	 * benches (a random spot there could be in the locked kitchen).
+	 */
+	private List<BlockPos> watchSpots(Phase phase, BlockBox zone) {
+		List<BlockPos> spots = new ArrayList<>();
+		if (phase.zone == Zone.CANTEEN) {
+			spots.addAll(layout().queueSpots);
+			if (seats.isEmpty()) {
+				seats = findSeats();
+			}
+			for (BlockPos seat : seats) {
+				BlockState st = world().getBlockState(seat);
+				if (st.getBlock() instanceof net.minecraft.block.StairsBlock) {
+					BlockPos aisle = seat.offset(st.get(net.minecraft.block.StairsBlock.FACING));
+					if (empty(world(), aisle) && empty(world(), aisle.up()) && !empty(world(), aisle.down())) {
+						spots.add(aisle);
+					}
+				}
+			}
+		}
+		return spots;
 	}
 
 	/** The line the i-th counting guard walks: in front of the first row, behind the second. */
@@ -1916,10 +1953,16 @@ public class CellbreakGame {
 	}
 
 	private void makeNoise(ServerPlayerEntity p, BlockPos pos) {
+		makeNoise(pos, p.getBlockPos());
+	}
+
+	/** A noise at pos: the snipers look, the nearest free guard comes to check the spot. */
+	private void makeNoise(BlockPos pos, BlockPos checkAt) {
 		alertSnipers(pos);
-		npcGuards().stream().filter(g -> !g.hasDuty() && g.getTarget() == null && g.getBlockPos().getSquaredDistance(pos) < 24 * 24)
+		npcGuards().stream().filter(g -> g.getTarget() == null && g.getBlockPos().getSquaredDistance(pos) < 24 * 24
+						&& (!g.hasDuty() || g.getBlockPos().getSquaredDistance(pos) < 12 * 12))
 				.min(java.util.Comparator.comparingDouble(g -> g.getBlockPos().getSquaredDistance(pos)))
-				.ifPresent(g -> g.checkNoise(p.getBlockPos()));
+				.ifPresent(g -> g.checkNoise(checkAt));
 	}
 
 	/** Called when a prisoner hits any guard. */
@@ -2016,7 +2059,7 @@ public class CellbreakGame {
 
 	/** An NPC inmate hit a player: a guard who sees it stops the fight and takes the NPC away. */
 	public void onNpcAttack(PrisonerNpcEntity npc, LivingEntity victim) {
-		alertSnipers(npc.getBlockPos());
+		makeNoise(npc.getBlockPos(), npc.getBlockPos());
 		if (escorts.containsKey(npc.getUuid())) {
 			return;
 		}
@@ -2099,7 +2142,8 @@ public class CellbreakGame {
 	}
 
 	public void onPrisonerFight(ServerPlayerEntity attacker, Entity victim) {
-		alertSnipers(attacker.getBlockPos());
+		// A fight is loud: guards nearby come to see what is going on.
+		makeNoise(attacker.getBlockPos(), attacker.getBlockPos());
 		PlayerData d = data(attacker);
 		if (!isPrisoner(attacker) || ticks - d.lastFightTick < 40) {
 			return;
@@ -2772,7 +2816,14 @@ public class CellbreakGame {
 	private void standEveryoneUp() {
 		for (Map.Entry<UUID, Entity> e : seatStands.entrySet()) {
 			Entity stand = e.getValue();
-			stand.removeAllPassengers();
+			BlockPos seat = seatOf.get(e.getKey());
+			for (Entity rider : new ArrayList<>(stand.getPassengerList())) {
+				rider.stopRiding();
+				// Up from the bench, right where it is (the game would pick any free spot, even outdoors).
+				if (seat != null) {
+					rider.refreshPositionAndAngles(seat.getX() + 0.5, seat.getY() + 0.5, seat.getZ() + 0.5, rider.getYaw(), 0);
+				}
+			}
 			stand.discard();
 		}
 		seatStands.clear();
@@ -3230,12 +3281,31 @@ public class CellbreakGame {
 	}
 
 	private void setDoors(boolean open) {
+		setDoors(open, open);
+	}
+
+	/** Cell doors and indoor day doors follow cellsOpen; day doors that lead outdoors follow outdoorsOpen. */
+	private void setDoors(boolean cellsOpen, boolean outdoorsOpen) {
 		for (PrisonLayout.Cell c : layout().cells) {
-			setDoor(c.door, open);
+			setDoor(c.door, cellsOpen);
 		}
 		for (BlockPos door : layout().dayDoors) {
-			setDoor(door, open);
+			setDoor(door, isOutdoorDoor(door) ? outdoorsOpen && cellsOpen : cellsOpen);
 		}
+	}
+
+	private final Map<BlockPos, Boolean> outdoorDoors = new HashMap<>();
+
+	/** A door with open sky on one side of it. */
+	private boolean isOutdoorDoor(BlockPos door) {
+		return outdoorDoors.computeIfAbsent(door, d -> {
+			BlockState st = world().getBlockState(d);
+			if (!st.isOf(Blocks.IRON_DOOR)) {
+				return false;
+			}
+			Direction f = st.get(DoorBlock.FACING);
+			return world().isSkyVisible(d.offset(f).up()) || world().isSkyVisible(d.offset(f.getOpposite()).up());
+		});
 	}
 
 	/**
