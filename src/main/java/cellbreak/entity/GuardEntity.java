@@ -62,6 +62,15 @@ public class GuardEntity extends PathAwareEntity {
 	/** A job given by the game (count the line-up, stand at an exit): walk the route, then stay. */
 	private List<BlockPos> duty;
 	private BlockPos dutyLook;
+	/** Walk the duty route round and round (watching a zone) instead of staying at its end. */
+	private boolean dutyLoop;
+	/** A short job (checking a noise) on top of the usual duty; the usual one comes back after. */
+	private List<BlockPos> savedDuty;
+	private BlockPos savedLook;
+	private boolean savedLoop;
+	private int checkUntil = -1;
+	/** A prisoner caught fighting: the guard goes to stop them until this age. */
+	private int breakUpUntil = -1;
 
 	public GuardEntity(EntityType<? extends PathAwareEntity> type, World world) {
 		super(type, world);
@@ -89,8 +98,43 @@ public class GuardEntity extends PathAwareEntity {
 
 	/** Gives the guard a route to walk (slowly, looking around) and to stay at its end; null frees them. */
 	public void setDuty(List<BlockPos> route, BlockPos lookAt) {
+		setDuty(route, lookAt, false);
+	}
+
+	/** As above; with loop the guard walks the route round and round, pausing at each point. */
+	public void setDuty(List<BlockPos> route, BlockPos lookAt, boolean loop) {
 		duty = route;
 		dutyLook = lookAt;
+		dutyLoop = loop;
+		checkUntil = -1;
+	}
+
+	/** Goes to look at what made a noise, then gets back to what they were doing. */
+	public void checkNoise(BlockPos pos) {
+		if (sniper || checkUntil >= 0) {
+			return;
+		}
+		savedDuty = duty;
+		savedLook = dutyLook;
+		savedLoop = dutyLoop;
+		duty = List.of(pos);
+		dutyLook = pos;
+		dutyLoop = false;
+		checkUntil = age + 20 * 20;
+	}
+
+	/** A prisoner was seen fighting: run there and stop them with the baton. */
+	public void breakUpFight(PlayerEntity p) {
+		if (sniper) {
+			return;
+		}
+		setTarget(p);
+		breakUpUntil = age + 15 * 20;
+	}
+
+	private boolean isBreakingUp(LivingEntity target) {
+		return age < breakUpUntil && target instanceof PlayerEntity p && game() != null && game().isPrisoner(p)
+				&& !game().isOutOfPlay(p);
 	}
 
 	public boolean hasDuty() {
@@ -160,8 +204,14 @@ public class GuardEntity extends PathAwareEntity {
 	@Override
 	protected void mobTick() {
 		super.mobTick();
+		if (checkUntil >= 0 && age > checkUntil) {
+			duty = savedDuty;
+			dutyLook = savedLook;
+			dutyLoop = savedLoop;
+			checkUntil = -1;
+		}
 		LivingEntity target = getTarget();
-		if (target != null && !isWantedPrisoner(target)) {
+		if (target != null && !isWantedPrisoner(target) && !isBreakingUp(target)) {
 			setTarget(null);
 			target = null;
 		}
@@ -219,7 +269,8 @@ public class GuardEntity extends PathAwareEntity {
 			if (n >= HITS_TO_ARREST) {
 				hits.remove(p.getUuid());
 				setTarget(null);
-				game.arrest(p, "задержан охраной");
+				game.arrest(p, isBreakingUp(p) ? "задержан за драку" : "задержан охраной");
+				breakUpUntil = -1;
 			}
 		}
 		return hit;
@@ -336,6 +387,7 @@ public class GuardEntity extends PathAwareEntity {
 		private List<BlockPos> route;
 		private int index;
 		private int stuck;
+		private int pause;
 
 		DutyGoal(GuardEntity guard) {
 			this.guard = guard;
@@ -370,6 +422,21 @@ public class GuardEntity extends PathAwareEntity {
 			BlockPos goal = route.get(Math.min(index, route.size() - 1));
 			boolean last = index >= route.size() - 1;
 			double d = guard.squaredDistanceTo(goal.getX() + 0.5, goal.getY(), goal.getZ() + 0.5);
+			if (guard.dutyLoop && d < 2.0) {
+				// Watching a zone: stands a while at each point, looking around, then goes on.
+				guard.getNavigation().stop();
+				if (pause == 0) {
+					pause = 60 + guard.getRandom().nextInt(80);
+				}
+				if (--pause <= 0) {
+					index = (index + 1) % route.size();
+					stuck = 0;
+				} else if (pause % 40 == 0) {
+					guard.getLookControl().lookAt(guard.getX() + guard.getRandom().nextGaussian() * 8, guard.getEyeY(),
+							guard.getZ() + guard.getRandom().nextGaussian() * 8);
+				}
+				return;
+			}
 			if (d < (last ? 1.0 : 2.0)) {
 				if (!last) {
 					index++;
@@ -384,16 +451,16 @@ public class GuardEntity extends PathAwareEntity {
 				return;
 			}
 			// Counting walks slowly, getting to a post is brisk.
-			double speed = route.size() > 1 && index > 0 ? 0.55 : 1.0;
+			double speed = guard.dutyLoop ? 0.7 : route.size() > 1 && index > 0 ? 0.55 : 1.0;
 			if (guard.getNavigation().isIdle() || guard.age % 20 == 0) {
 				guard.getNavigation().startMovingTo(goal.getX() + 0.5, goal.getY(), goal.getZ() + 0.5, speed);
 			}
-			if (route.size() > 1 && index > 0 && guard.dutyLook != null) {
+			if (!guard.dutyLoop && route.size() > 1 && index > 0 && guard.dutyLook != null) {
 				// Looks over the line while walking along it.
 				guard.getLookControl().lookAt(guard.getX() + (guard.dutyLook.getX() + 0.5 - guard.getX()) * 0.1,
 						guard.getEyeY() - 0.3, guard.dutyLook.getZ() + 0.5);
 			}
-			if (++stuck > 10 * 20) {
+			if (++stuck > 10 * 20 && guard.checkUntil < 0) {
 				// Could not get there in time: comes in through a service door.
 				stuck = 0;
 				guard.getWorld().playSound(null, goal, SoundEvents.BLOCK_IRON_DOOR_OPEN, SoundCategory.HOSTILE, 0.6F, 1.0F);

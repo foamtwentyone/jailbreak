@@ -137,7 +137,8 @@ public final class CbContent {
 
 	/** Items a prisoner is not allowed to carry. */
 	public static final Set<Item> CONTRABAND = Set.of(MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, SHIV, CELL_KEY,
-			BATON, HANDCUFFS, FAKE_WALL, FAKE_VENT, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, WORK_PICKAXE, WORK_AXE);
+			BATON, HANDCUFFS, FAKE_WALL, FAKE_VENT, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, WORK_PICKAXE, WORK_AXE,
+			net.minecraft.item.Items.IRON_NUGGET);
 	/** Work tools may be carried on the work field during work; anywhere else they are contraband too. */
 	public static final Set<Item> WORK_TOOLS = Set.of(WORK_PICKAXE, WORK_AXE);
 

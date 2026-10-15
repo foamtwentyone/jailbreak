@@ -132,7 +132,8 @@ public class CellbreakGame {
 	private static final int SEARCHED_AT_ROLL_CALL = 4;
 	/** Roll call: the counting guards start walking the line-up, then announce the count and the search. */
 	private static final int COUNT_START_SECONDS = 20;
-	private static final int COUNT_END_SECONDS = 38;
+	private static final int COUNT_END_SECONDS = 36;
+	private static final int SEARCH_SECONDS = 42;
 	private static final int INFIRMARY_SECONDS = 60;
 	/** How long a suspicious act outdoors (breaking, placing a fake, graffiti) keeps a day sniper's eye on you. */
 	private static final int SUSPICIOUS_TICKS = 60;
@@ -185,6 +186,12 @@ public class CellbreakGame {
 	private int scheduleIndex;
 	private int phaseTicksLeft;
 	private boolean searchDone;
+	private boolean countDone;
+	/** What happened since the last roll call, for the guards' news. */
+	private int holesFound;
+	private int graffitiFound;
+	private int fightsSeen;
+	private int scannerAlarms;
 	private int npcGuardCount;
 	private List<String> nicknames = List.of(PrisonerNpcEntity.NICKNAMES);
 	/** Ore and logs taken on the work field, and when they grow back. */
@@ -531,7 +538,11 @@ public class CellbreakGame {
 				countStarted = true;
 				startCounting();
 			}
-			if (!searchDone && phaseElapsed() >= COUNT_END_SECONDS * 20) {
+			if (!countDone && phaseElapsed() >= COUNT_END_SECONDS * 20) {
+				countDone = true;
+				announceCountAndNews();
+			}
+			if (!searchDone && phaseElapsed() >= SEARCH_SECONDS * 20) {
 				searchDone = true;
 				rollCallSearch();
 			}
@@ -542,6 +553,15 @@ public class CellbreakGame {
 		if (phase() == Phase.LIGHTS_OUT && ticks % 4 == 0) {
 			moveSearchlights();
 		}
+		// Every tick: a running prisoner crosses an arch in a fraction of a second.
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			PlayerData d = data(p);
+			if (!d.escaped && d.solitaryUntil == 0) {
+				checkDetector(p, d);
+			}
+		}
+		checkThrownContraband();
+		soundSirens();
 		if (ticks % 10 == 0) {
 			updatePlayers();
 		}
@@ -594,6 +614,7 @@ public class CellbreakGame {
 		PrisonLayout layout = layout();
 		phaseTicksLeft = (Integer) SCHEDULE[scheduleIndex][1] * 20;
 		searchDone = false;
+		countDone = false;
 		countStarted = false;
 		clearSearchlights();
 		assignGuardDuties(phase);
@@ -734,7 +755,6 @@ public class CellbreakGame {
 					&& ticks - d.lastScoldTick > 10 * 20) {
 				scold(watcher, p, d, phase);
 			}
-			checkDetector(p, d);
 			checkSnipers(p, d, snipers, phase);
 			if (d.wanted) {
 				if (ticks - d.lastSeenTick > LOSE_PURSUIT_SECONDS * 20L) {
@@ -1150,10 +1170,12 @@ public class CellbreakGame {
 		ServerWorld world = world();
 		BlockPos feet = p.getBlockPos();
 		BlockPos lower = null;
-		for (BlockPos q : new BlockPos[] { feet, feet.up() }) {
+		Box body = p.getBoundingBox().contract(0.05);
+		for (BlockPos q : BlockPos.iterate(BlockPos.ofFloored(body.minX, body.minY, body.minZ),
+				BlockPos.ofFloored(body.maxX, body.maxY, body.maxZ))) {
 			BlockState state = world.getBlockState(q);
 			if (state.isOf(CbContent.DETECTOR)) {
-				lower = state.get(DetectorBlock.HALF) == DoubleBlockHalf.UPPER ? q.down() : q;
+				lower = (state.get(DetectorBlock.HALF) == DoubleBlockHalf.UPPER ? q.down() : q).toImmutable();
 				break;
 			}
 		}
@@ -1169,10 +1191,7 @@ public class CellbreakGame {
 			d.hudQuietUntil = ticks + 40;
 			return;
 		}
-		for (int i = 0; i < 3; i++) {
-			world.playSound(null, lower, SoundEvents.BLOCK_NOTE_BLOCK_BIT.value(), SoundCategory.BLOCKS, 3.0F, 0.5F + i * 0.1F);
-		}
-		world.playSound(null, lower, SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), SoundCategory.BLOCKS, 3.0F, 2.0F);
+		startSiren(lower);
 		d.lastSeenTick = ticks;
 		d.lastSeenPos = feet;
 		addHeat(p, 60);
@@ -1184,6 +1203,60 @@ public class CellbreakGame {
 	}
 
 	/** Names of the contraband a prisoner carries (translated on each player's side). */
+	/** Contraband thrown through an arch is caught too: it is confiscated and the thrower is in trouble. */
+	private void checkThrownContraband() {
+		ServerWorld world = world();
+		for (BlockPos lower : layout().detectors) {
+			Box arch = new Box(lower).stretch(0, 1, 0).expand(0.1);
+			for (net.minecraft.entity.ItemEntity item : world.getEntitiesByClass(net.minecraft.entity.ItemEntity.class, arch,
+					i -> CbContent.CONTRABAND.contains(i.getStack().getItem()))) {
+				Text name = item.getStack().getName();
+				item.discard();
+				DetectorBlock.flash(world, lower, true);
+				startSiren(lower);
+				Entity thrower = item.getOwner();
+				if (thrower instanceof ServerPlayerEntity p && isPrisoner(p)) {
+					addHeat(p, 60);
+					PlayerData d = data(p);
+					d.lastSeenTick = ticks;
+					d.lastSeenPos = p.getBlockPos();
+					p.sendMessage(Text.literal("Сканер засёк брошенную контрабанду: ").append(name)
+							.append(". Её забрали. Подозрение +60").formatted(Formatting.RED));
+				}
+				for (ServerPlayerEntity g : online(Role.GUARD)) {
+					g.sendMessage(Text.literal("Сканер: через рамку бросили ").append(name).formatted(Formatting.RED));
+				}
+			}
+		}
+	}
+
+	/** A wailing two-tone siren at a scanner arch for three seconds. */
+	private final Map<BlockPos, Integer> sirens = new HashMap<>();
+
+	private void startSiren(BlockPos pos) {
+		sirens.put(pos, 60);
+		scannerAlarms++;
+	}
+
+	private void soundSirens() {
+		for (Iterator<Map.Entry<BlockPos, Integer>> it = sirens.entrySet().iterator(); it.hasNext();) {
+			Map.Entry<BlockPos, Integer> e = it.next();
+			int left = e.getValue();
+			if (left % 2 == 0) {
+				// Pitch sweeps up and down twice a second, like a siren.
+				double phase = (60 - left) / 10.0 * Math.PI;
+				float pitch = (float) (1.05 + 0.45 * Math.sin(phase));
+				world().playSound(null, e.getKey(), SoundEvents.BLOCK_NOTE_BLOCK_BIT.value(), SoundCategory.BLOCKS, 2.5F, pitch);
+				world().playSound(null, e.getKey(), SoundEvents.BLOCK_NOTE_BLOCK_FLUTE.value(), SoundCategory.BLOCKS, 1.5F, pitch);
+			}
+			if (--left <= 0) {
+				it.remove();
+			} else {
+				e.setValue(left);
+			}
+		}
+	}
+
 	private static List<Text> contrabandNames(PlayerEntity p) {
 		List<Text> names = new ArrayList<>();
 		List<Item> seen = new ArrayList<>();
@@ -1291,6 +1364,19 @@ public class CellbreakGame {
 		BlockBox z = layout.rollCallZone;
 		if (!phase.isRollCall()) {
 			guards.forEach(g -> g.setDuty(null, null));
+			// Where everybody has to be, some guards watch: two on the work field, one elsewhere.
+			BlockBox zone = zoneBox(phase.zone);
+			if (zone != null) {
+				int watchers = Math.min(phase == Phase.WORK ? 2 : 1, Math.max(0, guards.size() - 1));
+				for (int i = 0; i < watchers; i++) {
+					List<BlockPos> route = new ArrayList<>();
+					for (int k = 0; k < 4; k++) {
+						route.add(randomSpotIn(zone));
+					}
+					BlockPos center = new BlockPos(zone.getCenter().getX(), zone.getMinY(), zone.getCenter().getZ());
+					guards.get(guards.size() - 1 - i).setDuty(route, center, true);
+				}
+			}
 			return;
 		}
 		BlockPos center = new BlockPos(z.getCenter().getX(), z.getMinY(), z.getCenter().getZ());
@@ -1354,19 +1440,16 @@ public class CellbreakGame {
 		}
 	}
 
-	/** End of the count: who is missing, then four random inmates in the line-up are searched. */
-	private void rollCallSearch() {
-		BlockBox zone = layout().rollCallZone;
-		BlockBox area = zone.expand(2);
+	/** Who stands in the line-up now (players and NPCs) and who is missing. */
+	private List<Object> lineUp(List<String> missing, int[] expected) {
+		BlockBox area = layout().rollCallZone.expand(2);
 		List<Object> pool = new ArrayList<>();
-		List<String> missing = new ArrayList<>();
-		int expected = 0;
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			PlayerData d = data(p);
 			if (d.escaped || d.solitaryUntil != 0 || d.infirmaryUntil != 0) {
 				continue;
 			}
-			expected++;
+			expected[0]++;
 			if (area.contains(p.getBlockPos())) {
 				pool.add(p);
 			} else {
@@ -1377,15 +1460,66 @@ public class CellbreakGame {
 			if (npc.solitaryUntil != 0 || npc.infirmaryUntil != 0) {
 				continue;
 			}
-			expected++;
+			expected[0]++;
 			if (area.contains(npc.getBlockPos())) {
 				pool.add(npc);
 			} else {
 				missing.add(npc.getName().getString());
 			}
 		}
-		guardSays(countingGuard, "Пересчёт окончен: на месте " + pool.size() + " из " + expected + "."
+		return pool;
+	}
+
+	private static final String[] SMALL_NEWS = { "На обед сегодня макароны. Не нравится — голодайте.",
+			"В душе сегодня только холодная вода.", "Кто взял ложку из столовой — верните ложку.",
+			"Начальник тюрьмы в хорошем настроении. Не испортите.", "Вечером будет проверка камер.",
+			"Прогулку сегодня не отменяют. Пока.", "Напоминаю: ходить по газону во дворе запрещено.",
+			"Металлолом с рабочего поля сдавать на столе, а не прятать по карманам!" };
+
+	/** End of the count: how many are here and who is missing, then the news of the day. */
+	private void announceCountAndNews() {
+		List<String> missing = new ArrayList<>();
+		int[] expected = { 0 };
+		List<Object> pool = lineUp(missing, expected);
+		guardSays(countingGuard, "Пересчёт окончен: на месте " + pool.size() + " из " + expected[0] + "."
 				+ (missing.isEmpty() ? " Все на месте." : " Нет: " + String.join(", ", missing) + "."));
+		List<String> news = new ArrayList<>();
+		long escaped = players.values().stream().filter(d -> d.role == Role.PRISONER && d.escaped).count();
+		if (escaped > 0) {
+			news.add("Сбежавших: " + escaped + ". Их ищут. Остальным даже не думать.");
+		}
+		List<String> wanted = new ArrayList<>();
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			if (isWanted(p)) {
+				wanted.add(p.getName().getString());
+			}
+		}
+		if (!wanted.isEmpty()) {
+			news.add("В розыске: " + String.join(", ", wanted) + ". Кто знает, где они, — сообщите.");
+		}
+		if (holesFound > 0) {
+			news.add("Найдено проломов и подкопов: " + holesFound + ". Охрана усилена.");
+		}
+		if (graffitiFound > 0) {
+			news.add("Стены опять разрисованы (" + graffitiFound + "). Художника найдём.");
+		}
+		if (fightsSeen > 0) {
+			news.add("Драк: " + fightsSeen + ". Следующего драчуна — в карцер.");
+		}
+		if (scannerAlarms > 0) {
+			news.add("Сканер сработал " + scannerAlarms + " раз. Мы всё видим.");
+		}
+		news.add(SMALL_NEWS[world().random.nextInt(SMALL_NEWS.length)]);
+		holesFound = 0;
+		graffitiFound = 0;
+		fightsSeen = 0;
+		scannerAlarms = 0;
+		guardSays(countingGuard, "Новости: " + String.join(" ", news));
+	}
+
+	/** After the news: four random inmates in the line-up are searched. */
+	private void rollCallSearch() {
+		List<Object> pool = lineUp(new ArrayList<>(), new int[] { 0 });
 		if (pool.isEmpty()) {
 			return;
 		}
@@ -1446,10 +1580,31 @@ public class CellbreakGame {
 		}
 		damage.putIfAbsent(pos.toImmutable(), original);
 		suspiciousOutdoors(p, pos);
-		if (isSeen(p, npcGuards(), online(Role.GUARD))) {
+		makeNoise(p, pos);
+		if (seenWorking(p)) {
 			addHeat(p, 40);
 			p.sendMessage(Text.literal("Охрана заметила, как ты ломаешь тюрьму! Подозрение +40").formatted(Formatting.RED));
 		}
+	}
+
+	/**
+	 * Breaking walls is loud: a guard close by turns round and sees it (no need to be looking
+	 * that way already); guards further off go and check where the noise came from.
+	 */
+	private boolean seenWorking(ServerPlayerEntity p) {
+		for (GuardEntity g : npcGuards()) {
+			if (sees(g, p, 12, false)) {
+				g.getLookControl().lookAt(p);
+				return true;
+			}
+		}
+		return isSeen(p, npcGuards(), online(Role.GUARD));
+	}
+
+	private void makeNoise(ServerPlayerEntity p, BlockPos pos) {
+		npcGuards().stream().filter(g -> !g.hasDuty() && g.getTarget() == null && g.getBlockPos().getSquaredDistance(pos) < 24 * 24)
+				.min(java.util.Comparator.comparingDouble(g -> g.getBlockPos().getSquaredDistance(pos)))
+				.ifPresent(g -> g.checkNoise(p.getBlockPos()));
 	}
 
 	/** Called when a prisoner hits any guard. */
@@ -1540,7 +1695,7 @@ public class CellbreakGame {
 	}
 
 	/** A prisoner player hit another prisoner (player or NPC): a fight. Guards who see it get suspicious. */
-	public void onPrisonerFight(ServerPlayerEntity attacker) {
+	public void onPrisonerFight(ServerPlayerEntity attacker, Entity victim) {
 		PlayerData d = data(attacker);
 		if (!isPrisoner(attacker) || ticks - d.lastFightTick < 40) {
 			return;
@@ -1548,10 +1703,23 @@ public class CellbreakGame {
 		d.lastFightTick = ticks;
 		LivingEntity watcher = seenBy(attacker, npcGuards(), online(Role.GUARD));
 		if (watcher != null) {
+			fightsSeen++;
 			addHeat(attacker, 15);
 			attacker.sendMessage(Text.literal("Охрана видит, как ты дерёшься! Подозрение +15").formatted(Formatting.RED), true);
 			if (watcher instanceof GuardEntity g) {
 				guardSays(g, "Эй! А ну прекратить драку, " + attacker.getName().getString() + "!");
+				g.breakUpFight(attacker);
+				// The nearest other guard comes to help.
+				npcGuards().stream().filter(o -> o != g && o.squaredDistanceTo(attacker) < 24 * 24)
+						.min(java.util.Comparator.comparingDouble(o -> o.squaredDistanceTo(attacker)))
+						.ifPresent(o -> o.breakUpFight(attacker));
+				if (victim instanceof PrisonerNpcEntity npc) {
+					npc.calmDown();
+				}
+			}
+			for (ServerPlayerEntity pg : online(Role.GUARD)) {
+				pg.sendMessage(Text.literal("Драка: " + attacker.getName().getString() + " (" + attacker.getBlockPos().toShortString()
+						+ ")").formatted(Formatting.RED), false);
 			}
 		}
 	}
@@ -1625,6 +1793,7 @@ public class CellbreakGame {
 				if (g.getBlockPos().getSquaredDistance(pos) < 100 && canSeeBlock(g, pos)) {
 					world.setBlockState(pos, Blocks.AIR.getDefaultState());
 					it.remove();
+					graffitiFound++;
 					guardSays(g, "Опять кто-то стены разрисовал! Закрасить. Найду художника — пойдёт в карцер.");
 					ServerPlayerEntity author = server.getPlayerManager().getPlayer(e.getValue());
 					if (author != null && isPrisoner(author)) {
@@ -1653,6 +1822,7 @@ public class CellbreakGame {
 				if (g.getBlockPos().getSquaredDistance(pos) < 100 && canSeeBlock(g, pos)) {
 					world.setBlockState(pos, e.getValue());
 					it.remove();
+					holesFound++;
 					broadcast(Text.literal("Охрана нашла " + describe(e.getValue()) + " (" + pos.toShortString()
 							+ ") и заделала. Будут искать виновного!").formatted(Formatting.RED));
 					ServerPlayerEntity owner = cellOwner(pos);
@@ -2241,6 +2411,10 @@ public class CellbreakGame {
 	}
 
 	private boolean isForbidden(ServerPlayerEntity p, Item item) {
+		if (item == Items.IRON_NUGGET && phase() == Phase.WORK && layout().workZone != null
+				&& layout().workZone.expand(3).contains(p.getBlockPos())) {
+			return false;
+		}
 		if (CbContent.WORK_TOOLS.contains(item) && phase() == Phase.WORK) {
 			PrisonLayout l = layout();
 			BlockPos pos = p.getBlockPos();

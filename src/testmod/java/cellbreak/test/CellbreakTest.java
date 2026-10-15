@@ -186,6 +186,12 @@ public class CellbreakTest implements ModInitializer {
 									+ " target=" + (npc.getTarget() == null ? "-" : npc.getTarget().getName().getString()));
 							return 1;
 						}))))
+				.then(CommandManager.literal("drop").then(CommandManager.argument("name", StringArgumentType.word()).executes(c -> {
+					ServerPlayerEntity p = bot(c).player;
+					p.dropSelectedItem(true);
+					reply(c, "dropped");
+					return 1;
+				})))
 				.then(CommandManager.literal("lights").executes(c -> {
 					ServerWorld w = c.getSource().getServer().getOverworld();
 					StringBuilder sb = new StringBuilder("lights:");

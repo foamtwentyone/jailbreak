@@ -136,6 +136,10 @@ public final class MapCommands {
 									world(c).setBlockState(p, lower, flags);
 									world(c).setBlockState(p.up(), lower.with(cellbreak.block.DetectorBlock.HALF,
 											DoubleBlockHalf.UPPER), flags);
+									if (!layout(c).detectors.contains(p)) {
+										layout(c).detectors.add(p.toImmutable());
+									}
+									save(c);
 									ok(c, "Сканер-рамка поставлена: " + p.toShortString());
 									return 1;
 								}))))

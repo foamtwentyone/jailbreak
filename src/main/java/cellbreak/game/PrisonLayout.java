@@ -65,6 +65,8 @@ public class PrisonLayout {
 	public BlockBox infirmaryZone;
 	/** Where the guards who do not count stand at roll call (by the exits). */
 	public final List<BlockPos> rollCallPosts = new ArrayList<>();
+	/** Scanner arches (their lower halves): they also catch contraband thrown through them. */
+	public final List<BlockPos> detectors = new ArrayList<>();
 
 	public boolean isEscaped(BlockPos pos) {
 		for (BlockBox a : areas) {
@@ -169,6 +171,7 @@ public class PrisonLayout {
 		putPos(nbt, "infirmarySpawn", infirmarySpawn);
 		putBox(nbt, "infirmary", infirmaryZone);
 		nbt.putLongArray("rollCallPosts", longs(rollCallPosts));
+		nbt.putLongArray("detectors", longs(detectors));
 		return nbt;
 	}
 
@@ -217,6 +220,9 @@ public class PrisonLayout {
 		l.infirmaryZone = getBox(nbt, "infirmary");
 		for (long p : nbt.getLongArray("rollCallPosts")) {
 			l.rollCallPosts.add(BlockPos.fromLong(p));
+		}
+		for (long p : nbt.getLongArray("detectors")) {
+			l.detectors.add(BlockPos.fromLong(p));
 		}
 		return l;
 	}

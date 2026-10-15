@@ -332,22 +332,22 @@ ITEMS = {
     ], {"o": OUT, "y": (120, 200, 90)}),
     "makeshift_shovel": ([
         "................",
-        ".............oo.",
-        "............owo.",
-        "...........owo..",
-        "..........owo...",
-        ".........owo....",
-        "........owo.....",
-        "...ooooowo......",
-        "..ossssoo.......",
-        ".osssssso.......",
-        ".osssssso.......",
-        ".ossssso........",
-        ".osssso.........",
-        "..oooo..........",
+        "..........ooo...",
+        ".........ossso..",
+        "........osssslo.",
+        "........ossssslo",
+        ".........osssslo",
+        "........otosslo.",
+        ".......owto.oo..",
+        "......owo.......",
+        ".....owo........",
+        "....owo.........",
+        "...owo..........",
+        "..owo...........",
+        ".owo............",
+        ".oo.............",
         "................",
-        "................",
-    ], {"o": OUT, "s": (190, 190, 196), "w": (176, 128, 80)}),
+    ], {"o": OUT, "s": (190, 190, 196), "l": (130, 132, 140), "w": (176, 128, 80), "t": (220, 220, 210)}),
     "handcuffs": ([
         "................",
         "................",
@@ -817,6 +817,67 @@ NEW_ITEMS = {
 }
 
 
+def outlined(cells, palette):
+    """16x16 item from {(x, y): colour key}; every empty pixel touching the shape becomes outline."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for (x, y), k in cells.items():
+        px[x, y] = palette[k] + (255,)
+    for y in range(16):
+        for x in range(16):
+            if (x, y) in cells:
+                continue
+            if any((x + dx, y + dy) in cells for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                px[x, y] = OUT + (255,)
+    return img
+
+
+WORK_PAL = {"s": (226, 230, 236), "l": (168, 174, 184), "d": (104, 110, 122), "w": (150, 102, 58),
+            "h": (104, 68, 38), "y": (236, 196, 44), "k": (40, 40, 44)}
+
+
+def work_handle(cells, top):
+    """A two-tone wooden handle from the bottom-left corner up to `top`, with yellow-black tape."""
+    for t in range(top):
+        x, y = 2 + t, 13 - t
+        tape = t in (2, 3)
+        cells[(x, y)] = ("y" if t == 2 else "k") if tape else "w"
+        cells[(x + 1, y)] = ("k" if t == 2 else "y") if tape else "h"
+
+
+def work_pickaxe_img():
+    import math
+    cells = {}
+    work_handle(cells, 9)
+    # The head: an arc round the bottom-left corner, from the top-left over to the right.
+    cx, cy = 3.0, 13.0
+    for y in range(16):
+        for x in range(16):
+            dx, dy = x + 0.5 - cx, cy - (y + 0.5)
+            r = math.hypot(dx, dy)
+            ang = math.degrees(math.atan2(dy, dx))
+            if 8.7 <= r <= 10.6 and -8 <= ang <= 98:
+                ends = ang < 2 or ang > 88
+                cells[(x, y)] = "d" if ends else ("s" if r > 9.7 else "l")
+    return outlined(cells, WORK_PAL)
+
+
+def work_axe_img():
+    cells = {}
+    work_handle(cells, 11)
+    # The blade on the upper-left of the handle's top; the cutting edge is bright.
+    rows = {1: (8, 9), 2: (6, 10), 3: (5, 10), 4: (5, 10), 5: (5, 9), 6: (6, 8), 7: (7, 7)}
+    for y, (x0, x1) in rows.items():
+        for x in range(x0, x1 + 1):
+            if (x, y) in cells:
+                continue
+            cells[(x, y)] = "s" if x == x0 else ("d" if x >= x1 - 0 and y > 1 else "l")
+    # A short back spike on the other side.
+    cells[(14, 3)] = "l"
+    cells[(14, 4)] = "d"
+    return outlined(cells, WORK_PAL)
+
+
 def main_v3(root):
     dirs = {k: os.path.join(root, "textures", k) for k in ("entity", "block", "item")}
     for i in range(16):
@@ -834,6 +895,8 @@ def main_v3(root):
         cut_broken(img).save(os.path.join(dirs["item"], target + ".png"))
     for name, (rows, pal) in NEW_ITEMS.items():
         from_pixels(rows, pal).save(os.path.join(dirs["item"], name + ".png"))
+    work_pickaxe_img().save(os.path.join(dirs["item"], "work_pickaxe.png"))
+    work_axe_img().save(os.path.join(dirs["item"], "work_axe.png"))
     for i, rows in enumerate(GRAFFITI):
         graffiti_img(rows).save(os.path.join(dirs["block"], "graffiti_%d.png" % i))
     for name, fn in {"detector_side": detector_side, "detector_panel": detector_panel,

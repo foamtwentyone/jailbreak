@@ -14,7 +14,6 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.ai.goal.Goal;
 import net.minecraft.entity.ai.goal.MeleeAttackGoal;
-import net.minecraft.entity.ai.goal.RevengeGoal;
 import net.minecraft.entity.ai.goal.LookAroundGoal;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.ai.goal.SwimGoal;
@@ -104,6 +103,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	public Personality personality = Personality.NEUTRAL;
 	private int talkCooldown;
 	private int angryTicks;
+	/** The last hit already answered: a new hit makes the inmate angry again, an old one does not. */
+	private int answeredHit = -1;
 
 	public PrisonerNpcEntity(EntityType<? extends MerchantEntity> type, World world) {
 		super(type, world);
@@ -130,7 +131,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				.add(EntityAttributes.GENERIC_MAX_HEALTH, 20.0)
 				.add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.3)
 				.add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 2.0)
-				.add(EntityAttributes.GENERIC_FOLLOW_RANGE, 64.0);
+				.add(EntityAttributes.GENERIC_FOLLOW_RANGE, 96.0);
 	}
 
 	@Override
@@ -155,29 +156,37 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		goalSelector.add(2, new RoutineGoal(this));
 		goalSelector.add(3, new LookAtEntityGoal(this, PlayerEntity.class, 8.0F));
 		goalSelector.add(4, new LookAroundGoal(this));
-		targetSelector.add(1, new RevengeGoal(this));
 	}
 
 	@Override
 	protected void mobTick() {
 		super.mobTick();
+		// Hit by a player: hits back for a while, then lets it go (until hit again).
+		LivingEntity attacker = getAttacker();
+		if (attacker instanceof PlayerEntity && getLastAttackedTime() != answeredHit && infirmaryUntil == 0) {
+			answeredHit = getLastAttackedTime();
+			setTarget(attacker);
+			angryTicks = 0;
+		}
 		LivingEntity target = getTarget();
 		if (target != null) {
-			// A fight does not last forever; and one who left (solitary, infirmary) is forgotten.
-			if (++angryTicks > 20 * 20 || !target.isAlive() || squaredDistanceTo(target) > 24 * 24
+			if (++angryTicks > 10 * 20 || !target.isAlive() || squaredDistanceTo(target) > 16 * 16
 					|| !(target instanceof PlayerEntity tp) || infirmaryUntil != 0
 					|| game() != null && game().isOutOfPlay(tp)) {
-				setTarget(null);
-				setAttacker(null);
-				angryTicks = 0;
+				calmDown();
 			}
-		} else {
-			angryTicks = 0;
 		}
 		if (--talkCooldown <= 0) {
 			talkCooldown = 20;
 			talkToPasserby();
 		}
+	}
+
+	/** Stops fighting (time is up, or a guard broke the fight up). */
+	public void calmDown() {
+		setTarget(null);
+		angryTicks = 0;
+		getNavigation().stop();
 	}
 
 	/** Says something to a player prisoner walking right past: a compliment, a jibe or a joke. */
@@ -301,6 +310,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		private BlockPos destination;
 		private int travelTicks;
 		private int waitTicks;
+		/** The destination cannot be reached on foot: the inmate does not try, it takes a side door. */
+		private boolean unreachable;
 
 		RoutineGoal(PrisonerNpcEntity npc) {
 			this.npc = npc;
@@ -349,10 +360,27 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				destination = wanted;
 				travelTicks = 0;
 				Path path = npc.getNavigation().findPathTo(destination, 0);
-				npc.getNavigation().startMovingAlong(path, 1.0);
+				// A path that stops short (in a cell corner, under the canteen) is not worth walking.
+				unreachable = path == null || !path.reachesTarget()
+						&& path.getEnd() != null && path.getEnd().getBlockPos().getSquaredDistance(destination) > 9;
+				if (unreachable) {
+					npc.getNavigation().stop();
+				} else {
+					npc.getNavigation().startMovingAlong(path, 1.0);
+				}
 			}
 			travelTicks++;
-			if (npc.getBlockPos().getSquaredDistance(destination) <= 2) {
+			BlockPos at = npc.getBlockPos();
+			boolean arrived = Math.abs(at.getY() - destination.getY()) <= 1
+					&& at.getSquaredDistance(destination.getX(), at.getY(), destination.getZ()) <= 2;
+			if (unreachable && travelTicks > 40) {
+				npc.refreshPositionAndAngles(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5,
+						npc.getYaw(), npc.getPitch());
+				npc.getNavigation().stop();
+				unreachable = false;
+				arrived = true;
+			}
+			if (arrived) {
 				npc.getNavigation().stop();
 				// In the line-up they stand still and wait; elsewhere they idle a bit before moving on.
 				waitTicks = npc.lineupSlot != null ? 40 : 40 + npc.getRandom().nextInt(100);
@@ -365,7 +393,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 						npc.getYaw(), npc.getPitch());
 				npc.getNavigation().stop();
 				travelTicks = 0;
-			} else if (travelTicks % 30 == 0 && npc.getNavigation().isIdle()) {
+			} else if (!unreachable && travelTicks % 30 == 0 && npc.getNavigation().isIdle()) {
 				npc.getNavigation().startMovingTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5, 1.0);
 			}
 		}

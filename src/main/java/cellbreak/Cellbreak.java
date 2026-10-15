@@ -113,7 +113,7 @@ public class Cellbreak implements ModInitializer {
 				if (entity instanceof GuardEntity || entity instanceof ServerPlayerEntity t && game.isGuard(t)) {
 					game.onGuardAttacked(p);
 				} else if (entity instanceof PrisonerNpcEntity || entity instanceof ServerPlayerEntity t && game.isPrisoner(t)) {
-					game.onPrisonerFight(p);
+					game.onPrisonerFight(p, entity);
 				}
 			}
 			return true;
