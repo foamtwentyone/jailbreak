@@ -75,7 +75,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			"%s, хочешь, поделюсь хлебом?", "Ты держишься лучше всех, кого я видел за пять лет.",
 			"Если кто обидит — скажи мне, %s.", "Отличная форма, %s! Прямо как из каталога.",
 			"Хорошего дня, %s. Ну, насколько он тут может быть хорошим.", "%s, ты как глоток свежего воздуха в этой дыре.",
-			"У тебя добрые глаза, %s. Береги их.", "Уважаю тех, кто не ноет. Ты из таких." };
+			"У тебя добрые глаза, %s. Береги их.", "Уважаю тех, кто не ноет. Ты из таких.",
+			"Ты сегодня молодцом, %s.", "Знаешь, с тобой тут как-то светлее.", "Хочешь, научу шить из простыни? Шучу. Почти.", "Ты держишь слово, %s. Это ценно.", "Береги себя на поле, там скользко.", "Если будет тоскливо — заходи, поболтаем.", "Я в тебя верю, %s.", "У тебя хорошая походка. Уверенная." };
 	private static final String[] RUDE = { "Чего вылупился, %s?", "Смотри, куда прёшь.",
 			"%s, ты как местная баланда: никому не нравишься.", "Твоя мамка звонила: просила подержать тебя тут подольше.",
 			"Ещё раз толкнёшь — пожалеешь.", "Иди-иди, черепаха.", "От тебя даже охрана нос воротит, %s.",
@@ -85,7 +86,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			"Ещё слово — и поедешь в медпункт.", "%s, от тебя пахнет как от душевой после прогулки.",
 			"Твоя мама говорит, что ты в детстве ел мел. Это многое объясняет.", "Не стой на моём месте, %s.",
 			"Тебя даже снайперы не замечают, %s. Настолько ты пустое место.", "Иди поплачь в подушку, %s.",
-			"Твоя мама так плохо готовит, что баланда тебе тут как ресторан." };
+			"Твоя мама так плохо готовит, что баланда тебе тут как ресторан.",
+			"Иди отсюда, пока цел.", "%s, тебя в детстве роняли? Видно.", "Ты даже баланду ешь некрасиво.", "Не дыши в мою сторону, %s.", "Твоя мама точно не тебя хотела.", "Ты как трещина в стене — раздражаешь.", "Слышь, %s, ты мне не нравишься. Просто так.", "Твой батя бы со стыда сгорел." };
 	private static final String[] JOKES = { "Знаешь, почему охранник с дубинкой? Шутить не умеет.",
 			"%s, у тебя шнурок развязался. Шучу, у нас шнурков нет.",
 			"Твоя мама такая заботливая, что прислала тебе напильник в пироге. Шучу... или нет?",
@@ -98,7 +100,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			"Знаешь, как тут называют оптимиста? Новенький. Как тебя, %s.", "У нас тут как в санатории. Только выйти нельзя.",
 			"Твоя мама прислала письмо: «Сынок, учись хорошо». Я ей ответил: «Учится — копать».",
 			"%s, если увидишь мою свободу — передай привет.", "Повар сказал, что это котлета. Мы до сих пор спорим, чья.",
-			"Что сказал кирпич, когда я его ударил? Ничего. Он кирпич.", "Твоя мама — единственная, кто верит, что ты тут случайно." };
+			"Что сказал кирпич, когда я его ударил? Ничего. Он кирпич.", "Твоя мама — единственная, кто верит, что ты тут случайно.",
+			"Почему повар Степаныч не улыбается? Он пробовал свою еду.", "%s, говорят, ты сбежишь. Из столовой — может быть.", "Знаешь, что общего у тебя и кирки? Обоих скоро сломают.", "Твоя мама передавала привет. И напильник. Шучу. Привет только.", "Как охранник считает нас? На пальцах. Поэтому до десяти.", "Мой сокамерник храпит так, что снайпер думает — тревога.", "Сидят два заключённых, один говорит: «Скучно». Второй: «Так копай»." };
 	private static final String[] VETERAN = { "Слушай старика, %s: не спорь с охраной на перекличке.",
 			"Я тут двадцать лет. Стены везде одинаковые, а вот решётки — нет.", "Напильник держи в тумбочке, а не в кармане.",
 			"Металлодетектор в мастерской ловит даже самородки. Проверено мной.", "Ночью держись в тени, %s. Прожекторы не спят.",
@@ -109,7 +112,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			"Самодельная кирка ломается в самый неподходящий момент. Носи запасную.", "Не дерись при охране. Это быстрый путь в карцер.",
 			"Перекличку пропускать — себе дороже.", "Я видел, как отсюда сбегали. Видел и как возвращали.",
 			"Муляж стены спасёт тебе жизнь. Ну, или срок.", "Ключ из глины — лучший друг заключённого.",
-			"Ночью двери запирают через полминуты после звонка. Не опаздывай.", "Терпение, %s. Стены тоже стареют." };
+			"Ночью двери запирают через полминуты после звонка. Не опаздывай.", "Терпение, %s. Стены тоже стареют.",
+			"Повара не зли — останешься без хлеба.", "Ключ из глины ломается, если долго им вертеть. Будь нежнее.", "Лучшее время для дел — свободное время после работы.", "Сканер пищит и на брёвна тоже. Запомни.", "В чужую камеру не заходи — охрана этого не любит.", "Охранник, который зевает, — твой лучший друг.", "Медпункт не курорт, там всего полминуты.", "Верхний ярус тоже с вентиляцией. Я проверял." };
 	private static final String[] PARANOID = { "%s, ты тоже слышишь, как стены шепчут?", "Охрана читает наши мысли. Думай тише.",
 			"Не смотри на снайпера! Он это чувствует.", "Они кладут что-то в баланду. Я точно знаю.",
 			"Этот сканер видит сквозь кожу, %s. Я тебе говорю.", "Тот новенький — подсадной. Не верь ему.",
@@ -119,7 +123,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			"Не пей воду из душа, %s. Просто не пей.", "Они пересчитывают нас, потому что кого-то подменили.",
 			"Мои тапки пропали. Это заговор.", "Тсс! Деревья на поле подслушивают.", "Почему у охраны все шапки одинаковые? Подозрительно.",
 			"%s, если я пропаду — ищи в вентиляции.", "Начальник тюрьмы — робот. Я видел, как он не моргал.",
-			"Мне кажется, моя тень работает на охрану." };
+			"Мне кажется, моя тень работает на охрану.",
+			"Повар Гена слишком весёлый. Подозрительно.", "Ты видел, как сержант на меня посмотрел? Он знает.", "Каждая крошка хлеба — это датчик.", "Не стой у сканера, он сканирует мысли.", "Ночью прожектор ищет именно меня. Я уверен.", "%s, твоя тень только что шевельнулась сама.", "Мне снилось, что я в тюрьме. Проснулся — и правда.", "Не ешь баланду. Просто поверь." };
 	private static final String[] PHILOSOPHER = { "Свобода, %s, — это когда решётка только снаружи.",
 			"Мы все в тюрьме. Просто у некоторых стены красивее.", "Время здесь течёт иначе. Как баланда — медленно и вязко.",
 			"Что такое побег, %s? Возвращение к себе.", "Стена — это всего лишь вопрос, на который ещё не ответили киркой.",
@@ -129,7 +134,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			"Мы сами строим свои стены, %s. Эти, правда, построил кто-то другой.", "Тишина в камере громче любого крика.",
 			"Даже трещина в стене — это начало пути.", "Ложка в руках мудреца — инструмент. В руках глупца — ложка.",
 			"Дорога в тысячу шагов начинается с одного удара кирки.", "Всё проходит. Срок тоже.",
-			"Мел на стене смывают, а мысль — нет.", "Не бойся темноты, %s. Бойся прожектора.", "Кто знает себя, тот знает выход." };
+			"Мел на стене смывают, а мысль — нет.", "Не бойся темноты, %s. Бойся прожектора.", "Кто знает себя, тот знает выход.",
+			"Хлеб чёрствый, но это всё-таки хлеб.", "Любая стена — это чья-то граница. Чья — вот вопрос.", "Свобода начинается с вопроса «зачем».", "Прожектор ищет свет во тьме. Как и мы.", "Каждый день — это перекличка с самим собой.", "Мел стирается, %s. Как и всё в этом мире.", "Чужая камера — это чужая вселенная.", "Терпение — это кирка, которой копают время." };
 	private static final String[] BRAGGART = { "Я отсюда уже трижды сбегал. Просто возвращаюсь — скучно на воле.",
 			"Видел мою кирку? Сам сделал. Из ложки и характера.", "Охранники меня боятся, %s. Ну, уважают.",
 			"Я тут самый сильный. Спроси любого. Только не охрану.", "Мне торговцы сами приплачивают, чтобы я у них покупал.",
@@ -140,7 +146,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			"Я бы давно ушёл, но кто тогда будет вас учить?", "Мой муляж стены даже охрана хвалила. Не зная, что это муляж.",
 			"Я дерусь так, что медпункт для меня отдельную койку держит.", "Меня сюда посадили, потому что на воле я всех обыгрывал.",
 			"Видишь этот шрам? Это я спас охранника. Он, правда, не помнит.", "Я читал все книги в библиотеке. Обе.",
-			"%s, держись рядом — научу жизни." };
+			"%s, держись рядом — научу жизни.",
+			"Повар Степаныч меня уважает. Даёт двойную порцию.", "Я однажды прошёл через сканер с киркой. Он даже не пискнул.", "Я сержанта Петрова в армрестлинг уделал.", "Вся вентиляция — мои маршруты.", "Знаешь, кто нарисовал череп на стене? Я. Шедевр.", "На поле я руду носом чую.", "%s, я бы взял тебя в побег. Но у меня очередь.", "Мне сам начальник открыл дверь. Правда, в карцер." };
 	private static final String[] NEUTRAL_LINES = { "Угу.", "Привет.", "...", "Ну и денёк.", "Скорей бы ужин.",
 			"Опять дождь, что ли?", "Ты не видел мои носки?", "Мм." };
 
@@ -163,6 +170,12 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	public boolean skipsMeal;
 	public Personality personality = Personality.NEUTRAL;
 	private int talkCooldown;
+	/** Clicked too often: annoyed, then sulking (won't talk or trade). */
+	private float annoyance;
+	private int lastClickAge;
+	private int sulkUntil;
+	/** Kept a work tool hidden after work (the scanner will find it). */
+	public boolean smugglingTool;
 	private int angryTicks;
 	/** The last hit already answered: a new hit makes the inmate angry again, an old one does not. */
 	private int answeredHit = -1;
@@ -303,8 +316,50 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	@Override
 	public boolean tryAttack(net.minecraft.entity.Entity target) {
 		swingHand(Hand.MAIN_HAND);
-		return super.tryAttack(target);
+		boolean hit = super.tryAttack(target);
+		CellbreakGame game = game();
+		if (hit && game != null && target instanceof ServerPlayerEntity p) {
+			game.onNpcAttack(this, p);
+		}
+		return hit;
 	}
+
+	/** Somebody keeps clicking: the gentle ones take offence, the rude ones swear or start a fight. */
+	private void reactToPestering(PlayerEntity player) {
+		String name = player.getName().getString();
+		String line;
+		Formatting color = Formatting.RED;
+		boolean rough = personality == Personality.RUDE || personality == Personality.BRAGGART
+				|| personality == Personality.PARANOID;
+		if (rough && random.nextBoolean()) {
+			line = String.format(FIGHT_START[random.nextInt(FIGHT_START.length)], name);
+			setTarget(player);
+			setAttacker(player);
+		} else if (rough || personality == Personality.JOKER) {
+			line = String.format(INSULTS[random.nextInt(INSULTS.length)], name);
+		} else {
+			line = String.format(OFFENDED[random.nextInt(OFFENDED.length)], name);
+			color = Formatting.GRAY;
+			sulkUntil = age + 60 * 20;
+		}
+		Text msg = Text.literal(getName().getString() + ": ").formatted(Formatting.GOLD).append(Text.literal(line).formatted(color));
+		for (PlayerEntity other : getWorld().getPlayers()) {
+			if (other.squaredDistanceTo(this) < 12 * 12) {
+				other.sendMessage(msg, false);
+			}
+		}
+	}
+
+	private static final String[] OFFENDED = { "Ну всё, %s. Я с тобой не разговариваю.", "Отстань. Обиделся я.",
+			"Ты меня достал, %s. Иди к другим приставай.", "Я думал, мы друзья... А ты тычешь в меня, как в кнопку.",
+			"Всё. Молчу. Обиделся.", "Не трогай меня. Мне нужно побыть одному.", "Хватит! Я тебе не игрушка, %s." };
+	private static final String[] SULKING = { "...", "Не разговариваю.", "Отвернулся.", "Я обиделся, забыл?", "Хмф." };
+	private static final String[] INSULTS = { "%s, ты что, дятел? Хватит долбить!", "Ещё раз ткнёшь — и твоя мама узнает, где ты сидишь.",
+			"Твой папа, видать, тоже всё время тыкал куда не надо. Вот ты и получился.", "Отвали, %s, пока зубы целы.",
+			"Твоя мама кликает так же назойливо? Понятно, в кого ты.", "%s, у тебя руки чешутся? Почеши об стену.",
+			"Тыкалка сломалась? Сходи в медпункт.", "Вся твоя семья такая приставучая, %s?" };
+	private static final String[] FIGHT_START = { "Ну всё, %s, ты напросился!", "Сейчас я тебе потыкаю!",
+			"Держись, %s! Сам виноват!", "Последний раз ты меня трогал!" };
 
 	@Override
 	public ActionResult interactMob(PlayerEntity player, Hand hand) {
@@ -312,6 +367,18 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			return ActionResult.PASS;
 		}
 		if (getWorld().isClient) {
+			return ActionResult.SUCCESS;
+		}
+		annoyance = Math.max(0, annoyance - (age - lastClickAge) / 40.0F) + 1;
+		lastClickAge = age;
+		if (age < sulkUntil) {
+			player.sendMessage(Text.literal(getName().getString() + ": ").formatted(Formatting.GOLD)
+					.append(Text.literal(SULKING[random.nextInt(SULKING.length)]).formatted(Formatting.GRAY)), false);
+			return ActionResult.SUCCESS;
+		}
+		if (annoyance >= 6) {
+			annoyance = 0;
+			reactToPestering(player);
 			return ActionResult.SUCCESS;
 		}
 		if (!isTrader()) {
@@ -422,9 +489,14 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				npc.getNavigation().stop();
 				return;
 			}
+			if (npc.hasVehicle()) {
+				// Sitting at the table: nothing to walk to.
+				npc.getNavigation().stop();
+				return;
+			}
 			boolean working = game.isWorkingAt(npc.getBlockPos());
 			ItemStack held = npc.getMainHandStack();
-			if (working != held.isOf(CbContent.WORK_PICKAXE)) {
+			if (working != held.isOf(CbContent.WORK_PICKAXE) && !held.isOf(net.minecraft.item.Items.BREAD)) {
 				npc.equipStack(EquipmentSlot.MAINHAND, working ? new ItemStack(CbContent.WORK_PICKAXE) : ItemStack.EMPTY);
 			}
 			if (waitTicks > 0) {
@@ -483,6 +555,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				arrived = true;
 			}
 			if (arrived) {
+				game.onNpcArrived(npc, destination);
 				npc.getNavigation().stop();
 				// In the line-up they stand still and wait; elsewhere they idle a bit before moving on.
 				waitTicks = npc.lineupSlot != null ? 40 : 40 + npc.getRandom().nextInt(100);

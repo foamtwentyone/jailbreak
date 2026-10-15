@@ -36,5 +36,7 @@
   "block.cellbreak.graffiti": "Граффити",
   "tooltip.cellbreak.contraband": "Контрабанда",
   "tooltip.cellbreak.work_tool": "Только для работы на поле",
-  "tooltip.cellbreak.broken": "Почини в инвентаре: обломки + %s"
+  "tooltip.cellbreak.broken": "Почини в инвентаре: обломки + %s",
+  "item.cellbreak.rag": "Тряпка",
+  "entity.cellbreak.cook": "Повар"
 }

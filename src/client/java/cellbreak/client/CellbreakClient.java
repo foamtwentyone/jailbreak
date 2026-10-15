@@ -14,6 +14,7 @@ public class CellbreakClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		EntityRendererRegistry.register(CbContent.GUARD, GuardRenderer::new);
 		EntityRendererRegistry.register(CbContent.PRISONER, PrisonerRenderer::new);
+		EntityRendererRegistry.register(CbContent.COOK, CookRenderer::new);
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.CELL_BARS, RenderLayer.getCutoutMipped());
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.DETECTOR, RenderLayer.getCutout());
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.GRAFFITI, RenderLayer.getCutout());

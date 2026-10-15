@@ -143,6 +143,22 @@ public final class MapCommands {
 									ok(c, "Сканер-рамка поставлена: " + p.toShortString());
 									return 1;
 								}))))
+				.then(CommandManager.literal("cook").then(pos((c, p) -> {
+					layout(c).cookPosts.add(p);
+					ok(c, "Место повара №" + layout(c).cookPosts.size() + ": " + p.toShortString()
+							+ (layout(c).cookPosts.size() == 1 ? " (угрюмый Степаныч)" : " (весёлый Гена)"));
+				})))
+				.then(CommandManager.literal("queue").then(pos((c, p) -> {
+					layout(c).queueSpots.add(p);
+					ok(c, "Место в очереди за едой №" + layout(c).queueSpots.size() + ": " + p.toShortString());
+				})))
+				.then(CommandManager.literal("foodchest").then(pos((c, p) -> {
+					if (!(world(c).getBlockEntity(p) instanceof Inventory)) {
+						throw error("Здесь нет сундука или бочки.");
+					}
+					layout(c).foodChests.add(p);
+					ok(c, "Сундук с едой на кухне №" + layout(c).foodChests.size() + ": " + p.toShortString());
+				})))
 				.then(CommandManager.literal("rollcallpost").then(pos((c, p) -> {
 					layout(c).rollCallPosts.add(p);
 					ok(c, "Пост охраны на перекличке №" + layout(c).rollCallPosts.size() + ": " + p.toShortString());

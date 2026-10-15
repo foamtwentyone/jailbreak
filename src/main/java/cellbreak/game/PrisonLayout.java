@@ -67,6 +67,10 @@ public class PrisonLayout {
 	public final List<BlockPos> rollCallPosts = new ArrayList<>();
 	/** Scanner arches (their lower halves): they also catch contraband thrown through them. */
 	public final List<BlockPos> detectors = new ArrayList<>();
+	/** Canteen: where the cooks stand, the food queue (front first) and the kitchen chests. */
+	public final List<BlockPos> cookPosts = new ArrayList<>();
+	public final List<BlockPos> queueSpots = new ArrayList<>();
+	public final List<BlockPos> foodChests = new ArrayList<>();
 
 	public boolean isEscaped(BlockPos pos) {
 		for (BlockBox a : areas) {
@@ -172,6 +176,9 @@ public class PrisonLayout {
 		putBox(nbt, "infirmary", infirmaryZone);
 		nbt.putLongArray("rollCallPosts", longs(rollCallPosts));
 		nbt.putLongArray("detectors", longs(detectors));
+		nbt.putLongArray("cookPosts", longs(cookPosts));
+		nbt.putLongArray("queueSpots", longs(queueSpots));
+		nbt.putLongArray("foodChests", longs(foodChests));
 		return nbt;
 	}
 
@@ -223,6 +230,15 @@ public class PrisonLayout {
 		}
 		for (long p : nbt.getLongArray("detectors")) {
 			l.detectors.add(BlockPos.fromLong(p));
+		}
+		for (long p : nbt.getLongArray("cookPosts")) {
+			l.cookPosts.add(BlockPos.fromLong(p));
+		}
+		for (long p : nbt.getLongArray("queueSpots")) {
+			l.queueSpots.add(BlockPos.fromLong(p));
+		}
+		for (long p : nbt.getLongArray("foodChests")) {
+			l.foodChests.add(BlockPos.fromLong(p));
 		}
 		return l;
 	}

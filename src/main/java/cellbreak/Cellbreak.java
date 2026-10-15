@@ -158,6 +158,12 @@ public class Cellbreak implements ModInitializer {
 				game.wipeGraffiti(sp, pos);
 				return ActionResult.SUCCESS;
 			}
+			if (state.isOf(CbContent.GRAFFITI) && stack.isOf(CbContent.RAG)) {
+				if (sp != null && game.isRunning()) {
+					game.washGraffiti(sp, pos);
+				}
+				return ActionResult.SUCCESS;
+			}
 			if (stack.isOf(CbContent.CHALK)) {
 				return sp != null && game.drawGraffiti(sp, pos, hit.getSide()) ? ActionResult.SUCCESS : ActionResult.PASS;
 			}

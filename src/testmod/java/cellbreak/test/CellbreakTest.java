@@ -186,6 +186,29 @@ public class CellbreakTest implements ModInitializer {
 									+ " target=" + (npc.getTarget() == null ? "-" : npc.getTarget().getName().getString()));
 							return 1;
 						}))))
+				.then(CommandManager.literal("talk").then(CommandManager.argument("name", StringArgumentType.word())
+						.then(CommandManager.argument("times", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 50))
+								.executes(c -> {
+							ServerPlayerEntity p = bot(c).player;
+							var mobs = p.getServerWorld().getEntitiesByClass(net.minecraft.entity.mob.MobEntity.class,
+									p.getBoundingBox().expand(4), e -> true);
+							mobs.sort(java.util.Comparator.comparingDouble(e -> e.squaredDistanceTo(p)));
+							if (mobs.isEmpty()) {
+								reply(c, "nobody near");
+								return 0;
+							}
+							var mob = mobs.get(0);
+							int n = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "times");
+							for (int i = 0; i < n; i++) {
+								mob.interact(p, Hand.MAIN_HAND);
+								if (p.currentScreenHandler != p.playerScreenHandler) {
+									p.closeHandledScreen();
+								}
+							}
+							reply(c, "talked to " + mob.getName().getString() + " x" + n + ", its target="
+									+ (mob.getTarget() == null ? "-" : mob.getTarget().getName().getString()));
+							return 1;
+						}))))
 				.then(CommandManager.literal("drop").then(CommandManager.argument("name", StringArgumentType.word()).executes(c -> {
 					ServerPlayerEntity p = bot(c).player;
 					p.dropSelectedItem(true);

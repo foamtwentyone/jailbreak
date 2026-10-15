@@ -36,5 +36,7 @@
   "block.cellbreak.graffiti": "Graffiti",
   "tooltip.cellbreak.contraband": "Contraband",
   "tooltip.cellbreak.work_tool": "For the work field only",
-  "tooltip.cellbreak.broken": "Repair in the inventory: remains + %s"
+  "tooltip.cellbreak.broken": "Repair in the inventory: remains + %s",
+  "item.cellbreak.rag": "Rag",
+  "entity.cellbreak.cook": "Cook"
 }

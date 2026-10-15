@@ -56,6 +56,37 @@ public class GuardEntity extends PathAwareEntity {
 	/** A prisoner seen this recently but out of walking reach (ladders) gets a guard via a service passage. */
 	private static final int SHORTCUT_TICKS = 80;
 
+	private static final String[] SURNAMES = { "Петров", "Сидоров", "Кузнецов", "Волков", "Морозов", "Соколов",
+			"Лебедев", "Козлов", "Новиков", "Зайцев", "Павлов", "Голубев", "Виноградов", "Богданов", "Фёдоров", "Михайлов",
+			"Беляев", "Тарасов", "Белов", "Комаров" };
+	private static final String[] RANKS = { "Сержант", "Прапорщик", "Старшина", "Лейтенант", "Рядовой" };
+
+	/** How a guard talks to a prisoner who comes up to them. */
+	public enum Manner {
+		STRICT, LAZY, KIND, SARCASTIC
+	}
+
+	private static final String[] STRICT = { "Чего надо? Руки за спину.", "Не задерживайся, заключённый.",
+			"Ещё вопрос — и пойдёшь в карцер.", "Стоять ровно, когда говоришь с охраной!", "Я за тобой слежу.",
+			"Номер свой помнишь? Вот и не забывай, где ты.", "Разговоры с охраной не положены.",
+			"Двигай. Тут не курорт.", "Шаг в сторону — нарушение.", "Порядок есть порядок.",
+			"Я таких, как ты, сотню видел.", "Режим для всех один. И для тебя тоже." };
+	private static final String[] LAZY = { "Ох, отстань... у меня смена через два часа кончается.", "Иди куда шёл, мне лень писать рапорт.",
+			"Я не видел, ты не видел. Договорились?", "Зевнул... извини. Чего хотел?", "Не создавай мне работы, пожалуйста.",
+			"Скорей бы обед.", "Если что-то сломаешь — сделай так, чтобы я не заметил.", "Я тут просто стою. Ты тоже постой.",
+			"Начальник орёт, ты пристаёшь... тяжёлая у меня жизнь.", "Можно я просто посижу?" };
+	private static final String[] KIND = { "Как ты, держишься?", "Ешь хорошо, сил больше будет.", "Не нарушай — и всё будет нормально.",
+			"Если тебя кто обижает, скажи мне.", "У всех бывают плохие дни. Держись.", "Работай честно — выйдешь раньше.",
+			"Знаешь, я тоже не хотел тут работать. Но вот.", "Береги себя, парень.", "Привет. Тихо сегодня, да?",
+			"Не лезь в драки, ладно?" };
+	private static final String[] SARCASTIC = { "О, мой любимый заключённый. Что, опять соскучился?",
+			"Ищешь выход? Он вон там. Шучу, ты здесь навсегда.", "Решил подружиться с охраной? Мило.",
+			"Твоя камера скучает по тебе. Иди проведай.", "Ты такой подозрительный, что я даже восхищаюсь.",
+			"Если копаешь подкоп — копай потише, ладно?", "Скажи, а кирка в кармане тебе не мешает? Шучу. Или нет.",
+			"Свобода? Слышал о такой. Говорят, хорошая вещь.", "Ну что, герой, опять к нам с вопросами?",
+			"Аплодирую твоей смелости. Подходить к охраннику — это сильно." };
+
+	private Manner manner = Manner.STRICT;
 	private final Map<UUID, Integer> hits = new HashMap<>();
 	private int unreachableTicks;
 	private boolean sniper;
@@ -172,6 +203,10 @@ public class GuardEntity extends PathAwareEntity {
 	public EntityData initialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason reason, EntityData data) {
 		EntityData result = super.initialize(world, difficulty, reason, data);
 		dataTracker.set(VARIANT, random.nextInt(VARIANTS));
+		Manner[] all = Manner.values();
+		manner = all[random.nextInt(all.length)];
+		setCustomName(net.minecraft.text.Text.literal(RANKS[random.nextInt(RANKS.length)] + " "
+				+ SURNAMES[random.nextInt(SURNAMES.length)]).formatted(net.minecraft.util.Formatting.BLUE));
 		equipStack(EquipmentSlot.MAINHAND, new ItemStack(CbContent.BATON));
 		setEquipmentDropChance(EquipmentSlot.MAINHAND, 0.0F);
 		return result;
@@ -196,6 +231,7 @@ public class GuardEntity extends PathAwareEntity {
 		super.writeCustomDataToNbt(nbt);
 		nbt.putBoolean("Sniper", sniper);
 		nbt.putInt("Variant", getVariant());
+		nbt.putString("Manner", manner.name());
 	}
 
 	@Override
@@ -203,6 +239,11 @@ public class GuardEntity extends PathAwareEntity {
 		super.readCustomDataFromNbt(nbt);
 		sniper = nbt.getBoolean("Sniper");
 		dataTracker.set(VARIANT, nbt.getInt("Variant"));
+		try {
+			manner = Manner.valueOf(nbt.getString("Manner"));
+		} catch (IllegalArgumentException e) {
+			manner = Manner.STRICT;
+		}
 	}
 
 	private CellbreakGame game() {
@@ -290,6 +331,27 @@ public class GuardEntity extends PathAwareEntity {
 			}
 		}
 		return hit;
+	}
+
+	/** A player comes up and clicks: the guard answers in their manner. */
+	@Override
+	protected net.minecraft.util.ActionResult interactMob(PlayerEntity player, Hand hand) {
+		if (hand != Hand.MAIN_HAND || sniper) {
+			return net.minecraft.util.ActionResult.PASS;
+		}
+		if (!getWorld().isClient) {
+			String[] lines = switch (manner) {
+				case LAZY -> LAZY;
+				case KIND -> KIND;
+				case SARCASTIC -> SARCASTIC;
+				default -> STRICT;
+			};
+			getLookControl().lookAt(player);
+			player.sendMessage(net.minecraft.text.Text.literal(getName().getString() + ": ").formatted(net.minecraft.util.Formatting.BLUE)
+					.append(net.minecraft.text.Text.literal(lines[random.nextInt(lines.length)])
+							.formatted(net.minecraft.util.Formatting.WHITE)), false);
+		}
+		return net.minecraft.util.ActionResult.SUCCESS;
 	}
 
 	@Override

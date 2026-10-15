@@ -514,6 +514,7 @@ def main():
     for name, (rows, pal) in MORE_ITEMS.items():
         from_pixels(rows, pal).save(os.path.join(dirs["item"], name + ".png"))
     main_v3(root)
+    main_v4(root)
 
 
 # ---------------------------------------------------------------- 0.3: variety
@@ -951,6 +952,65 @@ def main_v3(root):
     # 0.3.2: more drawings, after everything else so the older textures keep their pixels.
     for i, rows in enumerate(GRAFFITI[6:], 6):
         graffiti_img(rows).save(os.path.join(dirs["block"], "graffiti_%d.png" % i))
+
+def cook_painter(look, cheerful):
+    white = (236, 236, 232)
+    white_d = (210, 210, 206)
+    check = (60, 60, 70) if not cheerful else (200, 60, 60)
+
+    def paint(part, face, x, y, w, h):
+        if part == "head":
+            if face == "top" or y < 2:
+                return white if (x + y) % 3 else white_d  # chef's hat
+            c = person_head(face, x, y, look)
+            return c
+        if part == "body":
+            if face == "front" and 3 <= x <= 4 and y in (2, 5, 8):
+                return (60, 60, 64)  # buttons
+            if face == "front" and y >= 6:
+                return (246, 246, 244) if x not in (0, 7) else white_d  # apron
+            if face == "front" and y == 0 and 2 <= x <= 5:
+                return check  # neckerchief
+            return white if y % 4 else white_d
+        if part in ("right_arm", "left_arm"):
+            if face == "bottom" or y >= 8:
+                return look["skin"]
+            return white
+        if face == "bottom" or y >= 11:
+            return (40, 40, 44)
+        return check if (x + y) % 2 else shade(check, 0.8)[:3]  # checked trousers
+    return paint
+
+
+RAG = ([
+    "................",
+    "................",
+    "....oooooo......",
+    "...okkkkkko.....",
+    "..okkdkkkkkoo...",
+    "..okkkkkdkkkko..",
+    ".okdkkkkkkkdko..",
+    ".okkkkkdkkkkko..",
+    ".okkkkkkkkkkko..",
+    "..okkdkkkkdkko..",
+    "..okkkkkkkkko...",
+    "...ooookkkko....",
+    ".......oooo.....",
+    "................",
+    "................",
+    "................",
+], {"o": (60, 56, 50), "k": (196, 186, 160), "d": (150, 140, 116)})
+
+
+def main_v4(root):
+    dirs = {k: os.path.join(root, "textures", k) for k in ("entity", "block", "item")}
+    gloomy = make_look(random.Random(9001))
+    gloomy.update({"style": "short", "beard": "mustache", "hair": (150, 150, 150)})
+    cheerful = make_look(random.Random(9002))
+    cheerful.update({"style": "short", "beard": "none", "scar": False, "tear": False})
+    paint_skin(cook_painter(gloomy, False)).save(os.path.join(dirs["entity"], "cook_0.png"))
+    paint_skin(cook_painter(cheerful, True)).save(os.path.join(dirs["entity"], "cook_1.png"))
+    from_pixels(*RAG).save(os.path.join(dirs["item"], "rag.png"))
 
 
 if __name__ == "__main__":

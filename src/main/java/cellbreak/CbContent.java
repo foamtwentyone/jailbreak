@@ -10,6 +10,7 @@ import cellbreak.block.DetectorBlock;
 import cellbreak.block.FakeBlock;
 import cellbreak.block.GraffitiBlock;
 import cellbreak.block.ToolLockedBlock;
+import cellbreak.entity.CookEntity;
 import cellbreak.entity.GuardEntity;
 import cellbreak.entity.PrisonerNpcEntity;
 import cellbreak.item.MakeshiftToolItem;
@@ -121,6 +122,8 @@ public final class CbContent {
 			List.of(), 1, ToolComponent.Rule.ofAlwaysDropping(WORK_LOGS, 1.5F))));
 	/** Draws graffiti on walls. */
 	public static final Item CHALK = item("chalk", new Item(new Item.Settings().maxDamage(6)));
+	/** Washes chalk drawings off. */
+	public static final Item RAG = item("rag", new Item(new Item.Settings().maxDamage(8)));
 	public static final Item SHIV = item("shiv",
 			new SwordItem(ToolMaterials.WOOD, new Item.Settings().maxDamage(30)
 					.attributeModifiers(SwordItem.createAttributeModifiers(ToolMaterials.WOOD, 2, -2.0F))));
@@ -158,17 +161,22 @@ public final class CbContent {
 			id("prisoner"), EntityType.Builder.create(PrisonerNpcEntity::new, SpawnGroup.MISC).dimensions(0.6F, 1.8F)
 					.maxTrackingRange(10).build("prisoner"));
 
+	public static final EntityType<CookEntity> COOK = Registry.register(Registries.ENTITY_TYPE, id("cook"),
+			EntityType.Builder.create(CookEntity::new, SpawnGroup.MISC).dimensions(0.6F, 1.8F).maxTrackingRange(10)
+					.build("cook"));
+
 	public static final Item PRISONER_SPAWN_EGG = item("prisoner_spawn_egg",
 			new SpawnEggItem(PRISONER, 0xE6761E, 0x3A2A20, new Item.Settings()));
 
 	public static void init() {
 		FabricDefaultAttributeRegistry.register(GUARD, GuardEntity.createGuardAttributes());
 		FabricDefaultAttributeRegistry.register(PRISONER, PrisonerNpcEntity.createPrisonerAttributes());
+		FabricDefaultAttributeRegistry.register(COOK, CookEntity.createCookAttributes());
 
 		List<Item> tabItems = List.of(PRISON_WALL.asItem(), CRACKED_PRISON_WALL.asItem(), REINFORCED_WALL.asItem(),
 				CELL_BARS.asItem(), VENT_COVER.asItem(), PRISON_FLOOR.asItem(), JOB_DESK.asItem(), DETECTOR.asItem(),
 				MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, SHIV, CELL_KEY,
-				FAKE_WALL, FAKE_VENT, CHALK, WORK_PICKAXE, WORK_AXE, MONEY, HANDCUFFS, BATON,
+				FAKE_WALL, FAKE_VENT, CHALK, RAG, WORK_PICKAXE, WORK_AXE, MONEY, HANDCUFFS, BATON,
 				GUARD_SPAWN_EGG, PRISONER_SPAWN_EGG);
 		Registry.register(Registries.ITEM_GROUP, id("main"), FabricItemGroup.builder()
 				.icon(() -> new ItemStack(MAKESHIFT_PICKAXE))
