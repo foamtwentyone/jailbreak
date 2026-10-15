@@ -153,10 +153,10 @@ public class PrisonerNpcEntity extends MerchantEntity {
 
 	/** What the black-market traders can have on offer: price in money, item, count. */
 	private static final Object[][] BLACK_MARKET = {
-			{ 3, CbContent.FILE, 1 }, { 4, CbContent.MAKESHIFT_PICKAXE, 1 }, { 3, CbContent.MAKESHIFT_SHOVEL, 1 },
-			{ 2, CbContent.SHIV, 1 }, { 6, CbContent.CELL_KEY, 1 }, { 2, CbContent.FAKE_WALL, 2 },
-			{ 2, CbContent.FAKE_VENT, 1 }, { 1, Items.STRING, 3 }, { 1, Items.FLINT, 2 }, { 1, Items.PAPER, 3 },
-			{ 1, Items.CLAY_BALL, 2 }, { 1, Items.IRON_NUGGET, 3 }, { 1, Items.COOKED_BEEF, 2 } };
+			{ 9, CbContent.FILE, 1 }, { 12, CbContent.MAKESHIFT_PICKAXE, 1 }, { 9, CbContent.MAKESHIFT_SHOVEL, 1 },
+			{ 7, CbContent.SHIV, 1 }, { 6, CbContent.FAKE_WALL, 1 }, { 6, CbContent.FAKE_VENT, 1 },
+			{ 4, CbContent.CHALK, 1 }, { 3, CbContent.RAG, 1 }, { 3, Items.STRING, 2 }, { 3, Items.FLINT, 1 },
+			{ 2, Items.PAPER, 2 }, { 3, Items.CLAY_BALL, 1 }, { 4, Items.IRON_NUGGET, 2 }, { 3, Items.COOKED_BEEF, 2 } };
 
 	public int cell = -1;
 	/** While above 0 the inmate sits in solitary (found with contraband at a search). */
@@ -245,8 +245,9 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		LivingEntity target = getTarget();
 		if (target != null) {
 			if (++angryTicks > 10 * 20 || !target.isAlive() || squaredDistanceTo(target) > 16 * 16
-					|| !(target instanceof PlayerEntity tp) || infirmaryUntil != 0
-					|| game() != null && game().isOutOfPlay(tp)) {
+					|| infirmaryUntil != 0
+					|| target instanceof PlayerEntity tp && game() != null && game().isOutOfPlay(tp)
+					|| target instanceof PrisonerNpcEntity other && (other.infirmaryUntil != 0 || other.solitaryUntil != 0)) {
 				calmDown();
 			}
 		}
@@ -254,6 +255,16 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			talkCooldown = 20;
 			talkToPasserby();
 		}
+	}
+
+	/** Picks a fight with another inmate. */
+	public void pickFightWith(PrisonerNpcEntity other) {
+		setTarget(other);
+		angryTicks = 0;
+	}
+
+	public boolean isRough() {
+		return personality == Personality.RUDE || personality == Personality.BRAGGART || personality == Personality.PARANOID;
 	}
 
 	/** Stops fighting (time is up, or a guard broke the fight up). */
@@ -266,7 +277,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	/** Says something to a player prisoner walking right past: a compliment, a jibe or a joke. */
 	private void talkToPasserby() {
 		CellbreakGame game = game();
-		if (game == null || !game.isRunning() || getTarget() != null || hasCustomer()
+		if (game == null || !game.isRunning() || getTarget() != null || hasCustomer() || isSleeping()
 				|| personality == Personality.NEUTRAL && random.nextInt(4) != 0) {
 			return;
 		}
@@ -291,6 +302,10 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			case BRAGGART -> BRAGGART;
 			default -> NEUTRAL_LINES;
 		};
+		// Now and then, whatever the character, a word of advice on what can be made of what.
+		if (random.nextInt(12) == 0) {
+			lines = CRAFT_TIPS;
+		}
 		String line = String.format(lines[random.nextInt(lines.length)], p.getName().getString());
 		Formatting color = switch (personality) {
 			case FRIENDLY -> Formatting.GREEN;
@@ -318,8 +333,11 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		swingHand(Hand.MAIN_HAND);
 		boolean hit = super.tryAttack(target);
 		CellbreakGame game = game();
-		if (hit && game != null && target instanceof ServerPlayerEntity p) {
-			game.onNpcAttack(this, p);
+		if (hit && game != null && target instanceof LivingEntity victim) {
+			game.onNpcAttack(this, victim);
+			if (target instanceof PrisonerNpcEntity other && other.getTarget() == null) {
+				other.setTarget(this);
+			}
 		}
 		return hit;
 	}
@@ -349,6 +367,19 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			}
 		}
 	}
+
+	private static final String[] CRAFT_TIPS = { "Слушай сюда: кремень, палка и нитка — вот тебе и кирка. Только тихо.",
+			"Два самородка и палка — напильник. Решётки его боятся.", "Самородок, палка и нитка — лопата. Пол тут мягкий.",
+			"Глина, самородок и бумага — слепок ключа. Двери откроются.", "Две бумаги и комок глины — муляж стены. Охрана не отличит.",
+			"Бумага, самородок и нитка — муляж решётки вентиляции.", "Кремень и бумага — заточка. Но я тебе этого не говорил.",
+			"Сломалась кирка? Обломки плюс кремень — и снова как новая.", "Обломки лопаты и нитка — лопата опять в строю.",
+			"Сломался напильник? Обломки и самородок — и пили дальше.", "Две глины — мел. Рисуй, но не попадайся.",
+			"Две нитки и бумага — тряпка. Смывать художества." };
+
+	/** What the owner says to a prisoner found in their cell. */
+	public static final String[][] OWNER_COMPLAINTS = {
+			{ "Эй, %s, это моя камера! Выйди, пожалуйста.", "Ты что-то потерял у меня, %s?", "Неудобно получается... Выйди, а?" },
+			{ "Это МОЯ камера, %s! Пошёл вон!", "Ещё раз зайдёшь — пожалеешь.", "Ты чего в чужой хате забыл?! Вон!" } };
 
 	private static final String[] OFFENDED = { "Ну всё, %s. Я с тобой не разговариваю.", "Отстань. Обиделся я.",
 			"Ты меня достал, %s. Иди к другим приставай.", "Я думал, мы друзья... А ты тычешь в меня, как в кнопку.",
@@ -402,7 +433,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 					new ItemStack((Item) o[1], (Integer) o[2]), 3, 0, 0.0F));
 		}
 		// Traders also buy scrap metal.
-		offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(CbContent.MONEY, 1), 8, 0, 0.0F));
+		offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(CbContent.MONEY, 2), 8, 0, 0.0F));
 	}
 
 	/** New day, new stock. */
@@ -465,11 +496,9 @@ public class PrisonerNpcEntity extends MerchantEntity {
 
 		/** A path that gets (nearly) to the point, or null. */
 		private Path goodPath(BlockPos to) {
-			Path path = npc.getNavigation().findPathTo(to, 0);
-			if (path == null || path.getEnd() == null) {
-				return null;
-			}
-			return path.reachesTarget() || path.getEnd().getBlockPos().getSquaredDistance(to) <= 4 ? path : null;
+			// Only a path that really gets there: one ending next to the goal may end behind a wall.
+			Path path = npc.getNavigation().findPathTo(to, 1);
+			return path != null && path.reachesTarget() ? path : null;
 		}
 
 		RoutineGoal(PrisonerNpcEntity npc) {
@@ -486,6 +515,10 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		public void tick() {
 			CellbreakGame game = npc.game();
 			if (game == null || !npc.isAlive() || npc.hasCustomer()) {
+				npc.getNavigation().stop();
+				return;
+			}
+			if (npc.isSleeping()) {
 				npc.getNavigation().stop();
 				return;
 			}

@@ -209,6 +209,13 @@ public class CellbreakTest implements ModInitializer {
 									+ (mob.getTarget() == null ? "-" : mob.getTarget().getName().getString()));
 							return 1;
 						}))))
+				.then(CommandManager.literal("sleep").then(CommandManager.argument("name", StringArgumentType.word())
+						.then(CommandManager.argument("pos", BlockPosArgumentType.blockPos()).executes(c -> {
+							ServerPlayerEntity p = bot(c).player;
+							var r = p.trySleep(BlockPosArgumentType.getBlockPos(c, "pos"));
+							reply(c, "sleep -> " + r.left().map(Object::toString).orElse("ok") + " sleeping=" + p.isSleeping());
+							return 1;
+						}))))
 				.then(CommandManager.literal("drop").then(CommandManager.argument("name", StringArgumentType.word()).executes(c -> {
 					ServerPlayerEntity p = bot(c).player;
 					p.dropSelectedItem(true);

@@ -68,12 +68,13 @@ public class Cellbreak implements ModInitializer {
 
 		PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
 			if (player instanceof ServerPlayerEntity p && CbContent.WORK_TOOLS.contains(p.getMainHandStack().getItem())
-					&& !p.isCreative() && !CellbreakGame.get(p.getServer()).canWorkAt(pos)) {
+					&& !p.isCreative() && !CellbreakGame.get(p.getServer()).canWorkAt(pos)
+					&& !(p.getMainHandStack().isOf(CbContent.WORK_PICKAXE) && isWall(state))) {
 				p.sendMessage(Text.literal("Рабочим инструментом можно работать только на рабочем поле во время работы.")
 						.formatted(Formatting.RED), true);
 				return false;
 			}
-			if (player instanceof ServerPlayerEntity p && isMakeshiftTool(p)) {
+			if (player instanceof ServerPlayerEntity p && (isMakeshiftTool(p) || p.getMainHandStack().isOf(CbContent.WORK_PICKAXE))) {
 				PrisonLayout layout = PrisonState.get(p.getServer()).getLayout();
 				if (layout != null && !layout.canBreakAt(pos)) {
 					p.sendMessage(Text.literal("Здесь ломать нельзя.").formatted(Formatting.RED), true);
@@ -84,19 +85,20 @@ public class Cellbreak implements ModInitializer {
 		});
 
 		PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, be) -> {
-			if (player instanceof ServerPlayerEntity p && CbContent.WORK_TOOLS.contains(p.getMainHandStack().getItem())) {
+			if (player instanceof ServerPlayerEntity p && CbContent.WORK_TOOLS.contains(p.getMainHandStack().getItem())
+					&& !isWall(state)) {
 				CellbreakGame game = CellbreakGame.get(p.getServer());
 				if (game.canWorkAt(pos)) {
 					game.onWorkBlockBroken(p, pos, state);
 				}
 				return;
 			}
-			if (!(player instanceof ServerPlayerEntity p) || !isMakeshiftTool(p)) {
+			if (!(player instanceof ServerPlayerEntity p) || !(isMakeshiftTool(p) || p.getMainHandStack().isOf(CbContent.WORK_PICKAXE))) {
 				return;
 			}
 			// Vanilla stone bricks crack first, like our own prison walls.
 			if (state.isIn(BlockTags.STONE_BRICKS) && !state.isOf(Blocks.CRACKED_STONE_BRICKS)
-					&& p.getMainHandStack().isOf(CbContent.MAKESHIFT_PICKAXE)) {
+					&& (p.getMainHandStack().isOf(CbContent.MAKESHIFT_PICKAXE) || p.getMainHandStack().isOf(CbContent.WORK_PICKAXE))) {
 				world.setBlockState(pos, Blocks.CRACKED_STONE_BRICKS.getDefaultState());
 			}
 			CellbreakGame.get(p.getServer()).onBlockBroken(p, pos, state);
@@ -147,8 +149,8 @@ public class Cellbreak implements ModInitializer {
 
 			// No sleeping through the routine.
 			if (state.getBlock() instanceof BedBlock) {
-				if (sp != null && game.isRunning()) {
-					sp.sendMessage(Text.literal("Спать — только по распорядку, в камере.").formatted(Formatting.GRAY), true);
+				if (sp != null && game.isRunning() && game.phase() != CellbreakGame.Phase.LIGHTS_OUT) {
+					sp.sendMessage(Text.literal("Спать — только после отбоя.").formatted(Formatting.GRAY), true);
 					return ActionResult.FAIL;
 				}
 				return ActionResult.PASS;
@@ -215,6 +217,11 @@ public class Cellbreak implements ModInitializer {
 			}
 			return TypedActionResult.pass(stack);
 		});
+	}
+
+	private static boolean isWall(BlockState state) {
+		return CbContent.VANILLA_WALLS.contains(state.getBlock()) || state.isOf(CbContent.PRISON_WALL)
+				|| state.isOf(CbContent.CRACKED_PRISON_WALL);
 	}
 
 	private static boolean isMakeshiftTool(ServerPlayerEntity p) {

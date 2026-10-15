@@ -123,26 +123,8 @@ public final class MapCommands {
 						.then(CommandManager.argument("facing", com.mojang.brigadier.arguments.StringArgumentType.word())
 								.suggests((c, b) -> net.minecraft.command.CommandSource.suggestMatching(
 										List.of("north", "south", "east", "west"), b))
-								.executes(c -> {
-									BlockPos p = BlockPosArgumentType.getBlockPos(c, "pos");
-									Direction facing = Direction.byName(
-											com.mojang.brigadier.arguments.StringArgumentType.getString(c, "facing"));
-									if (facing == null || facing.getAxis() == Direction.Axis.Y) {
-										throw error("Направление прохода: north, south, east или west.");
-									}
-									BlockState lower = CbContent.DETECTOR.getDefaultState()
-											.with(cellbreak.block.DetectorBlock.FACING, facing);
-									int flags = Block.NOTIFY_LISTENERS | Block.FORCE_STATE;
-									world(c).setBlockState(p, lower, flags);
-									world(c).setBlockState(p.up(), lower.with(cellbreak.block.DetectorBlock.HALF,
-											DoubleBlockHalf.UPPER), flags);
-									if (!layout(c).detectors.contains(p)) {
-										layout(c).detectors.add(p.toImmutable());
-									}
-									save(c);
-									ok(c, "Сканер-рамка поставлена: " + p.toShortString());
-									return 1;
-								}))))
+								.executes(c -> placeDetector(c, false))
+								.then(CommandManager.literal("materials").executes(c -> placeDetector(c, true))))))
 				.then(CommandManager.literal("cook").then(pos((c, p) -> {
 					layout(c).cookPosts.add(p);
 					ok(c, "Место повара №" + layout(c).cookPosts.size() + ": " + p.toShortString()
@@ -218,6 +200,29 @@ public final class MapCommands {
 					ok(c, "Ящик с хламом №" + layout(c).scrapChests.size() + ": " + p.toShortString());
 				})))
 				.then(CommandManager.literal("info").executes(MapCommands::info));
+	}
+
+	/** Puts a scanner arch; with materials it also stops logs, planks, ingots and nuggets. */
+	private static int placeDetector(CommandContext<ServerCommandSource> c, boolean materials) throws CommandSyntaxException {
+		BlockPos p = BlockPosArgumentType.getBlockPos(c, "pos");
+		Direction facing = Direction.byName(com.mojang.brigadier.arguments.StringArgumentType.getString(c, "facing"));
+		if (facing == null || facing.getAxis() == Direction.Axis.Y) {
+			throw error("Направление прохода: north, south, east или west.");
+		}
+		BlockState lower = CbContent.DETECTOR.getDefaultState().with(cellbreak.block.DetectorBlock.FACING, facing);
+		int flags = Block.NOTIFY_LISTENERS | Block.FORCE_STATE;
+		world(c).setBlockState(p, lower, flags);
+		world(c).setBlockState(p.up(), lower.with(cellbreak.block.DetectorBlock.HALF, DoubleBlockHalf.UPPER), flags);
+		PrisonLayout l = layout(c);
+		if (!l.detectors.contains(p)) {
+			l.detectors.add(p.toImmutable());
+		}
+		if (materials && !l.materialDetectors.contains(p)) {
+			l.materialDetectors.add(p.toImmutable());
+		}
+		save(c);
+		ok(c, "Сканер-рамка поставлена: " + p.toShortString() + (materials ? " (не выпускает брёвна, доски, слитки, самородки)" : ""));
+		return 1;
 	}
 
 	private static int info(CommandContext<ServerCommandSource> c) {

@@ -67,6 +67,8 @@ public class PrisonLayout {
 	public final List<BlockPos> rollCallPosts = new ArrayList<>();
 	/** Scanner arches (their lower halves): they also catch contraband thrown through them. */
 	public final List<BlockPos> detectors = new ArrayList<>();
+	/** The arches among them that also stop workshop materials (logs, planks, ingots, nuggets). */
+	public final List<BlockPos> materialDetectors = new ArrayList<>();
 	/** Canteen: where the cooks stand, the food queue (front first) and the kitchen chests. */
 	public final List<BlockPos> cookPosts = new ArrayList<>();
 	public final List<BlockPos> queueSpots = new ArrayList<>();
@@ -176,6 +178,7 @@ public class PrisonLayout {
 		putBox(nbt, "infirmary", infirmaryZone);
 		nbt.putLongArray("rollCallPosts", longs(rollCallPosts));
 		nbt.putLongArray("detectors", longs(detectors));
+		nbt.putLongArray("materialDetectors", longs(materialDetectors));
 		nbt.putLongArray("cookPosts", longs(cookPosts));
 		nbt.putLongArray("queueSpots", longs(queueSpots));
 		nbt.putLongArray("foodChests", longs(foodChests));
@@ -230,6 +233,9 @@ public class PrisonLayout {
 		}
 		for (long p : nbt.getLongArray("detectors")) {
 			l.detectors.add(BlockPos.fromLong(p));
+		}
+		for (long p : nbt.getLongArray("materialDetectors")) {
+			l.materialDetectors.add(BlockPos.fromLong(p));
 		}
 		for (long p : nbt.getLongArray("cookPosts")) {
 			l.cookPosts.add(BlockPos.fromLong(p));

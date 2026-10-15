@@ -116,8 +116,10 @@ public final class CbContent {
 	public static final List<Block> WORK_ORES = List.of(Blocks.IRON_ORE);
 	public static final List<Block> WORK_LOGS = List.of(Blocks.OAK_LOG, Blocks.SPRUCE_LOG, Blocks.BIRCH_LOG);
 	// Ore 3 s (hardness 3), logs 2 s (hardness 2).
+	// A real pickaxe: ore on the field, but stone brick walls too (like the makeshift one).
 	public static final Item WORK_PICKAXE = item("work_pickaxe", new Item(tool(new Item.Settings().maxDamage(80),
-			List.of(), 1, ToolComponent.Rule.ofAlwaysDropping(WORK_ORES, 1.5F))));
+			List.of(PRISON_WALL, CRACKED_PRISON_WALL), 1, ToolComponent.Rule.ofAlwaysDropping(WORK_ORES, 1.5F),
+			ToolComponent.Rule.ofAlwaysDropping(VANILLA_WALLS, 0.28F))));
 	public static final Item WORK_AXE = item("work_axe", new Item(tool(new Item.Settings().maxDamage(80),
 			List.of(), 1, ToolComponent.Rule.ofAlwaysDropping(WORK_LOGS, 1.5F))));
 	/** Draws graffiti on walls. */
@@ -142,6 +144,17 @@ public final class CbContent {
 	public static final Set<Item> CONTRABAND = Set.of(MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, SHIV, CELL_KEY,
 			BATON, HANDCUFFS, FAKE_WALL, FAKE_VENT, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, WORK_PICKAXE, WORK_AXE,
 			net.minecraft.item.Items.IRON_NUGGET);
+	/** Tools: carried through a scanner they make the guards go to full alert. */
+	public static final Set<Item> TOOLS = Set.of(MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, BROKEN_PICKAXE, BROKEN_SHOVEL,
+			BROKEN_FILE, WORK_PICKAXE, WORK_AXE, SHIV);
+
+	/** Workshop materials: the arch at the workshop's own door does not let them out. */
+	public static boolean isWorkshopMaterial(Item item) {
+		var entry = item.getRegistryEntry();
+		return item == net.minecraft.item.Items.IRON_INGOT || item == net.minecraft.item.Items.IRON_NUGGET
+				|| entry.isIn(net.minecraft.registry.tag.ItemTags.LOGS) || entry.isIn(net.minecraft.registry.tag.ItemTags.PLANKS);
+	}
+
 	/** Contraband: the items above and any log (wood to make tools and fakes from). */
 	public static boolean isContraband(Item item) {
 		return CONTRABAND.contains(item) || item.getRegistryEntry().isIn(net.minecraft.registry.tag.ItemTags.LOGS);

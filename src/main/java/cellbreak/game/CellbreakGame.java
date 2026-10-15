@@ -86,6 +86,7 @@ public class CellbreakGame {
 	}
 
 	public enum Phase {
+		WAKE_UP("Подъём", "Просыпайтесь! Через несколько секунд утренняя перекличка.", 23500, Zone.ANYWHERE),
 		ROLL_CALL("Утренняя перекличка", "Все в зону переклички! Охрана будет обыскивать.", 0, Zone.ROLL_CALL),
 		BREAKFAST("Завтрак", "Все в столовую!", 1000, Zone.CANTEEN),
 		WORK("Работа", "На рабочее поле! Добывай руду и брёвна, сдавай на столе в мастерской.", 3000, Zone.WORK),
@@ -116,7 +117,7 @@ public class CellbreakGame {
 
 	/** The daily routine, in seconds: about 12.5 minutes per day. */
 	private static final Object[][] SCHEDULE = {
-			{ Phase.ROLL_CALL, 50 }, { Phase.BREAKFAST, 60 }, { Phase.WORK, 120 }, { Phase.FREE_TIME, 90 },
+			{ Phase.WAKE_UP, 12 }, { Phase.ROLL_CALL, 50 }, { Phase.BREAKFAST, 60 }, { Phase.WORK, 120 }, { Phase.FREE_TIME, 90 },
 			{ Phase.EXERCISE, 60 }, { Phase.SHOWER, 45 }, { Phase.DINNER, 60 }, { Phase.EVENING_FREE, 60 },
 			{ Phase.EVENING_ROLL_CALL, 50 }, { Phase.LIGHTS_OUT, 150 },
 	};
@@ -566,6 +567,18 @@ public class CellbreakGame {
 		if (phase() == Phase.LIGHTS_OUT && ticks % 4 == 0) {
 			moveSearchlights();
 		}
+		if (phase() == Phase.LIGHTS_OUT && ticks % 10 == 0 && everyoneAsleep()) {
+			// Every prisoner is asleep: the night passes.
+			for (ServerPlayerEntity p : online(Role.PRISONER)) {
+				if (p.isSleeping()) {
+					p.wakeUp(false, true);
+				}
+			}
+			broadcast(Text.literal("Все спят... Ночь проходит быстро.").formatted(Formatting.GRAY));
+			endPhase();
+			nextPhase();
+			beginPhase();
+		}
 		if (phase() == Phase.LIGHTS_OUT && !doorsLocked && phaseElapsed() >= GRACE_SECONDS * 20) {
 			doorsLocked = true;
 			lockUpForTheNight();
@@ -588,6 +601,9 @@ public class CellbreakGame {
 		if (ticks % 10 == 0) {
 			updatePlayers();
 		}
+		if (phase() == Phase.SHOWER && ticks % 20 == 0) {
+			washAnimations();
+		}
 		if (phase().zone == Zone.CANTEEN && ticks % 20 == 0) {
 			serveQueue();
 			eatAnimations();
@@ -599,6 +615,9 @@ public class CellbreakGame {
 		}
 		if (ticks % (30 * 20) == 0) {
 			replaceMissingGuards();
+		}
+		if (ticks % (10 * 20) == 0) {
+			npcBrawls();
 		}
 	}
 
@@ -644,9 +663,18 @@ public class CellbreakGame {
 		countDone = false;
 		countStarted = false;
 		clearSearchlights();
+		if (phase != Phase.LIGHTS_OUT) {
+			for (PrisonerNpcEntity npc : npcPrisoners()) {
+				if (npc.isSleeping()) {
+					npc.wakeUp();
+				}
+			}
+		}
+		allAsleepSince = 0;
 		assignGuardDuties(phase);
 		assignLineup(phase);
 		startMeal(phase);
+		startShower(phase);
 		for (PrisonerNpcEntity npc : npcPrisoners()) {
 			npc.skipsMeal = phase.zone == Zone.CANTEEN && world().random.nextInt(5) == 0;
 		}
@@ -791,11 +819,63 @@ public class CellbreakGame {
 					p.sendMessage(Text.literal("Ты оторвался от охраны. Пока...").formatted(Formatting.GREEN));
 				}
 			} else if (!d.heatRaised && d.heat > 0) {
-				d.heat = Math.max(0, d.heat - 0.5);
+				d.heat = Math.max(0, d.heat - 0.15);
 			}
 			if (isWanted(p)) {
 				p.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 30, 0, false, false));
 			}
+		}
+	}
+
+	private long allAsleepSince;
+
+	/** True once every prisoner player who can sleep has been asleep in bed for three seconds. */
+	private boolean everyoneAsleep() {
+		List<ServerPlayerEntity> sleepers = new ArrayList<>();
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			PlayerData d = data(p);
+			if (!d.escaped && d.solitaryUntil == 0 && d.infirmaryUntil == 0) {
+				sleepers.add(p);
+			}
+		}
+		if (sleepers.isEmpty() || !sleepers.stream().allMatch(PlayerEntity::isSleeping)) {
+			allAsleepSince = 0;
+			return false;
+		}
+		if (allAsleepSince == 0) {
+			allAsleepSince = ticks;
+		}
+		return ticks - allAsleepSince >= 60;
+	}
+
+	/** Beds in the cells (head halves), by cell number. */
+	private Map<Integer, BlockPos> cellBeds;
+
+	private BlockPos bedOf(int cell) {
+		if (cellBeds == null) {
+			cellBeds = new HashMap<>();
+			List<PrisonLayout.Cell> cells = layout().cells;
+			for (int i = 0; i < cells.size(); i++) {
+				BlockBox b = cells.get(i).interior;
+				for (BlockPos p : BlockPos.iterate(b.getMinX(), b.getMinY(), b.getMinZ(), b.getMaxX(), b.getMaxY(), b.getMaxZ())) {
+					BlockState s = world().getBlockState(p);
+					if (s.getBlock() instanceof net.minecraft.block.BedBlock
+							&& s.get(net.minecraft.block.BedBlock.PART) == net.minecraft.block.enums.BedPart.HEAD) {
+						cellBeds.put(i, p.toImmutable());
+						break;
+					}
+				}
+			}
+		}
+		return cellBeds.get(cell);
+	}
+
+	/** An NPC inmate goes to bed (at lights out, in its cell). */
+	private void putToBed(PrisonerNpcEntity npc) {
+		BlockPos bed = bedOf(npc.cell);
+		if (bed != null && !npc.isSleeping()) {
+			npc.getNavigation().stop();
+			npc.sleep(bed);
 		}
 	}
 
@@ -816,6 +896,10 @@ public class CellbreakGame {
 	 */
 	private void checkForeignCell(ServerPlayerEntity p, PlayerData d, LivingEntity watcher, Phase phase) {
 		int cell = phase == Phase.LIGHTS_OUT ? -1 : foreignCell(p.getBlockPos(), d.cell);
+		if (cell >= 0 && d.foreignCellSince == 0 && watcher == null) {
+			// No guard around, but the owner may be at home.
+			ownerComplains(p, cell);
+		}
 		if (cell < 0) {
 			if (d.foreignCellSince != 0) {
 				if (d.foreignCellGuard != null && d.foreignCellGuard.isAlive()) {
@@ -843,11 +927,75 @@ public class CellbreakGame {
 		}
 		// Updated twice a second: +3 suspicion per second while they stay.
 		addHeat(p, 1.5);
+		ownerComplains(p, cell);
 		long stayed = ticks - d.foreignCellSince;
 		if (stayed > 0 && stayed % (6 * 20) == 0 && d.foreignCellGuard != null) {
 			guardSays(d.foreignCellGuard, "Я жду, " + p.getName().getString() + ". Выходи из камеры!");
 		}
 	}
+
+	private final Map<UUID, Long> ownerComplainedAt = new HashMap<>();
+
+	/** The NPC whose cell it is sees the player inside: complains, and a rough one may fight. */
+	private void ownerComplains(ServerPlayerEntity p, int cell) {
+		for (PrisonerNpcEntity npc : npcPrisoners()) {
+			if (npc.cell != cell || npc.isSleeping() || npc.squaredDistanceTo(p) > 10 * 10 || !npc.canSee(p)) {
+				continue;
+			}
+			long last = ownerComplainedAt.getOrDefault(npc.getUuid(), -10000L);
+			if (ticks - last < 8 * 20) {
+				return;
+			}
+			ownerComplainedAt.put(npc.getUuid(), ticks);
+			String[] lines = PrisonerNpcEntity.OWNER_COMPLAINTS[npc.isRough() ? 1 : 0];
+			String line = String.format(lines[world().random.nextInt(lines.length)], p.getName().getString());
+			npc.getLookControl().lookAt(p);
+			Text msg = Text.literal(npc.getName().getString() + ": ").formatted(Formatting.GOLD)
+					.append(Text.literal(line).formatted(npc.isRough() ? Formatting.RED : Formatting.YELLOW));
+			for (ServerPlayerEntity o : world().getPlayers()) {
+				if (o.squaredDistanceTo(npc) < 16 * 16) {
+					o.sendMessage(msg, false);
+				}
+			}
+			// A rough owner who already asked once does not ask a third time.
+			if (npc.isRough() && last > 0 && ticks - last < 30 * 20 && npc.getTarget() == null) {
+				npc.setTarget(p);
+			}
+			return;
+		}
+	}
+
+	/** Now and then two inmates get into a fight (a rough one starts it). */
+	private void npcBrawls() {
+		Phase phase = phase();
+		if (phase.zone != Zone.ANYWHERE && phase.zone != Zone.YARD && phase.zone != Zone.CANTEEN || world().random.nextInt(6) != 0) {
+			return;
+		}
+		List<PrisonerNpcEntity> npcs = npcPrisoners();
+		Collections.shuffle(npcs);
+		for (PrisonerNpcEntity a : npcs) {
+			if (!a.isRough() || a.getTarget() != null || a.hasVehicle() || a.solitaryUntil != 0 || a.infirmaryUntil != 0) {
+				continue;
+			}
+			for (PrisonerNpcEntity b : npcs) {
+				if (b != a && b.squaredDistanceTo(a) < 5 * 5 && !b.hasVehicle() && b.solitaryUntil == 0 && b.infirmaryUntil == 0) {
+					a.pickFightWith(b);
+					Text msg = Text.literal(a.getName().getString() + ": ").formatted(Formatting.GOLD).append(Text.literal(
+							BRAWL_LINES[world().random.nextInt(BRAWL_LINES.length)].formatted(b.getName().getString()))
+							.formatted(Formatting.RED));
+					for (ServerPlayerEntity o : world().getPlayers()) {
+						if (o.squaredDistanceTo(a) < 16 * 16) {
+							o.sendMessage(msg, false);
+						}
+					}
+					return;
+				}
+			}
+		}
+	}
+
+	private static final String[] BRAWL_LINES = { "%s, ты на кого смотришь?!", "Это ты мой хлеб взял, %s?!", "Ну всё, %s, держись!",
+			"%s, ты мне ещё за вчерашнее должен!", "Отойди от моего места, %s!" };
 
 	/** Whether the prisoner is where the routine wants them now. */
 	private boolean isInPlace(ServerPlayerEntity p, PlayerData d, Phase phase) {
@@ -1267,7 +1415,9 @@ public class CellbreakGame {
 			return;
 		}
 		d.detectorQuietUntil = ticks + 60;
-		List<Text> found = contrabandNames(p);
+		boolean materials = layout().materialDetectors.contains(lower);
+		List<Text> found = scannedNames(p, materials);
+		boolean tools = carriesTool(p);
 		DetectorBlock.flash(world, lower, !found.isEmpty());
 		if (found.isEmpty()) {
 			world.playSound(null, lower, SoundEvents.BLOCK_NOTE_BLOCK_CHIME.value(), SoundCategory.BLOCKS, 1.0F, 1.6F);
@@ -1279,12 +1429,46 @@ public class CellbreakGame {
 		alertSnipers(lower);
 		d.lastSeenTick = ticks;
 		d.lastSeenPos = feet;
-		addHeat(p, 60);
+		// A tool through the arch: full alert.
+		int heat = tools ? (int) MAX_HEAT : 60;
+		addHeat(p, heat);
 		Text list = joined(found);
-		p.sendMessage(Text.literal("Сканер сработал! Найдено: ").append(list).append(". Подозрение +60").formatted(Formatting.RED));
+		p.sendMessage(Text.literal("Сканер сработал! Найдено: ").append(list).append(". Подозрение +" + heat).formatted(Formatting.RED));
 		for (ServerPlayerEntity g : online(Role.GUARD)) {
 			g.sendMessage(Text.literal("Сканер сработал на " + p.getName().getString() + ": ").append(list).formatted(Formatting.RED));
 		}
+	}
+
+	/** What a scanner arch finds: contraband (an outer arch lets field nuggets and logs through), plus workshop materials at a materials arch. */
+	private static boolean scannerFinds(Item item, boolean materials) {
+		if (materials) {
+			return CbContent.isContraband(item) || CbContent.isWorkshopMaterial(item);
+		}
+		return CbContent.isContraband(item) && item != Items.IRON_NUGGET && !item.getRegistryEntry().isIn(ItemTags.LOGS);
+	}
+
+	private static List<Text> scannedNames(PlayerEntity p, boolean materials) {
+		List<Text> names = new ArrayList<>();
+		List<Item> seen = new ArrayList<>();
+		PlayerInventory inv = p.getInventory();
+		for (int i = 0; i < inv.size(); i++) {
+			ItemStack stack = inv.getStack(i);
+			if (!stack.isEmpty() && scannerFinds(stack.getItem(), materials) && !seen.contains(stack.getItem())) {
+				seen.add(stack.getItem());
+				names.add(stack.getName());
+			}
+		}
+		return names;
+	}
+
+	private static boolean carriesTool(PlayerEntity p) {
+		PlayerInventory inv = p.getInventory();
+		for (int i = 0; i < inv.size(); i++) {
+			if (CbContent.TOOLS.contains(inv.getStack(i).getItem())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Names of the contraband a prisoner carries (translated on each player's side). */
@@ -1293,8 +1477,9 @@ public class CellbreakGame {
 		ServerWorld world = world();
 		for (BlockPos lower : layout().detectors) {
 			Box arch = new Box(lower).stretch(0, 1, 0).expand(0.1);
+			boolean materials = layout().materialDetectors.contains(lower);
 			for (net.minecraft.entity.ItemEntity item : world.getEntitiesByClass(net.minecraft.entity.ItemEntity.class, arch,
-					i -> CbContent.isContraband(i.getStack().getItem()))) {
+					i -> scannerFinds(i.getStack().getItem(), materials))) {
 				Text name = item.getStack().getName();
 				item.discard();
 				DetectorBlock.flash(world, lower, true);
@@ -1560,7 +1745,20 @@ public class CellbreakGame {
 			"В душе сегодня только холодная вода.", "Кто взял ложку из столовой — верните ложку.",
 			"Начальник тюрьмы в хорошем настроении. Не испортите.", "Вечером будет проверка камер.",
 			"Прогулку сегодня не отменяют. Пока.", "Напоминаю: ходить по газону во дворе запрещено.",
-			"Металлолом с рабочего поля сдавать на столе, а не прятать по карманам!" };
+			"Металлолом с рабочего поля сдавать на столе, а не прятать по карманам!",
+			"Повар Гена просил передать: котлеты сегодня из настоящего мяса. Почти.",
+			"Начальник тюрьмы купил новую дубинку. Розовую. Смеяться запрещено.",
+			"Вчера над вышкой видели НЛО. Снайпер промахнулся.", "В душевой завелась лягушка. Не обижайте её, она на испытательном сроке.",
+			"Библиотека получила новую книгу. Одну. Очередь с завтрашнего дня.",
+			"У Степаныча украли поварёшку. Он плачет. Верните поварёшку.",
+			"Голубь на стене признан заключённым месяца. Берите пример.",
+			"Ночью кто-то храпел так, что снайперы подняли тревогу.",
+			"Сержант Петров женится. Подарок — ваше хорошее поведение.",
+			"Найден подкоп. Ведёт в столовую. Видимо, кто-то очень хотел добавки.",
+			"Объявляется конкурс на лучшую заправку койки. Приз — ещё одна заправка койки.",
+			"Метеорологи обещают солнце. Вам всё равно, вы внутри.",
+			"Кто-то нарисовал мелом портрет начальника. Похоже. Это и пугает.",
+			"Снайпер Иванов просит не махать ему руками. Он стесняется." };
 
 	/** End of the count: how many are here and who is missing, then the news of the day. */
 	private void announceCountAndNews() {
@@ -1595,7 +1793,15 @@ public class CellbreakGame {
 		if (scannerAlarms > 0) {
 			news.add("Сканер сработал " + scannerAlarms + " раз. Мы всё видим.");
 		}
-		news.add(SMALL_NEWS[world().random.nextInt(SMALL_NEWS.length)]);
+		// Not every real event makes the news; there is always a tall tale or two to mix in.
+		news.removeIf(n -> world().random.nextInt(3) == 0);
+		int tales = 1 + world().random.nextInt(2);
+		for (int i = 0; i < tales; i++) {
+			String tale = SMALL_NEWS[world().random.nextInt(SMALL_NEWS.length)];
+			if (!news.contains(tale)) {
+				news.add(world().random.nextInt(news.size() + 1), tale);
+			}
+		}
 		holesFound = 0;
 		graffitiFound = 0;
 		fightsSeen = 0;
@@ -1809,7 +2015,7 @@ public class CellbreakGame {
 	private final Map<UUID, Long> escortSince = new HashMap<>();
 
 	/** An NPC inmate hit a player: a guard who sees it stops the fight and takes the NPC away. */
-	public void onNpcAttack(PrisonerNpcEntity npc, ServerPlayerEntity victim) {
+	public void onNpcAttack(PrisonerNpcEntity npc, LivingEntity victim) {
 		alertSnipers(npc.getBlockPos());
 		if (escorts.containsKey(npc.getUuid())) {
 			return;
@@ -2518,6 +2724,22 @@ public class CellbreakGame {
 
 	/** An NPC inmate reached its seat: it sits down (on an invisible stand) and eats. */
 	public void onNpcArrived(PrisonerNpcEntity npc, BlockPos at) {
+		if (phase() == Phase.SHOWER && at.equals(showerSpots.get(npc.getUuid()))) {
+			// Under the shower head: turn the water on.
+			BlockPos lever = at.up();
+			BlockState st = world().getBlockState(lever);
+			if (st.isOf(Blocks.LEVER) && !st.get(net.minecraft.block.LeverBlock.POWERED)) {
+				world().setBlockState(lever, st.with(net.minecraft.block.LeverBlock.POWERED, true));
+				world().playSound(null, lever, SoundEvents.BLOCK_LEVER_CLICK, SoundCategory.BLOCKS, 0.4F, 0.6F);
+				leversOn.add(lever);
+			}
+			return;
+		}
+		if (phase() == Phase.LIGHTS_OUT && npc.cell >= 0 && npc.cell < layout().cells.size()
+				&& layout().cells.get(npc.cell).interior.contains(npc.getBlockPos())) {
+			putToBed(npc);
+			return;
+		}
 		BlockPos seat = seatOf.get(npc.getUuid());
 		if (seat == null || !seat.equals(at) || npc.hasVehicle() || phase().zone != Zone.CANTEEN) {
 			return;
@@ -2597,6 +2819,49 @@ public class CellbreakGame {
 	}
 
 	// ------------------------------------------------------------------ showers
+
+	/** Shower places of NPC inmates (under a shower head) and the faucets they opened. */
+	private final Map<UUID, BlockPos> showerSpots = new HashMap<>();
+	private final List<BlockPos> leversOn = new ArrayList<>();
+
+	private void startShower(Phase phase) {
+		for (BlockPos lever : leversOn) {
+			BlockState st = world().getBlockState(lever);
+			if (st.isOf(Blocks.LEVER)) {
+				world().setBlockState(lever, st.with(net.minecraft.block.LeverBlock.POWERED, false));
+			}
+		}
+		leversOn.clear();
+		showerSpots.clear();
+	}
+
+	/** A free place under a shower head for this inmate (each faucet is a lever above the place). */
+	private BlockPos showerSpot(PrisonerNpcEntity npc) {
+		BlockPos spot = showerSpots.get(npc.getUuid());
+		if (spot != null) {
+			return spot;
+		}
+		for (BlockPos head : layout().showerHeads) {
+			BlockPos s = head.down();
+			if (!showerSpots.containsValue(s)) {
+				showerSpots.put(npc.getUuid(), s);
+				return s;
+			}
+		}
+		return null;
+	}
+
+	/** Inmates under a running shower wash themselves. */
+	private void washAnimations() {
+		for (Map.Entry<UUID, BlockPos> e : showerSpots.entrySet()) {
+			if (world().getEntity(e.getKey()) instanceof PrisonerNpcEntity npc && npc.getBlockPos().equals(e.getValue())
+					&& world().random.nextInt(3) == 0) {
+				npc.swingHand(world().random.nextBoolean() ? net.minecraft.util.Hand.MAIN_HAND : net.minecraft.util.Hand.OFF_HAND);
+				world().spawnParticles(net.minecraft.particle.ParticleTypes.BUBBLE_POP, npc.getX(), npc.getY() + 1.2, npc.getZ(),
+						4, 0.25, 0.4, 0.25, 0.01);
+			}
+		}
+	}
 
 	/** Water runs from every shower whose faucet (a lever) is on. */
 	private void runShowers() {
@@ -2719,10 +2984,16 @@ public class CellbreakGame {
 		BlockPos cellSpawn = npc.cell >= 0 && npc.cell < layout.cells.size() ? layout.cells.get(npc.cell).spawn
 				: layout.npcGuardSpawn;
 		Phase phase = phase();
-		if (phase == Phase.LIGHTS_OUT) {
+		if (phase == Phase.LIGHTS_OUT || phase == Phase.WAKE_UP) {
 			return cellSpawn;
 		}
 		BlockBox zone = zoneBox(phase.zone);
+		if (phase == Phase.SHOWER) {
+			BlockPos spot = showerSpot(npc);
+			if (spot != null) {
+				return spot;
+			}
+		}
 		if (phase.zone == Zone.CANTEEN && !npc.skipsMeal) {
 			BlockPos meal = mealDestination(npc);
 			if (meal != null) {
@@ -2979,6 +3250,9 @@ public class CellbreakGame {
 				BlockPos s = layout.cells.get(npc.cell).spawn;
 				npc.refreshPositionAndAngles(s.getX() + 0.5, s.getY(), s.getZ() + 0.5, npc.getYaw(), 0);
 				npc.getNavigation().stop();
+			}
+			if (npc.solitaryUntil == 0 && npc.infirmaryUntil == 0) {
+				putToBed(npc);
 			}
 		}
 		setDoors(false);

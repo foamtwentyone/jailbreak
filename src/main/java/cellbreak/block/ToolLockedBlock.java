@@ -30,7 +30,9 @@ public class ToolLockedBlock extends Block {
 	}
 
 	public boolean isTool(ItemStack stack) {
-		return tool != null && stack.isOf(tool.get());
+		// The work pickaxe from the field breaks walls just like the makeshift one.
+		return tool != null && (stack.isOf(tool.get())
+				|| tool.get() == cellbreak.CbContent.MAKESHIFT_PICKAXE && stack.isOf(cellbreak.CbContent.WORK_PICKAXE));
 	}
 
 	@Override
