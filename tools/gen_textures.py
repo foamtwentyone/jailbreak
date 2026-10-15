@@ -387,6 +387,104 @@ ITEMS = {
 }
 
 
+def trader_painter(part, face, x, y, w, h):
+    """A prisoner who runs the black market: green bandana and a gold chain."""
+    if part == "head" and (face == "top" or y < 2):
+        return (40, 140, 60) if (x + y) % 3 else (30, 110, 45)
+    if part == "body" and face == "front" and y == 1 and 1 <= x <= 6:
+        return (230, 190, 60)
+    return prisoner_painter(part, face, x, y, w, h)
+
+
+def job_desk_top(x, y):
+    if x in (0, 15) or y in (0, 15):
+        return jitter((110, 74, 40), 4)
+    if 2 <= x <= 7 and 3 <= y <= 10:
+        return jitter((236, 232, 220), 3)  # work order sheet
+    if 3 <= x <= 6 and y in (5, 7, 9):
+        return (90, 90, 100, 255)
+    if 10 <= x <= 12 and 2 <= y <= 12:
+        return (150, 150, 160, 255) if x == 11 else jitter((140, 100, 60), 4)  # ruler
+    return jitter((156, 112, 66), 6) if y % 4 else jitter((136, 96, 56), 4)
+
+
+def job_desk_side(x, y):
+    if y < 3:
+        return jitter((136, 96, 56), 4)
+    if x in (0, 1, 14, 15):
+        return jitter((110, 74, 40), 4)
+    if 4 <= x <= 11 and 6 <= y <= 9:
+        return (60, 60, 66, 255) if (x, y) != (7, 7) else (200, 180, 70, 255)  # drawer + handle
+    return jitter((150, 106, 62), 5)
+
+
+def detector(x, y):
+    frame = x in (0, 1, 14, 15) or y in (0, 1)
+    if y in (0, 1) and 6 <= x <= 9:
+        return (220, 40, 40, 255) if y == 1 else (255, 90, 90, 255)  # alarm lamp
+    if frame:
+        return jitter((150, 154, 162) if x in (0, 15) or y == 0 else (110, 114, 122), 4)
+    return None
+
+
+MORE_ITEMS = {
+    "money": ([
+        "................",
+        "................",
+        "................",
+        ".oooooooooooooo.",
+        ".oggggggggggggo.",
+        ".ogllgggggglgo..",
+        ".oglggg$$gggggo.",
+        ".oggggg$$$ggggo.",
+        ".oggggg$$gggggo.",
+        ".oglggggggggllo.",
+        ".oggggggggggggo.",
+        ".oooooooooooooo.",
+        "................",
+        "................",
+        "................",
+        "................",
+    ], {"o": (30, 70, 30), "g": (110, 180, 100), "l": (160, 220, 150), "$": (40, 110, 40)}),
+    "fake_wall": ([
+        "................",
+        ".oooooooooooo...",
+        ".owwwmwwwwwmo...",
+        ".ommmmmmmmmmo...",
+        ".owmwwwwwmwwwo..",
+        ".ommmmmmmmmmmo..",
+        ".owwwmwwwwwmwwo.",
+        ".ommmmmmmmmmmmo.",
+        ".owmwwwwwmwwwpo.",
+        ".ommmmmmmmmmppo.",
+        ".owwwmwwwwwpppo.",
+        ".oooooooooooooo.",
+        "................",
+        "................",
+        "................",
+        "................",
+    ], {"o": (40, 40, 40), "w": (160, 160, 156), "m": (112, 112, 110), "p": (236, 232, 220)}),
+    "fake_vent": ([
+        "................",
+        ".oooooooooooo...",
+        ".ossssssssssso..",
+        ".ollllllllllso..",
+        ".ossssssssssso..",
+        ".ollllllllllso..",
+        ".ossssssssssso..",
+        ".ollllllllllsoo.",
+        ".osssssssssppo..",
+        ".olllllllllppo..",
+        ".osssssssspppo..",
+        ".oooooooooooo...",
+        "................",
+        "................",
+        "................",
+        "................",
+    ], {"o": (40, 40, 40), "s": (176, 180, 186), "l": (52, 54, 60), "p": (236, 232, 220)}),
+}
+
+
 def main():
     root = sys.argv[1]
     dirs = {k: os.path.join(root, "textures", k) for k in ("entity", "block", "item")}
@@ -407,6 +505,13 @@ def main():
         tex16(fn).save(os.path.join(dirs["block"], name + ".png"))
 
     for name, (rows, pal) in ITEMS.items():
+        from_pixels(rows, pal).save(os.path.join(dirs["item"], name + ".png"))
+
+    # Added later: generated after the originals so their pixels stay the same.
+    paint_skin(trader_painter).save(os.path.join(dirs["entity"], "prisoner_trader.png"))
+    for name, fn in {"job_desk_top": job_desk_top, "job_desk_side": job_desk_side, "detector": detector}.items():
+        tex16(fn).save(os.path.join(dirs["block"], name + ".png"))
+    for name, (rows, pal) in MORE_ITEMS.items():
         from_pixels(rows, pal).save(os.path.join(dirs["item"], name + ".png"))
 
 

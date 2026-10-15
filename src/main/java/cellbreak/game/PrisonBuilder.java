@@ -52,7 +52,7 @@ public class PrisonBuilder {
 		fill(-12, -6, -12, SIZE_X + 11, -2, SIZE_Z + 11, Blocks.DIRT.getDefaultState());
 		fill(-12, -1, -12, SIZE_X + 11, -1, SIZE_Z + 11, Blocks.GRASS_BLOCK.getDefaultState());
 		fill(0, -1, 0, SIZE_X - 1, -1, SIZE_Z - 1, floor);
-		fill(-12, 0, -12, SIZE_X + 11, 10, SIZE_Z + 11, air);
+		fill(-12, 0, -12, SIZE_X + 11, 14, SIZE_Z + 11, air);
 
 		// Perimeter wall, two blocks thick, with foundations three blocks deep.
 		for (int t = 1; t <= 2; t++) {
@@ -69,13 +69,17 @@ public class PrisonBuilder {
 		buildGuardRoom(layout);
 		buildCanteen(layout);
 		buildYard(layout);
+		buildWorkshop(layout);
+		buildShower(layout);
+		buildExerciseYard(layout);
+		buildTowers(layout);
 
-		// Invisible light so the prison is never pitch black.
-		BlockState light = Blocks.LIGHT.getDefaultState().with(LightBlock.LEVEL_15, 12);
+		// Invisible light so the prison is never pitch black (above the roofs: vents stay dark).
+		BlockState light = Blocks.LIGHT.getDefaultState().with(LightBlock.LEVEL_15, 15);
 		for (int x = 2; x < SIZE_X; x += 6) {
 			for (int z = 2; z < SIZE_Z; z += 6) {
-				if (world.getBlockState(at(x, 4, z)).isAir()) {
-					set(x, 4, z, light);
+				if (world.getBlockState(at(x, 6, z)).isAir()) {
+					set(x, 6, z, light);
 				}
 			}
 		}
@@ -95,15 +99,24 @@ public class PrisonBuilder {
 		layout.patrolPoints.add(at(18, 0, 0));
 		layout.patrolPoints.add(at(36, 0, 0));
 		layout.patrolPoints.add(at(46, 0, 22));
+		layout.patrolPoints.add(at(8, 0, 27));
+		layout.patrolPoints.add(at(19, 0, 27));
+		layout.patrolPoints.add(at(8, 0, 34));
+		layout.patrolPoints.add(at(38, 0, 36));
 		return layout;
 	}
 
 	private void buildCells(PrisonLayout layout) {
-		// Eight cells in a row: x 2..34, back wall z = 2, front wall z = 7, roof at y = 3.
-		fill(2, 0, 2, 2 + CELLS * 4, 3, 7, wall);
+		// Eight cells in a row: x 2..34, back wall z = 2, front wall z = 7, ceiling at y = 3, roof at y = 5.
+		// Between ceiling and roof runs a vent (1 block high, y = 4) above the back of all cells. Each
+		// cell has a vent cover in its ceiling; the vent leaves the block through a cover in the east wall.
+		fill(2, 0, 2, 2 + CELLS * 4, 5, 7, wall);
+		fill(3, 4, 3, 1 + CELLS * 4, 4, 3, air);
+		set(2 + CELLS * 4, 4, 3, CbContent.VENT_COVER.getDefaultState());
 		for (int i = 0; i < CELLS; i++) {
 			int x0 = 2 + i * 4;
 			fill(x0 + 1, 0, 3, x0 + 3, 2, 6, air);
+			set(x0 + 2, 3, 3, CbContent.VENT_COVER.getDefaultState());
 			bar(x0 + 2, 1, 2);
 			door(x0 + 2, 0, 7, Direction.SOUTH);
 			bed(x0 + 1, 3);
@@ -155,6 +168,62 @@ public class PrisonBuilder {
 		for (int[] p : new int[][] { { 24, 38 }, { 46, 30 }, { 1, 30 } }) {
 			set(p[0], 0, p[1], Blocks.CHEST.getDefaultState());
 			layout.scrapChests.add(at(p[0], 0, p[1]));
+		}
+	}
+
+	/** Workshop: wood and metal work, a metal detector in the doorway. */
+	private void buildWorkshop(PrisonLayout layout) {
+		fill(2, 0, 29, 14, 3, 37, wall);
+		fill(3, 0, 30, 13, 3, 36, air);
+		fill(8, 0, 29, 8, 1, 29, air);
+		set(8, 0, 30, CbContent.DETECTOR.getDefaultState());
+		set(5, 0, 35, CbContent.JOB_DESK.getDefaultState());
+		set(11, 0, 35, CbContent.JOB_DESK.getDefaultState());
+		set(3, 0, 32, Blocks.FURNACE.getDefaultState().with(net.minecraft.block.FurnaceBlock.FACING, Direction.EAST));
+		set(3, 0, 33, Blocks.FURNACE.getDefaultState().with(net.minecraft.block.FurnaceBlock.FACING, Direction.EAST));
+		set(13, 0, 32, Blocks.CHEST.getDefaultState().with(ChestBlock.FACING, Direction.WEST));
+		set(13, 0, 34, Blocks.CHEST.getDefaultState().with(ChestBlock.FACING, Direction.WEST));
+		fill(4, -1, 31, 12, -1, 34, Blocks.SPRUCE_PLANKS.getDefaultState());
+		layout.workZone = box(3, 0, 30, 13, 2, 36);
+		layout.workSupplies.add(at(13, 0, 32));
+		layout.workSupplies.add(at(13, 0, 34));
+	}
+
+	private void buildShower(PrisonLayout layout) {
+		fill(16, 0, 29, 22, 3, 35, wall);
+		fill(17, 0, 30, 21, 3, 34, air);
+		fill(19, 0, 29, 19, 1, 29, air);
+		fill(17, -1, 30, 21, -1, 34, Blocks.LIGHT_BLUE_CONCRETE.getDefaultState());
+		for (int x = 17; x <= 21; x += 2) {
+			set(x, 2, 34, Blocks.IRON_TRAPDOOR.getDefaultState());
+		}
+		layout.showerZone = box(17, 0, 30, 21, 2, 34);
+	}
+
+	/** Exercise yard in the south-east corner, marked with green floor and pull-up bars. */
+	private void buildExerciseYard(PrisonLayout layout) {
+		fill(26, -1, 30, 46, -1, 38, Blocks.GREEN_CONCRETE.getDefaultState());
+		fill(27, -1, 31, 45, -1, 37, Blocks.LIME_CONCRETE.getDefaultState());
+		for (int x = 30; x <= 42; x += 6) {
+			set(x, 0, 34, Blocks.IRON_BARS.getDefaultState());
+			set(x, 1, 34, Blocks.IRON_BARS.getDefaultState());
+			set(x + 2, 0, 34, Blocks.IRON_BARS.getDefaultState());
+			set(x + 2, 1, 34, Blocks.IRON_BARS.getDefaultState());
+			set(x + 1, 2, 34, Blocks.IRON_BARS.getDefaultState());
+		}
+		layout.yardZone = box(26, 0, 30, 46, 2, 38);
+	}
+
+	/** Sniper towers on the four corners of the perimeter wall. */
+	private void buildTowers(PrisonLayout layout) {
+		// No railing: anything around the platform would block the sniper's view.
+		for (int[] c : new int[][] { { -2, -2 }, { SIZE_X + 1, -2 }, { -2, SIZE_Z + 1 }, { SIZE_X + 1, SIZE_Z + 1 } }) {
+			fill(c[0] - 1, -3, c[1] - 1, c[0] + 1, 9, c[1] + 1, reinforced);
+			fill(c[0] - 2, 10, c[1] - 2, c[0] + 2, 10, c[1] + 2, reinforced);
+			for (int[] d : new int[][] { { -2, -2 }, { 2, -2 }, { -2, 2 }, { 2, 2 } }) {
+				set(c[0] + d[0], 11, c[1] + d[1], Blocks.LANTERN.getDefaultState());
+			}
+			layout.sniperPosts.add(at(c[0], 11, c[1]));
 		}
 	}
 

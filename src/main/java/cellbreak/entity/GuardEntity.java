@@ -19,35 +19,40 @@ import net.minecraft.entity.ai.goal.ActiveTargetGoal;
 import net.minecraft.entity.ai.goal.Goal;
 import net.minecraft.entity.ai.goal.LookAroundGoal;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
-import net.minecraft.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.entity.ai.goal.SwimGoal;
+import net.minecraft.entity.ai.pathing.Path;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.entity.ai.pathing.Path;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.LocalDifficulty;
 import net.minecraft.world.ServerWorldAccess;
 import net.minecraft.world.World;
 
 /**
- * NPC guard: patrols the prison and chases wanted prisoners (guards learn about them by radio,
- * no line of sight needed). Three hits and the prisoner is arrested.
+ * NPC guard. Patrols the prison; when a prisoner is wanted the guards learn about it by radio and
+ * hunt them: they run at the prisoner while they see them and search the place where the prisoner
+ * was last seen when they do not, so a prisoner can hide. Three hits and the prisoner is arrested.
+ * A guard can also be a sniper: standing on a tower, watching the yard.
  */
 public class GuardEntity extends PathAwareEntity {
 	private static final int HITS_TO_ARREST = 3;
-	/** If a wanted prisoner stays out of walking reach this long, the guard takes a service passage. */
+	/** A prisoner seen this recently but out of walking reach (ladders) gets a guard via a service passage. */
 	private static final int SHORTCUT_TICKS = 80;
 
 	private final Map<UUID, Integer> hits = new HashMap<>();
 	private int unreachableTicks;
+	private boolean sniper;
 
 	public GuardEntity(EntityType<? extends PathAwareEntity> type, World world) {
 		super(type, world);
@@ -66,7 +71,7 @@ public class GuardEntity extends PathAwareEntity {
 	@Override
 	protected void initGoals() {
 		goalSelector.add(0, new SwimGoal(this));
-		goalSelector.add(1, new MeleeAttackGoal(this, 1.3, true));
+		goalSelector.add(1, new ChaseGoal(this));
 		goalSelector.add(2, new PatrolGoal(this));
 		goalSelector.add(3, new LookAtEntityGoal(this, PlayerEntity.class, 12.0F));
 		goalSelector.add(4, new LookAroundGoal(this));
@@ -81,6 +86,32 @@ public class GuardEntity extends PathAwareEntity {
 		return result;
 	}
 
+	public boolean isSniper() {
+		return sniper;
+	}
+
+	/** Turns this guard into a tower sniper: stands still, cannot be hurt, holds a crossbow. */
+	public void makeSniper() {
+		sniper = true;
+		setAiDisabled(true);
+		setNoGravity(true);
+		setInvulnerable(true);
+		equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.CROSSBOW));
+		setEquipmentDropChance(EquipmentSlot.MAINHAND, 0.0F);
+	}
+
+	@Override
+	public void writeCustomDataToNbt(NbtCompound nbt) {
+		super.writeCustomDataToNbt(nbt);
+		nbt.putBoolean("Sniper", sniper);
+	}
+
+	@Override
+	public void readCustomDataFromNbt(NbtCompound nbt) {
+		super.readCustomDataFromNbt(nbt);
+		sniper = nbt.getBoolean("Sniper");
+	}
+
 	private CellbreakGame game() {
 		if (getWorld() instanceof ServerWorld sw) {
 			return CellbreakGame.get(sw.getServer());
@@ -90,7 +121,7 @@ public class GuardEntity extends PathAwareEntity {
 
 	private boolean isWantedPrisoner(LivingEntity entity) {
 		CellbreakGame game = game();
-		return game != null && entity instanceof PlayerEntity p && game.isWanted(p);
+		return !sniper && game != null && entity instanceof PlayerEntity p && game.isWanted(p);
 	}
 
 	@Override
@@ -101,11 +132,13 @@ public class GuardEntity extends PathAwareEntity {
 			setTarget(null);
 			target = null;
 		}
-		if (target == null || squaredDistanceTo(target) < 9) {
+		CellbreakGame game = game();
+		if (target == null || game == null || squaredDistanceTo(target) < 9
+				|| game.ticksSinceSeen((PlayerEntity) target) > 60) {
 			unreachableTicks = 0;
 			return;
 		}
-		// Ladders and the like are out of reach for mobs: check every second whether we can walk there.
+		// The prisoner was just seen but climbed out of walking reach (a ladder): check every second.
 		if (age % 20 == 0) {
 			Path path = getNavigation().findPathTo(target, 0);
 			unreachableTicks = path != null && path.reachesTarget() ? 0 : unreachableTicks + 20;
@@ -169,6 +202,56 @@ public class GuardEntity extends PathAwareEntity {
 		RadioTargetGoal(GuardEntity guard) {
 			super(guard, PlayerEntity.class, 5, false, false, guard::isWantedPrisoner);
 			targetPredicate = targetPredicate.ignoreVisibility();
+		}
+	}
+
+	/**
+	 * Runs at a wanted prisoner the guard can see; otherwise goes to where the prisoner was last
+	 * seen (by any guard) and looks around there.
+	 */
+	static class ChaseGoal extends Goal {
+		private final GuardEntity guard;
+		private int repath;
+		private int cooldown;
+
+		ChaseGoal(GuardEntity guard) {
+			this.guard = guard;
+			setControls(EnumSet.of(Control.MOVE, Control.LOOK));
+		}
+
+		@Override
+		public boolean canStart() {
+			return guard.getTarget() instanceof PlayerEntity && guard.game() != null;
+		}
+
+		@Override
+		public void stop() {
+			guard.getNavigation().stop();
+		}
+
+		@Override
+		public void tick() {
+			if (!(guard.getTarget() instanceof PlayerEntity target)) {
+				return;
+			}
+			CellbreakGame game = guard.game();
+			boolean sees = game.canGuardSee(guard, target);
+			BlockPos goal = sees ? target.getBlockPos() : game.lastKnownPos(target);
+			if (sees) {
+				guard.getLookControl().lookAt(target, 30.0F, 30.0F);
+			}
+			if (goal != null && --repath <= 0) {
+				repath = sees ? 5 : 20;
+				guard.getNavigation().startMovingTo(goal.getX() + 0.5, goal.getY(), goal.getZ() + 0.5, 1.3);
+			}
+			if (cooldown > 0) {
+				cooldown--;
+			}
+			if (sees && cooldown == 0 && guard.squaredDistanceTo(target) < 6.25) {
+				guard.swingHand(Hand.MAIN_HAND);
+				guard.tryAttack(target);
+				cooldown = 20;
+			}
 		}
 	}
 

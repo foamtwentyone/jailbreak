@@ -171,7 +171,7 @@ public class CellbreakTest implements ModInitializer {
 					StringBuilder sb = new StringBuilder();
 					sb.append(p.getName().getString()).append(" at ").append(p.getBlockPos().toShortString())
 							.append(" mode=").append(p.interactionManager.getGameMode()).append(" hp=").append(p.getHealth())
-							.append(" glowing=").append(p.isGlowing()).append("\ninventory:");
+							.append(" glowing=").append(p.isGlowing()).append(" pose=").append(p.getPose()).append("\ninventory:");
 					for (int i = 0; i < p.getInventory().size(); i++) {
 						if (!p.getInventory().getStack(i).isEmpty()) {
 							sb.append(' ').append(p.getInventory().getStack(i));
@@ -280,6 +280,93 @@ public class CellbreakTest implements ModInitializer {
 							reply(c, sb.toString());
 							return 1;
 						}))))
+				.then(CommandManager.literal("useside").then(CommandManager.argument("name", StringArgumentType.word())
+						.then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
+								.then(CommandManager.argument("side", StringArgumentType.word()).executes(c -> {
+									ServerPlayerEntity p = bot(c).player;
+									BlockPos pos = BlockPosArgumentType.getBlockPos(c, "pos");
+									Direction side = Direction.byName(StringArgumentType.getString(c, "side"));
+									BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(pos).add(Vec3d.of(side.getVector()).multiply(0.5)),
+											side, pos, false);
+									var result = UseBlockCallback.EVENT.invoker().interact(p, p.getServerWorld(), Hand.MAIN_HAND, hit);
+									reply(c, "use " + pos.toShortString() + " " + side + " -> " + result + ", now at "
+											+ p.getBlockPos().toShortString() + " pose=" + p.getPose());
+									return 1;
+								})))))
+				.then(CommandManager.literal("crawl").then(CommandManager.argument("name", StringArgumentType.word())
+						.then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
+								.then(CommandManager.argument("side", StringArgumentType.word()).executes(c -> {
+									ServerPlayerEntity p = bot(c).player;
+									BlockPos pos = BlockPosArgumentType.getBlockPos(c, "pos");
+									Direction side = Direction.byName(StringArgumentType.getString(c, "side"));
+									BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(pos), side, pos, false);
+									BlockPos t = pos.offset(side);
+									ServerWorld w = p.getServerWorld();
+									String dbg = " t=" + t.toShortString() + " t:" + w.getBlockState(t) + " up:" + w.getBlockState(t.up())
+											+ " down:" + w.getBlockState(t.down()) + " swim=" + p.isInSwimmingPose();
+									boolean ok = cellbreak.game.CellbreakGame.tryEnterCrawlSpace(p, hit);
+									reply(c, "crawl -> " + ok + " now " + p.getPos() + dbg);
+									return 1;
+								})))))
+				.then(CommandManager.literal("sniperview").then(CommandManager.argument("name", StringArgumentType.word()).executes(c -> {
+					ServerPlayerEntity p = bot(c).player;
+					ServerWorld w = p.getServerWorld();
+					StringBuilder sb = new StringBuilder("sky=" + w.isSkyVisible(p.getBlockPos().up()));
+					for (var g : w.getEntitiesByType(cellbreak.CbContent.GUARD, e -> e.isSniper())) {
+						var hit = w.raycast(new net.minecraft.world.RaycastContext(g.getEyePos(), p.getEyePos(),
+								net.minecraft.world.RaycastContext.ShapeType.COLLIDER, net.minecraft.world.RaycastContext.FluidHandling.NONE, g));
+						sb.append("\n  sniper ").append(g.getBlockPos().toShortString()).append(" dist=").append((int) g.distanceTo(p))
+								.append(" canSee=").append(g.canSee(p)).append(" hit=").append(hit.getType()).append(' ')
+								.append(hit.getBlockPos().toShortString()).append(' ').append(w.getBlockState(hit.getBlockPos()).getBlock());
+					}
+					reply(c, sb.toString());
+					return 1;
+				})))
+				.then(CommandManager.literal("useitem").then(CommandManager.argument("name", StringArgumentType.word()).executes(c -> {
+					ServerPlayerEntity p = bot(c).player;
+					var result = net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.invoker()
+							.interact(p, p.getServerWorld(), Hand.MAIN_HAND);
+					reply(c, "use item -> " + result.getResult());
+					return 1;
+				})))
+				.then(CommandManager.literal("sneak").then(CommandManager.argument("name", StringArgumentType.word())
+						.then(CommandManager.argument("on", StringArgumentType.word()).executes(c -> {
+							ServerPlayerEntity p = bot(c).player;
+							boolean on = StringArgumentType.getString(c, "on").equals("on");
+							p.setSneaking(on);
+							p.setPose(on ? net.minecraft.entity.EntityPose.CROUCHING : net.minecraft.entity.EntityPose.STANDING);
+							return 1;
+						}))))
+				.then(CommandManager.literal("trade").then(CommandManager.argument("name", StringArgumentType.word()).executes(c -> {
+					ServerPlayerEntity p = bot(c).player;
+					var npcs = p.getServerWorld().getEntitiesByClass(cellbreak.entity.PrisonerNpcEntity.class,
+							p.getBoundingBox().expand(64), cellbreak.entity.PrisonerNpcEntity::isTrader);
+					if (npcs.isEmpty()) {
+						reply(c, "no trader");
+						return 0;
+					}
+					var npc = npcs.get(0);
+					var result = npc.interactMob(p, Hand.MAIN_HAND);
+					StringBuilder sb = new StringBuilder("trade with " + npc.getName().getString() + " -> " + result
+							+ ", screen=" + p.currentScreenHandler.getClass().getSimpleName() + ", offers:");
+					for (var o : npc.getOffers()) {
+						sb.append(" [").append(o.getOriginalFirstBuyItem()).append(" -> ").append(o.getSellItem()).append(']');
+					}
+					npc.setCustomer(null);
+					p.closeHandledScreen();
+					reply(c, sb.toString());
+					return 1;
+				})))
+				.then(CommandManager.literal("npcs").executes(c -> {
+					ServerWorld w = c.getSource().getServer().getOverworld();
+					StringBuilder sb = new StringBuilder("npc prisoners:");
+					for (var n : w.getEntitiesByType(cellbreak.CbContent.PRISONER, e -> true)) {
+						sb.append("\n  ").append(n.getName().getString()).append(" at ").append(n.getBlockPos().toShortString())
+								.append(" cell=").append(n.cell);
+					}
+					reply(c, sb.toString());
+					return 1;
+				}))
 				.then(CommandManager.literal("map").executes(CellbreakTest::map)));
 	}
 

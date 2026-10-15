@@ -14,5 +14,17 @@
   "item.cellbreak.baton": "Baton",
   "item.cellbreak.guard_spawn_egg": "Guard Spawn Egg",
   "entity.cellbreak.guard": "Guard",
-  "itemGroup.cellbreak": "Cellbreak"
+  "itemGroup.cellbreak": "Cellbreak",
+  "block.cellbreak.job_desk": "Job Desk",
+  "block.cellbreak.detector": "Metal Detector",
+  "block.cellbreak.fake_prison_wall": "Fake Wall",
+  "block.cellbreak.fake_stone_bricks": "Fake Wall",
+  "block.cellbreak.fake_prison_floor": "Fake Floor",
+  "block.cellbreak.fake_smooth_stone": "Fake Floor",
+  "block.cellbreak.fake_vent_cover": "Fake Vent Cover",
+  "item.cellbreak.money": "Money",
+  "item.cellbreak.fake_wall": "Fake Wall or Floor",
+  "item.cellbreak.fake_vent": "Fake Vent Cover",
+  "item.cellbreak.prisoner_spawn_egg": "Prisoner Spawn Egg",
+  "entity.cellbreak.prisoner": "Inmate"
 }

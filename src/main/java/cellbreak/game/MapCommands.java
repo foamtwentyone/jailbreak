@@ -91,6 +91,29 @@ public final class MapCommands {
 					layout(c).canteenZone = b;
 					ok(c, "Столовая: " + str(b));
 				})))
+				.then(CommandManager.literal("work").then(box((c, b) -> {
+					layout(c).workZone = b;
+					ok(c, "Место работы: " + str(b) + ". Поставьте там стол сдачи работы (cellbreak:job_desk), печь и склад (map supply).");
+				})))
+				.then(CommandManager.literal("yard").then(box((c, b) -> {
+					layout(c).yardZone = b;
+					ok(c, "Прогулочный двор: " + str(b));
+				})))
+				.then(CommandManager.literal("shower").then(box((c, b) -> {
+					layout(c).showerZone = b;
+					ok(c, "Душевая: " + str(b));
+				})))
+				.then(CommandManager.literal("supply").then(pos((c, p) -> {
+					if (!(world(c).getBlockEntity(p) instanceof Inventory)) {
+						throw error("Здесь нет сундука или бочки.");
+					}
+					layout(c).workSupplies.add(p);
+					ok(c, "Склад сырья для работы №" + layout(c).workSupplies.size() + ": " + p.toShortString());
+				})))
+				.then(CommandManager.literal("sniper").then(pos((c, p) -> {
+					layout(c).sniperPosts.add(p);
+					ok(c, "Пост снайпера №" + layout(c).sniperPosts.size() + ": " + p.toShortString());
+				})))
 				.then(CommandManager.literal("solitary").then(pos((c, p) -> {
 					Room room = scanRoom(world(c), p);
 					PrisonLayout l = layout(c);
@@ -140,6 +163,11 @@ public final class MapCommands {
 		sb.append("\nКамер: ").append(l.cells.size()).append(", дневных дверей: ").append(l.dayDoors.size());
 		sb.append("\nПерекличка: ").append(l.rollCallZone == null ? "-" : str(l.rollCallZone));
 		sb.append("\nСтоловая: ").append(l.canteenZone == null ? "-" : str(l.canteenZone));
+		sb.append("\nРабота: ").append(l.workZone == null ? "- (работы не будет)" : str(l.workZone))
+				.append(", складов сырья: ").append(l.workSupplies.size());
+		sb.append("\nПрогулка: ").append(l.yardZone == null ? "- (прогулки не будет)" : str(l.yardZone));
+		sb.append("\nДуш: ").append(l.showerZone == null ? "- (душа не будет)" : str(l.showerZone));
+		sb.append("\nСнайперов: ").append(l.sniperPosts.size());
 		sb.append("\nКарцер: ").append(l.solitarySpawn == null ? "-" : l.solitarySpawn.toShortString());
 		sb.append("\nКомната охраны: ").append(l.guardSpawn == null ? "-" : l.guardSpawn.toShortString());
 		sb.append("\nNPC-охрана: ").append(l.npcGuardSpawn == null ? "-" : l.npcGuardSpawn.toShortString());

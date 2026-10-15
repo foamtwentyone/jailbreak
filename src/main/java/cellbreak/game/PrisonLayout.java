@@ -40,6 +40,14 @@ public class PrisonLayout {
 	public final List<BlockPos> dayDoors = new ArrayList<>();
 	public BlockBox rollCallZone;
 	public BlockBox canteenZone;
+	/** Optional zones: parts of the routine without their zone are skipped. */
+	public BlockBox workZone;
+	public BlockBox yardZone;
+	public BlockBox showerZone;
+	/** Chests refilled with raw materials (logs, raw iron, coal) when work starts. */
+	public final List<BlockPos> workSupplies = new ArrayList<>();
+	/** Where snipers stand (on towers or walls). */
+	public final List<BlockPos> sniperPosts = new ArrayList<>();
 	public BlockPos solitarySpawn;
 	public BlockBox solitaryInterior;
 	public BlockPos solitaryDoor;
@@ -134,6 +142,11 @@ public class PrisonLayout {
 		nbt.putLongArray("dayDoors", longs(dayDoors));
 		putBox(nbt, "rollCall", rollCallZone);
 		putBox(nbt, "canteen", canteenZone);
+		putBox(nbt, "work", workZone);
+		putBox(nbt, "yard", yardZone);
+		putBox(nbt, "shower", showerZone);
+		nbt.putLongArray("workSupplies", longs(workSupplies));
+		nbt.putLongArray("snipers", longs(sniperPosts));
 		putPos(nbt, "solitarySpawn", solitarySpawn);
 		putBox(nbt, "solitaryInterior", solitaryInterior);
 		putPos(nbt, "solitaryDoor", solitaryDoor);
@@ -161,6 +174,15 @@ public class PrisonLayout {
 		}
 		l.rollCallZone = getBox(nbt, "rollCall");
 		l.canteenZone = getBox(nbt, "canteen");
+		l.workZone = getBox(nbt, "work");
+		l.yardZone = getBox(nbt, "yard");
+		l.showerZone = getBox(nbt, "shower");
+		for (long p : nbt.getLongArray("workSupplies")) {
+			l.workSupplies.add(BlockPos.fromLong(p));
+		}
+		for (long p : nbt.getLongArray("snipers")) {
+			l.sniperPosts.add(BlockPos.fromLong(p));
+		}
 		l.solitarySpawn = getPos(nbt, "solitarySpawn");
 		l.solitaryInterior = getBox(nbt, "solitaryInterior");
 		l.solitaryDoor = getPos(nbt, "solitaryDoor");

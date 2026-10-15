@@ -9,6 +9,8 @@ import cellbreak.game.PrisonLayout;
 import cellbreak.game.PrisonState;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.command.CommandSource;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.fabricmc.api.ModInitializer;
@@ -20,6 +22,9 @@ import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
+import cellbreak.block.FakeBlock;
+import net.minecraft.util.TypedActionResult;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.DoorBlock;
@@ -77,7 +82,7 @@ public class Cellbreak implements ModInitializer {
 					&& p.getMainHandStack().isOf(CbContent.MAKESHIFT_PICKAXE)) {
 				world.setBlockState(pos, Blocks.CRACKED_STONE_BRICKS.getDefaultState());
 			}
-			CellbreakGame.get(p.getServer()).onBlockBroken(p);
+			CellbreakGame.get(p.getServer()).onBlockBroken(p, pos, state);
 		});
 
 		ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
@@ -107,16 +112,62 @@ public class Cellbreak implements ModInitializer {
 		});
 
 		UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
-			BlockPos pos = hit.getBlockPos();
-			BlockState state = world.getBlockState(pos);
-			if (hand != Hand.MAIN_HAND || !player.getMainHandStack().isOf(CbContent.CELL_KEY)
-					|| !state.isOf(Blocks.IRON_DOOR)) {
+			if (hand != Hand.MAIN_HAND) {
 				return ActionResult.PASS;
 			}
-			if (!world.isClient) {
-				((DoorBlock) state.getBlock()).setOpen(player, world, state, pos, !state.get(DoorBlock.OPEN));
+			BlockPos pos = hit.getBlockPos();
+			BlockState state = world.getBlockState(pos);
+			var stack = player.getMainHandStack();
+			ServerPlayerEntity sp = player instanceof ServerPlayerEntity s ? s : null;
+			CellbreakGame game = sp != null ? CellbreakGame.get(sp.getServer()) : null;
+
+			// Cell key opens iron doors.
+			if (stack.isOf(CbContent.CELL_KEY) && state.isOf(Blocks.IRON_DOOR)) {
+				if (sp != null) {
+					((DoorBlock) state.getBlock()).setOpen(player, world, state, pos, !state.get(DoorBlock.OPEN));
+				}
+				return ActionResult.SUCCESS;
 			}
-			return ActionResult.SUCCESS;
+			// Fake walls and vent covers.
+			if (state.getBlock() instanceof FakeBlock fake) {
+				if (stack.isOf(CbContent.BATON)) {
+					if (sp != null && game.isGuard(sp)) {
+						game.revealFake(sp, pos);
+					}
+					return ActionResult.SUCCESS;
+				}
+				if (stack.isEmpty() && player.isSneaking()) {
+					if (sp != null) {
+						game.takeFake(sp, pos, fake);
+					}
+					return ActionResult.SUCCESS;
+				}
+			}
+			if (stack.isOf(CbContent.FAKE_WALL) || stack.isOf(CbContent.FAKE_VENT)) {
+				return sp != null && game.placeFake(sp) ? ActionResult.SUCCESS : ActionResult.PASS;
+			}
+			// Hand in work.
+			if (state.isOf(CbContent.JOB_DESK)) {
+				if (sp != null) {
+					game.useJobDesk(sp);
+				}
+				return ActionResult.SUCCESS;
+			}
+			// Squeeze into a vent or a crawl space.
+			if (sp != null && stack.isEmpty() && !player.isSneaking() && CellbreakGame.tryEnterCrawlSpace(sp, hit)) {
+				return ActionResult.SUCCESS;
+			}
+			return ActionResult.PASS;
+		});
+
+		UseItemCallback.EVENT.register((player, world, hand) -> {
+			var stack = player.getStackInHand(hand);
+			if (hand == Hand.MAIN_HAND && player instanceof ServerPlayerEntity sp
+					&& (stack.isOf(CbContent.FAKE_WALL) || stack.isOf(CbContent.FAKE_VENT))
+					&& CellbreakGame.get(sp.getServer()).placeFake(sp)) {
+				return TypedActionResult.success(stack);
+			}
+			return TypedActionResult.pass(stack);
 		});
 	}
 
@@ -133,19 +184,29 @@ public class Cellbreak implements ModInitializer {
 				.then(CommandManager.literal("build").requires(s -> s.hasPermissionLevel(2)).executes(Cellbreak::build))
 				.then(CommandManager.literal("join")
 						.then(CommandManager.literal("prisoner").executes(c -> join(c, Role.PRISONER)))
-						.then(CommandManager.literal("guard").executes(c -> join(c, Role.GUARD))))
+						.then(CommandManager.literal("guard").executes(c -> join(c, Role.GUARD)))
+						.then(CommandManager.literal("random").executes(c -> join(c, Role.RANDOM)))
+						.then(CommandManager.literal("spectator").executes(c -> join(c, Role.SPECTATOR))))
+				.then(CommandManager.literal("menu").executes(c -> {
+					CellbreakGame.get(c.getSource().getServer()).sendRoleMenu(c.getSource().getPlayerOrThrow());
+					return 1;
+				}))
 				.then(CommandManager.literal("leave").executes(Cellbreak::leave))
 				.then(CommandManager.literal("role").requires(s -> s.hasPermissionLevel(2))
 						.then(CommandManager.argument("players", EntityArgumentType.players())
 								.then(CommandManager.literal("prisoner").executes(c -> role(c, Role.PRISONER)))
 								.then(CommandManager.literal("guard").executes(c -> role(c, Role.GUARD)))))
 				.then(CommandManager.literal("start").requires(s -> s.hasPermissionLevel(2))
-						.executes(c -> start(c, 30, -1))
+						.executes(c -> start(c, 30, -1, -1))
 						.then(CommandManager.argument("minutes", IntegerArgumentType.integer(1, 240))
-								.executes(c -> start(c, IntegerArgumentType.getInteger(c, "minutes"), -1))
+								.executes(c -> start(c, IntegerArgumentType.getInteger(c, "minutes"), -1, -1))
 								.then(CommandManager.argument("npcGuards", IntegerArgumentType.integer(0, 20))
 										.executes(c -> start(c, IntegerArgumentType.getInteger(c, "minutes"),
-												IntegerArgumentType.getInteger(c, "npcGuards"))))))
+												IntegerArgumentType.getInteger(c, "npcGuards"), -1))
+										.then(CommandManager.argument("npcPrisoners", IntegerArgumentType.integer(0, 40))
+												.executes(c -> start(c, IntegerArgumentType.getInteger(c, "minutes"),
+														IntegerArgumentType.getInteger(c, "npcGuards"),
+														IntegerArgumentType.getInteger(c, "npcPrisoners")))))))
 				.then(CommandManager.literal("stop").requires(s -> s.hasPermissionLevel(2)).executes(c -> {
 					CellbreakGame game = CellbreakGame.get(c.getSource().getServer());
 					if (!game.isRunning()) {
@@ -160,6 +221,25 @@ public class Cellbreak implements ModInitializer {
 					return 1;
 				}))
 				.then(MapCommands.build())
+				.then(CommandManager.literal("phase").requires(s -> s.hasPermissionLevel(2))
+						.then(CommandManager.argument("phase", StringArgumentType.word())
+								.suggests((c, b) -> CommandSource.suggestMatching(java.util.Arrays.stream(CellbreakGame.Phase.values())
+										.map(ph -> ph.name().toLowerCase(java.util.Locale.ROOT)), b))
+								.executes(c -> {
+									String name = StringArgumentType.getString(c, "phase").toUpperCase(java.util.Locale.ROOT);
+									CellbreakGame.Phase target;
+									try {
+										target = CellbreakGame.Phase.valueOf(name);
+									} catch (IllegalArgumentException e) {
+										c.getSource().sendError(Text.literal("Нет такого этапа."));
+										return 0;
+									}
+									if (!CellbreakGame.get(c.getSource().getServer()).jumpTo(target)) {
+										c.getSource().sendError(Text.literal("Раунд не идёт или на этой карте нет места для этапа."));
+										return 0;
+									}
+									return 1;
+								})))
 				.then(CommandManager.literal("status").executes(Cellbreak::status))
 				.then(CommandManager.literal("heat").requires(s -> s.hasPermissionLevel(2))
 						.then(CommandManager.argument("player", EntityArgumentType.player())
@@ -234,8 +314,8 @@ public class Cellbreak implements ModInitializer {
 		return targets.size();
 	}
 
-	private static int start(CommandContext<ServerCommandSource> c, int minutes, int npcGuards) {
-		String error = CellbreakGame.get(c.getSource().getServer()).start(minutes, npcGuards);
+	private static int start(CommandContext<ServerCommandSource> c, int minutes, int npcGuards, int npcPrisoners) {
+		String error = CellbreakGame.get(c.getSource().getServer()).start(minutes, npcGuards, npcPrisoners);
 		if (error != null) {
 			c.getSource().sendError(Text.literal(error));
 			return 0;

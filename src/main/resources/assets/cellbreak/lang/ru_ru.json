@@ -14,5 +14,17 @@
   "item.cellbreak.baton": "Дубинка",
   "item.cellbreak.guard_spawn_egg": "Яйцо призыва охранника",
   "entity.cellbreak.guard": "Охранник",
-  "itemGroup.cellbreak": "Cellbreak"
+  "itemGroup.cellbreak": "Cellbreak",
+  "block.cellbreak.job_desk": "Стол сдачи работы",
+  "block.cellbreak.detector": "Металлодетектор",
+  "block.cellbreak.fake_prison_wall": "Муляж стены",
+  "block.cellbreak.fake_stone_bricks": "Муляж стены",
+  "block.cellbreak.fake_prison_floor": "Муляж пола",
+  "block.cellbreak.fake_smooth_stone": "Муляж пола",
+  "block.cellbreak.fake_vent_cover": "Муляж решётки вентиляции",
+  "item.cellbreak.money": "Деньги",
+  "item.cellbreak.fake_wall": "Муляж стены или пола",
+  "item.cellbreak.fake_vent": "Муляж решётки вентиляции",
+  "item.cellbreak.prisoner_spawn_egg": "Яйцо призыва заключённого",
+  "entity.cellbreak.prisoner": "Заключённый"
 }

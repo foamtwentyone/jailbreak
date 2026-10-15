@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "cellbreak:block/job_desk_top",
+    "side": "cellbreak:block/job_desk_side",
+    "bottom": "cellbreak:block/job_desk_side"
+  }
+}

@@ -10,6 +10,8 @@ public class CellbreakClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		EntityRendererRegistry.register(CbContent.GUARD, GuardRenderer::new);
+		EntityRendererRegistry.register(CbContent.PRISONER, PrisonerRenderer::new);
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.CELL_BARS, RenderLayer.getCutoutMipped());
+		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.DETECTOR, RenderLayer.getCutout());
 	}
 }
