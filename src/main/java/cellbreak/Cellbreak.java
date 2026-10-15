@@ -1,10 +1,10 @@
 package cellbreak;
 
 import cellbreak.entity.GuardEntity;
+import cellbreak.entity.PrisonerNpcEntity;
 import cellbreak.game.CellbreakGame;
 import cellbreak.game.CellbreakGame.Role;
 import cellbreak.game.MapCommands;
-import cellbreak.game.PrisonBuilder;
 import cellbreak.game.PrisonLayout;
 import cellbreak.game.PrisonState;
 import com.mojang.brigadier.CommandDispatcher;
@@ -25,6 +25,7 @@ import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import cellbreak.block.FakeBlock;
 import net.minecraft.util.TypedActionResult;
+import net.minecraft.block.BedBlock;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.DoorBlock;
@@ -57,12 +58,21 @@ public class Cellbreak implements ModInitializer {
 
 		ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, amount) -> {
 			if (entity instanceof ServerPlayerEntity p) {
-				return !CellbreakGame.get(p.getServer()).onFatalDamage(p);
+				return !CellbreakGame.get(p.getServer()).onFatalDamage(p, source);
+			}
+			if (entity instanceof PrisonerNpcEntity npc && npc.getServer() != null) {
+				return !CellbreakGame.get(npc.getServer()).onNpcKnockedOut(npc, source);
 			}
 			return true;
 		});
 
 		PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
+			if (player instanceof ServerPlayerEntity p && CbContent.WORK_TOOLS.contains(p.getMainHandStack().getItem())
+					&& !p.isCreative() && !CellbreakGame.get(p.getServer()).canWorkAt(pos)) {
+				p.sendMessage(Text.literal("Рабочим инструментом можно работать только на рабочем поле во время работы.")
+						.formatted(Formatting.RED), true);
+				return false;
+			}
 			if (player instanceof ServerPlayerEntity p && isMakeshiftTool(p)) {
 				PrisonLayout layout = PrisonState.get(p.getServer()).getLayout();
 				if (layout != null && !layout.canBreakAt(pos)) {
@@ -74,6 +84,13 @@ public class Cellbreak implements ModInitializer {
 		});
 
 		PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, be) -> {
+			if (player instanceof ServerPlayerEntity p && CbContent.WORK_TOOLS.contains(p.getMainHandStack().getItem())) {
+				CellbreakGame game = CellbreakGame.get(p.getServer());
+				if (game.canWorkAt(pos)) {
+					game.onWorkBlockBroken(p, pos, state);
+				}
+				return;
+			}
 			if (!(player instanceof ServerPlayerEntity p) || !isMakeshiftTool(p)) {
 				return;
 			}
@@ -86,10 +103,17 @@ public class Cellbreak implements ModInitializer {
 		});
 
 		ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
+			// Nobody beats up a prisoner lying in the infirmary or sitting in solitary.
+			if (entity instanceof ServerPlayerEntity t && source.getAttacker() != null
+					&& CellbreakGame.get(t.getServer()).isPrisoner(t) && CellbreakGame.get(t.getServer()).isOutOfPlay(t)) {
+				return false;
+			}
 			if (source.getAttacker() instanceof ServerPlayerEntity p) {
 				CellbreakGame game = CellbreakGame.get(p.getServer());
 				if (entity instanceof GuardEntity || entity instanceof ServerPlayerEntity t && game.isGuard(t)) {
 					game.onGuardAttacked(p);
+				} else if (entity instanceof PrisonerNpcEntity || entity instanceof ServerPlayerEntity t && game.isPrisoner(t)) {
+					game.onPrisonerFight(p);
 				}
 			}
 			return true;
@@ -121,6 +145,22 @@ public class Cellbreak implements ModInitializer {
 			ServerPlayerEntity sp = player instanceof ServerPlayerEntity s ? s : null;
 			CellbreakGame game = sp != null ? CellbreakGame.get(sp.getServer()) : null;
 
+			// No sleeping through the routine.
+			if (state.getBlock() instanceof BedBlock) {
+				if (sp != null && game.isRunning()) {
+					sp.sendMessage(Text.literal("Спать — только по распорядку, в камере.").formatted(Formatting.GRAY), true);
+					return ActionResult.FAIL;
+				}
+				return ActionResult.PASS;
+			}
+			// Chalk drawings: prisoners draw, guards wipe them off.
+			if (state.isOf(CbContent.GRAFFITI) && sp != null && game.isGuard(sp)) {
+				game.wipeGraffiti(sp, pos);
+				return ActionResult.SUCCESS;
+			}
+			if (stack.isOf(CbContent.CHALK)) {
+				return sp != null && game.drawGraffiti(sp, pos, hit.getSide()) ? ActionResult.SUCCESS : ActionResult.PASS;
+			}
 			// Cell key opens iron doors.
 			if (stack.isOf(CbContent.CELL_KEY) && state.isOf(Blocks.IRON_DOOR)) {
 				if (sp != null) {
@@ -181,7 +221,6 @@ public class Cellbreak implements ModInitializer {
 
 	private static void registerCommands(CommandDispatcher<ServerCommandSource> d) {
 		d.register(CommandManager.literal("cellbreak")
-				.then(CommandManager.literal("build").requires(s -> s.hasPermissionLevel(2)).executes(Cellbreak::build))
 				.then(CommandManager.literal("join")
 						.then(CommandManager.literal("prisoner").executes(c -> join(c, Role.PRISONER)))
 						.then(CommandManager.literal("guard").executes(c -> join(c, Role.GUARD)))
@@ -248,7 +287,7 @@ public class Cellbreak implements ModInitializer {
 				.then(CommandManager.literal("tp").requires(s -> s.hasPermissionLevel(2)).executes(c -> {
 					PrisonLayout layout = PrisonState.get(c.getSource().getServer()).getLayout();
 					if (layout == null) {
-						c.getSource().sendError(Text.literal("Тюрьма ещё не построена."));
+						c.getSource().sendError(Text.literal("Тюрьма не отмечена на карте."));
 						return 0;
 					}
 					BlockPos p = layout.npcGuardSpawn;
@@ -256,25 +295,6 @@ public class Cellbreak implements ModInitializer {
 							p.getX() + 0.5, p.getY(), p.getZ() + 0.5, 0, 0);
 					return 1;
 				})));
-	}
-
-	private static int build(CommandContext<ServerCommandSource> c) {
-		ServerCommandSource src = c.getSource();
-		if (CellbreakGame.get(src.getServer()).isRunning()) {
-			src.sendError(Text.literal("Сначала остановите раунд: /cellbreak stop"));
-			return 0;
-		}
-		if (src.getWorld() != src.getServer().getOverworld()) {
-			src.sendError(Text.literal("Тюрьму можно построить только в обычном мире."));
-			return 0;
-		}
-		BlockPos origin = BlockPos.ofFloored(src.getPosition());
-		PrisonLayout layout = new PrisonBuilder(src.getWorld(), origin).build();
-		PrisonState.get(src.getServer()).setLayout(layout);
-		src.sendFeedback(() -> Text.literal("Тюрьма построена! Камер: " + layout.cells.size()
-				+ ". Теперь игроки выбирают роль: /cellbreak join prisoner или /cellbreak join guard,"
-				+ " затем /cellbreak start").formatted(Formatting.GREEN), true);
-		return 1;
 	}
 
 	private static int join(CommandContext<ServerCommandSource> c, Role role) throws CommandSyntaxException {
@@ -328,7 +348,7 @@ public class Cellbreak implements ModInitializer {
 		CellbreakGame game = CellbreakGame.get(src.getServer());
 		boolean built = PrisonState.get(src.getServer()).getLayout() != null;
 		StringBuilder sb = new StringBuilder();
-		sb.append("Тюрьма: ").append(built ? "построена" : "не построена");
+		sb.append("Тюрьма: ").append(built ? "отмечена" : "не отмечена");
 		sb.append(". Раунд: ").append(game.isRunning() ? "идёт (" + game.phase().title + ")" : "не идёт").append('.');
 		game.participants().forEach((id, d) -> {
 			ServerPlayerEntity p = src.getServer().getPlayerManager().getPlayer(id);

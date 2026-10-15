@@ -1,7 +1,94 @@
 {
   "variants": {
-    "": {
-      "model": "cellbreak:block/detector"
+    "facing=north,half=lower,lamp=0": {
+      "model": "cellbreak:block/detector_lower"
+    },
+    "facing=north,half=upper,lamp=0": {
+      "model": "cellbreak:block/detector_upper_0"
+    },
+    "facing=north,half=lower,lamp=1": {
+      "model": "cellbreak:block/detector_lower"
+    },
+    "facing=north,half=upper,lamp=1": {
+      "model": "cellbreak:block/detector_upper_1"
+    },
+    "facing=north,half=lower,lamp=2": {
+      "model": "cellbreak:block/detector_lower"
+    },
+    "facing=north,half=upper,lamp=2": {
+      "model": "cellbreak:block/detector_upper_2"
+    },
+    "facing=east,half=lower,lamp=0": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 90
+    },
+    "facing=east,half=upper,lamp=0": {
+      "model": "cellbreak:block/detector_upper_0",
+      "y": 90
+    },
+    "facing=east,half=lower,lamp=1": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 90
+    },
+    "facing=east,half=upper,lamp=1": {
+      "model": "cellbreak:block/detector_upper_1",
+      "y": 90
+    },
+    "facing=east,half=lower,lamp=2": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 90
+    },
+    "facing=east,half=upper,lamp=2": {
+      "model": "cellbreak:block/detector_upper_2",
+      "y": 90
+    },
+    "facing=south,half=lower,lamp=0": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 180
+    },
+    "facing=south,half=upper,lamp=0": {
+      "model": "cellbreak:block/detector_upper_0",
+      "y": 180
+    },
+    "facing=south,half=lower,lamp=1": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 180
+    },
+    "facing=south,half=upper,lamp=1": {
+      "model": "cellbreak:block/detector_upper_1",
+      "y": 180
+    },
+    "facing=south,half=lower,lamp=2": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 180
+    },
+    "facing=south,half=upper,lamp=2": {
+      "model": "cellbreak:block/detector_upper_2",
+      "y": 180
+    },
+    "facing=west,half=lower,lamp=0": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 270
+    },
+    "facing=west,half=upper,lamp=0": {
+      "model": "cellbreak:block/detector_upper_0",
+      "y": 270
+    },
+    "facing=west,half=lower,lamp=1": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 270
+    },
+    "facing=west,half=upper,lamp=1": {
+      "model": "cellbreak:block/detector_upper_1",
+      "y": 270
+    },
+    "facing=west,half=lower,lamp=2": {
+      "model": "cellbreak:block/detector_lower",
+      "y": 270
+    },
+    "facing=west,half=upper,lamp=2": {
+      "model": "cellbreak:block/detector_upper_2",
+      "y": 270
     }
   }
 }

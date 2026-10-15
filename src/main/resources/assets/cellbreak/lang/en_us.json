@@ -16,7 +16,7 @@
   "entity.cellbreak.guard": "Guard",
   "itemGroup.cellbreak": "Cellbreak",
   "block.cellbreak.job_desk": "Job Desk",
-  "block.cellbreak.detector": "Metal Detector",
+  "block.cellbreak.detector": "Scanner Arch",
   "block.cellbreak.fake_prison_wall": "Fake Wall",
   "block.cellbreak.fake_stone_bricks": "Fake Wall",
   "block.cellbreak.fake_prison_floor": "Fake Floor",
@@ -26,5 +26,15 @@
   "item.cellbreak.fake_wall": "Fake Wall or Floor",
   "item.cellbreak.fake_vent": "Fake Vent Cover",
   "item.cellbreak.prisoner_spawn_egg": "Prisoner Spawn Egg",
-  "entity.cellbreak.prisoner": "Inmate"
+  "entity.cellbreak.prisoner": "Inmate",
+  "item.cellbreak.broken_pickaxe": "Broken Makeshift Pickaxe",
+  "item.cellbreak.broken_shovel": "Broken Makeshift Shovel",
+  "item.cellbreak.broken_file": "Broken File",
+  "item.cellbreak.work_pickaxe": "Work Pickaxe",
+  "item.cellbreak.work_axe": "Work Axe",
+  "item.cellbreak.chalk": "Chalk",
+  "block.cellbreak.graffiti": "Graffiti",
+  "tooltip.cellbreak.contraband": "Contraband",
+  "tooltip.cellbreak.work_tool": "For the work field only",
+  "tooltip.cellbreak.broken": "Repair in the inventory: remains + %s"
 }

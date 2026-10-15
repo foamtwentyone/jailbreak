@@ -23,6 +23,9 @@ import net.minecraft.entity.ai.goal.SwimGoal;
 import net.minecraft.entity.ai.pathing.Path;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.data.TrackedData;
+import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -46,6 +49,9 @@ import net.minecraft.world.World;
  * A guard can also be a sniper: standing on a tower, watching the yard.
  */
 public class GuardEntity extends PathAwareEntity {
+	public static final int VARIANTS = 6;
+	private static final TrackedData<Integer> VARIANT = DataTracker.registerData(GuardEntity.class,
+			TrackedDataHandlerRegistry.INTEGER);
 	private static final int HITS_TO_ARREST = 3;
 	/** A prisoner seen this recently but out of walking reach (ladders) gets a guard via a service passage. */
 	private static final int SHORTCUT_TICKS = 80;
@@ -53,6 +59,9 @@ public class GuardEntity extends PathAwareEntity {
 	private final Map<UUID, Integer> hits = new HashMap<>();
 	private int unreachableTicks;
 	private boolean sniper;
+	/** A job given by the game (count the line-up, stand at an exit): walk the route, then stay. */
+	private List<BlockPos> duty;
+	private BlockPos dutyLook;
 
 	public GuardEntity(EntityType<? extends PathAwareEntity> type, World world) {
 		super(type, world);
@@ -69,18 +78,40 @@ public class GuardEntity extends PathAwareEntity {
 	}
 
 	@Override
+	protected void initDataTracker(DataTracker.Builder builder) {
+		super.initDataTracker(builder);
+		builder.add(VARIANT, 0);
+	}
+
+	public int getVariant() {
+		return dataTracker.get(VARIANT);
+	}
+
+	/** Gives the guard a route to walk (slowly, looking around) and to stay at its end; null frees them. */
+	public void setDuty(List<BlockPos> route, BlockPos lookAt) {
+		duty = route;
+		dutyLook = lookAt;
+	}
+
+	public boolean hasDuty() {
+		return duty != null;
+	}
+
+	@Override
 	protected void initGoals() {
 		goalSelector.add(0, new SwimGoal(this));
 		goalSelector.add(1, new ChaseGoal(this));
-		goalSelector.add(2, new PatrolGoal(this));
-		goalSelector.add(3, new LookAtEntityGoal(this, PlayerEntity.class, 12.0F));
-		goalSelector.add(4, new LookAroundGoal(this));
+		goalSelector.add(2, new DutyGoal(this));
+		goalSelector.add(3, new PatrolGoal(this));
+		goalSelector.add(4, new LookAtEntityGoal(this, PlayerEntity.class, 12.0F));
+		goalSelector.add(5, new LookAroundGoal(this));
 		targetSelector.add(1, new RadioTargetGoal(this));
 	}
 
 	@Override
 	public EntityData initialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason reason, EntityData data) {
 		EntityData result = super.initialize(world, difficulty, reason, data);
+		dataTracker.set(VARIANT, random.nextInt(VARIANTS));
 		equipStack(EquipmentSlot.MAINHAND, new ItemStack(CbContent.BATON));
 		setEquipmentDropChance(EquipmentSlot.MAINHAND, 0.0F);
 		return result;
@@ -104,12 +135,14 @@ public class GuardEntity extends PathAwareEntity {
 	public void writeCustomDataToNbt(NbtCompound nbt) {
 		super.writeCustomDataToNbt(nbt);
 		nbt.putBoolean("Sniper", sniper);
+		nbt.putInt("Variant", getVariant());
 	}
 
 	@Override
 	public void readCustomDataFromNbt(NbtCompound nbt) {
 		super.readCustomDataFromNbt(nbt);
 		sniper = nbt.getBoolean("Sniper");
+		dataTracker.set(VARIANT, nbt.getInt("Variant"));
 	}
 
 	private CellbreakGame game() {
@@ -268,7 +301,7 @@ public class GuardEntity extends PathAwareEntity {
 		@Override
 		public boolean canStart() {
 			CellbreakGame game = guard.game();
-			if (game == null || guard.getTarget() != null || guard.getRandom().nextInt(40) != 0) {
+			if (game == null || guard.getTarget() != null || guard.duty != null || guard.getRandom().nextInt(40) != 0) {
 				return false;
 			}
 			PrisonLayout layout = game.layout();
@@ -293,7 +326,80 @@ public class GuardEntity extends PathAwareEntity {
 
 		@Override
 		public boolean shouldContinue() {
-			return guard.getTarget() == null && !guard.getNavigation().isIdle();
+			return guard.getTarget() == null && guard.duty == null && !guard.getNavigation().isIdle();
+		}
+	}
+
+	/** Walks the duty route point by point, then stays at the last point and watches. */
+	static class DutyGoal extends Goal {
+		private final GuardEntity guard;
+		private List<BlockPos> route;
+		private int index;
+		private int stuck;
+
+		DutyGoal(GuardEntity guard) {
+			this.guard = guard;
+			setControls(EnumSet.of(Control.MOVE, Control.LOOK));
+		}
+
+		@Override
+		public boolean canStart() {
+			return guard.duty != null && guard.getTarget() == null;
+		}
+
+		@Override
+		public void start() {
+			route = guard.duty;
+			index = 0;
+			stuck = 0;
+		}
+
+		@Override
+		public void stop() {
+			guard.getNavigation().stop();
+		}
+
+		@Override
+		public void tick() {
+			if (route != guard.duty) {
+				start();
+			}
+			if (route == null || route.isEmpty()) {
+				return;
+			}
+			BlockPos goal = route.get(Math.min(index, route.size() - 1));
+			boolean last = index >= route.size() - 1;
+			double d = guard.squaredDistanceTo(goal.getX() + 0.5, goal.getY(), goal.getZ() + 0.5);
+			if (d < (last ? 1.0 : 2.0)) {
+				if (!last) {
+					index++;
+					stuck = 0;
+				} else {
+					guard.getNavigation().stop();
+					if (guard.dutyLook != null) {
+						guard.getLookControl().lookAt(guard.dutyLook.getX() + 0.5, guard.dutyLook.getY() + 1.5,
+								guard.dutyLook.getZ() + 0.5);
+					}
+				}
+				return;
+			}
+			// Counting walks slowly, getting to a post is brisk.
+			double speed = route.size() > 1 && index > 0 ? 0.55 : 1.0;
+			if (guard.getNavigation().isIdle() || guard.age % 20 == 0) {
+				guard.getNavigation().startMovingTo(goal.getX() + 0.5, goal.getY(), goal.getZ() + 0.5, speed);
+			}
+			if (route.size() > 1 && index > 0 && guard.dutyLook != null) {
+				// Looks over the line while walking along it.
+				guard.getLookControl().lookAt(guard.getX() + (guard.dutyLook.getX() + 0.5 - guard.getX()) * 0.1,
+						guard.getEyeY() - 0.3, guard.dutyLook.getZ() + 0.5);
+			}
+			if (++stuck > 10 * 20) {
+				// Could not get there in time: comes in through a service door.
+				stuck = 0;
+				guard.getWorld().playSound(null, goal, SoundEvents.BLOCK_IRON_DOOR_OPEN, SoundCategory.HOSTILE, 0.6F, 1.0F);
+				guard.refreshPositionAndAngles(goal.getX() + 0.5, goal.getY(), goal.getZ() + 0.5, guard.getYaw(), 0);
+				guard.getNavigation().stop();
+			}
 		}
 	}
 }

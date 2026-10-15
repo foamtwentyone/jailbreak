@@ -1,7 +1,9 @@
 package cellbreak.game;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.nbt.NbtCompound;
@@ -19,6 +21,8 @@ public class PrisonState extends PersistentState {
 
 	private PrisonLayout layout;
 	private final Map<UUID, GameMode> roundModes = new HashMap<>();
+	/** Searchlight lights and graffiti of the running round: removed if the server stopped mid-round. */
+	private final Set<Long> leftovers = new HashSet<>();
 
 	public static PrisonState get(MinecraftServer server) {
 		return server.getOverworld().getPersistentStateManager().getOrCreate(TYPE, "cellbreak");
@@ -38,6 +42,10 @@ public class PrisonState extends PersistentState {
 		return roundModes;
 	}
 
+	public Set<Long> leftovers() {
+		return leftovers;
+	}
+
 	private static PrisonState fromNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
 		PrisonState state = new PrisonState();
 		if (nbt.contains("layout")) {
@@ -46,6 +54,9 @@ public class PrisonState extends PersistentState {
 		NbtCompound modes = nbt.getCompound("roundModes");
 		for (String key : modes.getKeys()) {
 			state.roundModes.put(UUID.fromString(key), GameMode.byName(modes.getString(key), GameMode.SURVIVAL));
+		}
+		for (long p : nbt.getLongArray("leftovers")) {
+			state.leftovers.add(p);
 		}
 		return state;
 	}
@@ -58,6 +69,7 @@ public class PrisonState extends PersistentState {
 		NbtCompound modes = new NbtCompound();
 		roundModes.forEach((id, mode) -> modes.putString(id.toString(), mode.getName()));
 		nbt.put("roundModes", modes);
+		nbt.putLongArray("leftovers", leftovers.stream().mapToLong(Long::longValue).toArray());
 		return nbt;
 	}
 }

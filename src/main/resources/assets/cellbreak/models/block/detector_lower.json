@@ -1,0 +1,108 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "side": "cellbreak:block/detector_side",
+    "particle": "cellbreak:block/detector_side",
+    "panel": "cellbreak:block/detector_panel"
+  },
+  "elements": [
+    {
+      "from": [
+        0,
+        0,
+        4
+      ],
+      "to": [
+        2,
+        16,
+        12
+      ],
+      "faces": {
+        "north": {
+          "texture": "#side"
+        },
+        "south": {
+          "texture": "#side"
+        },
+        "east": {
+          "texture": "#side"
+        },
+        "west": {
+          "texture": "#side"
+        },
+        "up": {
+          "texture": "#side"
+        },
+        "down": {
+          "texture": "#side"
+        }
+      }
+    },
+    {
+      "from": [
+        14,
+        0,
+        4
+      ],
+      "to": [
+        16,
+        16,
+        12
+      ],
+      "faces": {
+        "north": {
+          "texture": "#side"
+        },
+        "south": {
+          "texture": "#side"
+        },
+        "east": {
+          "texture": "#side"
+        },
+        "west": {
+          "texture": "#side"
+        },
+        "up": {
+          "texture": "#side"
+        },
+        "down": {
+          "texture": "#side"
+        }
+      }
+    },
+    {
+      "from": [
+        2,
+        6,
+        4.5
+      ],
+      "to": [
+        2.5,
+        14,
+        11.5
+      ],
+      "faces": {
+        "east": {
+          "texture": "#panel"
+        }
+      }
+    },
+    {
+      "from": [
+        13.5,
+        6,
+        4.5
+      ],
+      "to": [
+        14,
+        14,
+        11.5
+      ],
+      "faces": {
+        "west": {
+          "texture": "#panel"
+        }
+      }
+    }
+  ]
+}

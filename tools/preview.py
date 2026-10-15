@@ -132,21 +132,22 @@ def main():
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
     small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
 
-    sheet = Image.new("RGBA", (1280, 900), (38, 42, 48, 255))
+    sheet = Image.new("RGBA", (1280, 1040), (38, 42, 48, 255))
     dr = ImageDraw.Draw(sheet)
 
-    x = 30
-    for name, label in (("guard", "Охранник"), ("prisoner", "Заключённый")):
+    dr.text((30, 20), "Охрана и заключённые (16 разных NPC-заключённых, 6 охранников)", font=font, fill=(240, 240, 240))
+    people = ["guard_0", "guard_3", "prisoner_0", "prisoner_3", "prisoner_6", "prisoner_9", "prisoner_trader_5",
+              "prisoner_12", "prisoner_14"]
+    x = 20
+    for name in people:
         skin = Image.open(os.path.join(tdir, "entity", name + ".png")).convert("RGBA")
         front = render_biped(skin, (-0.55, -0.35, 1))
-        back = render_biped(skin, (0.55, -0.35, -1))
-        dr.text((x, 20), label, font=font, fill=(240, 240, 240))
+        front = front.resize((int(front.width * 0.62), int(front.height * 0.62)), Image.LANCZOS)
         sheet.alpha_composite(front, (x, 60))
-        sheet.alpha_composite(back, (x + front.width + 20, 60))
-        x += front.width + back.width + 70
+        x += front.width + 6
 
-    dr.text((30, 420), "Блоки", font=font, fill=(240, 240, 240))
-    blocks = [("prison_wall", "стена"), ("cracked_prison_wall", "стена с трещиной"),
+    dr.text((30, 330), "Блоки", font=font, fill=(240, 240, 240))
+    blocks = [("prison_wall", "стена"), ("cracked_prison_wall", "трещина"),
               ("reinforced_wall", "усиленная стена"), ("cell_bars", "решётка"),
               ("vent_cover", "вентиляция"), ("prison_floor", "пол")]
     bx = 30
@@ -154,25 +155,35 @@ def main():
         tex = Image.open(os.path.join(tdir, "block", name + ".png"))
         if name == "cell_bars":
             cube = tex.resize((96, 96), Image.NEAREST)
-            sheet.alpha_composite(cube, (bx + 36, 480))
+            sheet.alpha_composite(cube, (bx + 36, 390))
         else:
             cube = render_cube(tex, 96)
-            sheet.alpha_composite(cube, (bx, 455))
-        dr.text((bx, 660), label, font=small, fill=(210, 210, 210))
+            sheet.alpha_composite(cube, (bx, 365))
+        dr.text((bx, 570), label, font=small, fill=(210, 210, 210))
         bx += 205
 
-    dr.text((30, 705), "Предметы", font=font, fill=(240, 240, 240))
+    dr.text((30, 610), "Граффити и сканер", font=font, fill=(240, 240, 240))
+    gx = 30
+    for name in ["graffiti_%d" % i for i in range(6)] + ["detector_panel", "detector_lamp_green", "detector_lamp_red"]:
+        tex = Image.open(os.path.join(tdir, "block", name + ".png")).convert("RGBA")
+        bg = Image.new("RGBA", (96, 96), (110, 110, 112, 255))
+        bg.alpha_composite(tex.resize((96, 96), Image.NEAREST))
+        sheet.alpha_composite(bg, (gx, 650))
+        gx += 136
+
+    dr.text((30, 770), "Предметы", font=font, fill=(240, 240, 240))
     items = [("shiv", "заточка"), ("file", "напильник"), ("makeshift_pickaxe", "кирка"),
-             ("makeshift_shovel", "лопата"), ("cell_key", "ключ-слепок"),
-             ("handcuffs", "наручники"), ("baton", "дубинка")]
+             ("makeshift_shovel", "лопата"), ("broken_pickaxe", "обломки"), ("cell_key", "ключ"),
+             ("work_pickaxe", "раб. кирка"), ("work_axe", "раб. топор"), ("chalk", "мел"),
+             ("handcuffs", "наручники"), ("baton", "дубинка"), ("money", "деньги")]
     ix = 30
     for name, label in items:
         tex = Image.open(os.path.join(tdir, "item", name + ".png")).convert("RGBA")
-        bg = Image.new("RGBA", (112, 112), (58, 62, 70, 255))
-        bg.alpha_composite(tex.resize((96, 96), Image.NEAREST), (8, 8))
-        sheet.alpha_composite(bg, (ix, 745))
-        dr.text((ix, 862), label, font=small, fill=(210, 210, 210))
-        ix += 175
+        bg = Image.new("RGBA", (88, 88), (58, 62, 70, 255))
+        bg.alpha_composite(tex.resize((80, 80), Image.NEAREST), (4, 4))
+        sheet.alpha_composite(bg, (ix, 810))
+        dr.text((ix, 905), label, font=small, fill=(210, 210, 210))
+        ix += 102
 
     sheet.convert("RGB").save(out_path)
 

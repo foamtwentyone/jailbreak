@@ -6,7 +6,9 @@ import java.util.Set;
 import java.util.function.Function;
 
 import cellbreak.block.CellBarsBlock;
+import cellbreak.block.DetectorBlock;
 import cellbreak.block.FakeBlock;
+import cellbreak.block.GraffitiBlock;
 import cellbreak.block.ToolLockedBlock;
 import cellbreak.entity.GuardEntity;
 import cellbreak.entity.PrisonerNpcEntity;
@@ -69,10 +71,14 @@ public final class CbContent {
 	/** Prisoners hand in their work here (planks, iron ingots) for money. */
 	public static final Block JOB_DESK = block("job_desk", Block::new,
 			AbstractBlock.Settings.create().mapColor(MapColor.OAK_TAN).strength(2.5F).sounds(BlockSoundGroup.WOOD));
-	/** Walk-through arch that beeps when a prisoner carries contraband. */
-	public static final Block DETECTOR = block("detector", Block::new,
+	/** Walk-through scanner arch (two blocks high) that checks prisoners for contraband. */
+	public static final Block DETECTOR = block("detector", DetectorBlock::new,
 			AbstractBlock.Settings.create().mapColor(MapColor.IRON_GRAY).strength(3.0F).sounds(BlockSoundGroup.METAL)
-					.noCollision().nonOpaque());
+					.nonOpaque().luminance(s -> s.get(DetectorBlock.LAMP) > 0 ? 7 : 0));
+	/** A chalk drawing on a wall (no item: drawn with chalk). */
+	public static final Block GRAFFITI = Registry.register(Registries.BLOCK, id("graffiti"),
+			new GraffitiBlock(AbstractBlock.Settings.create().replaceable().noCollision().nonOpaque().strength(0.5F)
+					.sounds(BlockSoundGroup.SAND).dropsNothing()));
 
 	public static final Block FAKE_PRISON_WALL = fake("fake_prison_wall", false);
 	public static final Block FAKE_STONE_BRICKS = fake("fake_stone_bricks", false);
@@ -91,15 +97,30 @@ public final class CbContent {
 	// Mining speeds = hardness * 30 / ticks: stone bricks 8 s per stage, smooth stone floor 6 s,
 	// ground 2 s, iron bars 10 s.
 	public static final Item MAKESHIFT_PICKAXE = item("makeshift_pickaxe",
-			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(6), List.of(PRISON_WALL, CRACKED_PRISON_WALL),
-					ToolComponent.Rule.ofAlwaysDropping(VANILLA_WALLS, 0.28F))));
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(5), List.of(PRISON_WALL, CRACKED_PRISON_WALL),
+					ToolComponent.Rule.ofAlwaysDropping(VANILLA_WALLS, 0.28F)), () -> CbContent.BROKEN_PICKAXE));
 	public static final Item MAKESHIFT_SHOVEL = item("makeshift_shovel",
-			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(24), List.of(PRISON_FLOOR),
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(12), List.of(PRISON_FLOOR),
 					ToolComponent.Rule.ofAlwaysDropping(VANILLA_FLOORS, 0.5F),
-					ToolComponent.Rule.ofAlwaysDropping(VANILLA_GROUND, 0.375F))));
+					ToolComponent.Rule.ofAlwaysDropping(VANILLA_GROUND, 0.375F)), () -> CbContent.BROKEN_SHOVEL));
 	public static final Item FILE = item("file",
-			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(4), List.of(CELL_BARS, VENT_COVER),
-					ToolComponent.Rule.ofAlwaysDropping(VANILLA_BARS, 0.75F))));
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(3), List.of(CELL_BARS, VENT_COVER),
+					ToolComponent.Rule.ofAlwaysDropping(VANILLA_BARS, 0.75F)), () -> CbContent.BROKEN_FILE));
+	/** What is left of a snapped tool: fixed with one more part (see the repair recipes). */
+	public static final Item BROKEN_PICKAXE = item("broken_pickaxe", new Item(new Item.Settings().maxCount(1)));
+	public static final Item BROKEN_SHOVEL = item("broken_shovel", new Item(new Item.Settings().maxCount(1)));
+	public static final Item BROKEN_FILE = item("broken_file", new Item(new Item.Settings().maxCount(1)));
+
+	/** Ore and logs of the work field. */
+	public static final List<Block> WORK_ORES = List.of(Blocks.IRON_ORE);
+	public static final List<Block> WORK_LOGS = List.of(Blocks.OAK_LOG, Blocks.SPRUCE_LOG, Blocks.BIRCH_LOG);
+	// Ore 3 s (hardness 3), logs 2 s (hardness 2).
+	public static final Item WORK_PICKAXE = item("work_pickaxe", new Item(tool(new Item.Settings().maxDamage(80),
+			List.of(), 1, ToolComponent.Rule.ofAlwaysDropping(WORK_ORES, 1.5F))));
+	public static final Item WORK_AXE = item("work_axe", new Item(tool(new Item.Settings().maxDamage(80),
+			List.of(), 1, ToolComponent.Rule.ofAlwaysDropping(WORK_LOGS, 1.5F))));
+	/** Draws graffiti on walls. */
+	public static final Item CHALK = item("chalk", new Item(new Item.Settings().maxDamage(6)));
 	public static final Item SHIV = item("shiv",
 			new SwordItem(ToolMaterials.WOOD, new Item.Settings().maxDamage(30)
 					.attributeModifiers(SwordItem.createAttributeModifiers(ToolMaterials.WOOD, 2, -2.0F))));
@@ -116,7 +137,9 @@ public final class CbContent {
 
 	/** Items a prisoner is not allowed to carry. */
 	public static final Set<Item> CONTRABAND = Set.of(MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, SHIV, CELL_KEY,
-			BATON, HANDCUFFS, FAKE_WALL, FAKE_VENT);
+			BATON, HANDCUFFS, FAKE_WALL, FAKE_VENT, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, WORK_PICKAXE, WORK_AXE);
+	/** Work tools may be carried on the work field during work; anywhere else they are contraband too. */
+	public static final Set<Item> WORK_TOOLS = Set.of(WORK_PICKAXE, WORK_AXE);
 
 	public static final EntityType<GuardEntity> GUARD = Registry.register(Registries.ENTITY_TYPE, id("guard"),
 			EntityType.Builder.create(GuardEntity::new, SpawnGroup.MISC).dimensions(0.6F, 1.8F).maxTrackingRange(10)
@@ -138,7 +161,8 @@ public final class CbContent {
 
 		List<Item> tabItems = List.of(PRISON_WALL.asItem(), CRACKED_PRISON_WALL.asItem(), REINFORCED_WALL.asItem(),
 				CELL_BARS.asItem(), VENT_COVER.asItem(), PRISON_FLOOR.asItem(), JOB_DESK.asItem(), DETECTOR.asItem(),
-				MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, SHIV, CELL_KEY, FAKE_WALL, FAKE_VENT, MONEY, HANDCUFFS, BATON,
+				MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, SHIV, CELL_KEY,
+				FAKE_WALL, FAKE_VENT, CHALK, WORK_PICKAXE, WORK_AXE, MONEY, HANDCUFFS, BATON,
 				GUARD_SPAWN_EGG, PRISONER_SPAWN_EGG);
 		Registry.register(Registries.ITEM_GROUP, id("main"), FabricItemGroup.builder()
 				.icon(() -> new ItemStack(MAKESHIFT_PICKAXE))
@@ -161,6 +185,11 @@ public final class CbContent {
 	 * blocks named in the rules, also in adventure mode.
 	 */
 	private static Item.Settings tool(Item.Settings settings, List<Block> ownBlocks, ToolComponent.Rule... vanilla) {
+		return tool(settings, ownBlocks, 0, vanilla);
+	}
+
+	private static Item.Settings tool(Item.Settings settings, List<Block> ownBlocks, int damagePerBlock,
+			ToolComponent.Rule... vanilla) {
 		List<Block> all = new ArrayList<>(ownBlocks);
 		for (ToolComponent.Rule rule : vanilla) {
 			rule.blocks().forEach(entry -> all.add(entry.value()));
@@ -168,7 +197,7 @@ public final class CbContent {
 		BlockPredicate predicate = BlockPredicate.Builder.create().blocks(all).build();
 		return settings.maxCount(1)
 				.component(DataComponentTypes.CAN_BREAK, new BlockPredicatesChecker(List.of(predicate), true))
-				.component(DataComponentTypes.TOOL, new ToolComponent(List.of(vanilla), 1.0F, 0));
+				.component(DataComponentTypes.TOOL, new ToolComponent(List.of(vanilla), 1.0F, damagePerBlock));
 	}
 
 	private static Block block(String name, Function<AbstractBlock.Settings, Block> factory,

@@ -9,7 +9,13 @@ import net.minecraft.client.render.entity.model.PlayerEntityModel;
 import net.minecraft.util.Identifier;
 
 public class GuardRenderer extends BipedEntityRenderer<GuardEntity, PlayerEntityModel<GuardEntity>> {
-	private static final Identifier TEXTURE = CbContent.id("textures/entity/guard.png");
+	private static final Identifier[] TEXTURES = new Identifier[GuardEntity.VARIANTS];
+
+	static {
+		for (int i = 0; i < TEXTURES.length; i++) {
+			TEXTURES[i] = CbContent.id("textures/entity/guard_" + i + ".png");
+		}
+	}
 
 	public GuardRenderer(EntityRendererFactory.Context ctx) {
 		super(ctx, new PlayerEntityModel<>(ctx.getPart(EntityModelLayers.PLAYER), false), 0.5F);
@@ -17,6 +23,6 @@ public class GuardRenderer extends BipedEntityRenderer<GuardEntity, PlayerEntity
 
 	@Override
 	public Identifier getTexture(GuardEntity entity) {
-		return TEXTURE;
+		return TEXTURES[Math.floorMod(entity.getVariant(), TEXTURES.length)];
 	}
 }

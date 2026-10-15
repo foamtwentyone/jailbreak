@@ -7,8 +7,14 @@ import java.util.List;
 
 import cellbreak.CbContent;
 import cellbreak.game.CellbreakGame;
+import net.minecraft.entity.EntityData;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.ai.goal.Goal;
+import net.minecraft.entity.ai.goal.MeleeAttackGoal;
+import net.minecraft.entity.ai.goal.RevengeGoal;
 import net.minecraft.entity.ai.goal.LookAroundGoal;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.ai.goal.SwimGoal;
@@ -26,7 +32,10 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.LocalDifficulty;
+import net.minecraft.world.ServerWorldAccess;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Formatting;
@@ -44,6 +53,28 @@ import net.minecraft.world.World;
 public class PrisonerNpcEntity extends MerchantEntity {
 	private static final TrackedData<Boolean> TRADER = DataTracker.registerData(PrisonerNpcEntity.class,
 			TrackedDataHandlerRegistry.BOOLEAN);
+	private static final TrackedData<Integer> VARIANT = DataTracker.registerData(PrisonerNpcEntity.class,
+			TrackedDataHandlerRegistry.INTEGER);
+	/** Number of different looks (skins). */
+	public static final int VARIANTS = 16;
+
+	/** How an inmate treats a player walking past. */
+	public enum Personality {
+		NEUTRAL, FRIENDLY, RUDE, JOKER
+	}
+
+	private static final String[] FRIENDLY = { "Хорошо выглядишь сегодня, %s!", "Держись, %s, прорвёмся.",
+			"О, %s! Рад тебя видеть.", "Говорят, ты тут самый толковый. Уважаю.", "Классная причёска, %s.",
+			"С тобой и срок быстрее идёт.", "Если что надо — обращайся, %s.", "Ты сегодня прям сияешь, %s." };
+	private static final String[] RUDE = { "Чего вылупился, %s?", "Смотри, куда прёшь.",
+			"%s, ты как местная баланда: никому не нравишься.", "Твоя мамка звонила: просила подержать тебя тут подольше.",
+			"Ещё раз толкнёшь — пожалеешь.", "Иди-иди, черепаха.", "От тебя даже охрана нос воротит, %s.",
+			"Твоя мама так медленно ходит, что её на перекличке до сих пор считают." };
+	private static final String[] JOKES = { "Знаешь, почему охранник с дубинкой? Шутить не умеет.",
+			"%s, у тебя шнурок развязался. Шучу, у нас шнурков нет.",
+			"Твоя мама такая заботливая, что прислала тебе напильник в пироге. Шучу... или нет?",
+			"%s, тебя на прогулку выпускают или выгуливают?", "Твоя мама звонила: спрашивала, почему ты до сих пор не сбежал. Стыдно ей.",
+			"Ты в зеркало смотрелся, %s? Вот и охрана испугалась.", "Сидел тут один умник с ложкой. Говорят, до сих пор копает." };
 
 	public static final String[] NICKNAMES = { "Косой", "Шрам", "Профессор", "Бублик", "Гвоздь", "Тихий", "Лысый",
 			"Химик", "Боцман", "Сиплый", "Кабан", "Штопор", "Матрос", "Сухарь", "Жмых", "Кот", "Лом", "Пончик",
@@ -63,18 +94,42 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	public int cell = -1;
 	/** While above 0 the inmate sits in solitary (found with contraband at a search). */
 	public long solitaryUntil;
+	/** While above 0 the inmate lies in the infirmary (lost a fight). */
+	public long infirmaryUntil;
+	/** Where to stand in the line-up at roll call (set by the game), or null. */
+	public BlockPos lineupSlot;
+	public BlockPos lineupLook;
+	/** Decided at each meal: some inmates skip it. */
+	public boolean skipsMeal;
+	public Personality personality = Personality.NEUTRAL;
+	private int talkCooldown;
+	private int angryTicks;
 
 	public PrisonerNpcEntity(EntityType<? extends MerchantEntity> type, World world) {
 		super(type, world);
 		setPersistent();
-		setInvulnerable(true);
 		setCanPickUpLoot(false);
+	}
+
+	@Override
+	public EntityData initialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason reason, EntityData data) {
+		EntityData result = super.initialize(world, difficulty, reason, data);
+		dataTracker.set(VARIANT, random.nextInt(VARIANTS));
+		Personality[] all = Personality.values();
+		personality = all[random.nextInt(all.length)];
+		talkCooldown = random.nextInt(200);
+		return result;
+	}
+
+	public int getVariant() {
+		return dataTracker.get(VARIANT);
 	}
 
 	public static DefaultAttributeContainer.Builder createPrisonerAttributes() {
 		return MobEntity.createMobAttributes()
 				.add(EntityAttributes.GENERIC_MAX_HEALTH, 20.0)
-				.add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.27)
+				.add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.3)
+				.add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 2.0)
 				.add(EntityAttributes.GENERIC_FOLLOW_RANGE, 64.0);
 	}
 
@@ -82,6 +137,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	protected void initDataTracker(DataTracker.Builder builder) {
 		super.initDataTracker(builder);
 		builder.add(TRADER, false);
+		builder.add(VARIANT, 0);
 	}
 
 	public boolean isTrader() {
@@ -95,9 +151,68 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	@Override
 	protected void initGoals() {
 		goalSelector.add(0, new SwimGoal(this));
-		goalSelector.add(1, new RoutineGoal(this));
-		goalSelector.add(2, new LookAtEntityGoal(this, PlayerEntity.class, 8.0F));
-		goalSelector.add(3, new LookAroundGoal(this));
+		goalSelector.add(1, new MeleeAttackGoal(this, 1.2, true));
+		goalSelector.add(2, new RoutineGoal(this));
+		goalSelector.add(3, new LookAtEntityGoal(this, PlayerEntity.class, 8.0F));
+		goalSelector.add(4, new LookAroundGoal(this));
+		targetSelector.add(1, new RevengeGoal(this));
+	}
+
+	@Override
+	protected void mobTick() {
+		super.mobTick();
+		LivingEntity target = getTarget();
+		if (target != null) {
+			// A fight does not last forever; and one who left (solitary, infirmary) is forgotten.
+			if (++angryTicks > 20 * 20 || !target.isAlive() || squaredDistanceTo(target) > 24 * 24
+					|| !(target instanceof PlayerEntity tp) || infirmaryUntil != 0
+					|| game() != null && game().isOutOfPlay(tp)) {
+				setTarget(null);
+				setAttacker(null);
+				angryTicks = 0;
+			}
+		} else {
+			angryTicks = 0;
+		}
+		if (--talkCooldown <= 0) {
+			talkCooldown = 20;
+			talkToPasserby();
+		}
+	}
+
+	/** Says something to a player prisoner walking right past: a compliment, a jibe or a joke. */
+	private void talkToPasserby() {
+		CellbreakGame game = game();
+		if (game == null || !game.isRunning() || personality == Personality.NEUTRAL || getTarget() != null || hasCustomer()) {
+			return;
+		}
+		PlayerEntity near = getWorld().getClosestPlayer(this, 3.0);
+		if (!(near instanceof ServerPlayerEntity p) || !game.isPrisoner(p) || !canSee(p) || !game.mayTalkTo(p)) {
+			return;
+		}
+		String[] lines = switch (personality) {
+			case FRIENDLY -> FRIENDLY;
+			case RUDE -> RUDE;
+			default -> JOKES;
+		};
+		String line = String.format(lines[random.nextInt(lines.length)], p.getName().getString());
+		Formatting color = personality == Personality.FRIENDLY ? Formatting.GREEN
+				: personality == Personality.RUDE ? Formatting.RED : Formatting.YELLOW;
+		Text msg = Text.literal(getName().getString() + ": ").formatted(Formatting.GOLD)
+				.append(Text.literal(line).formatted(color));
+		for (PlayerEntity other : getWorld().getPlayers()) {
+			if (other.squaredDistanceTo(this) < 12 * 12) {
+				other.sendMessage(msg, false);
+			}
+		}
+		getLookControl().lookAt(p);
+		talkCooldown = 20 * (40 + random.nextInt(40));
+	}
+
+	@Override
+	public boolean tryAttack(net.minecraft.entity.Entity target) {
+		swingHand(Hand.MAIN_HAND);
+		return super.tryAttack(target);
 	}
 
 	@Override
@@ -159,6 +274,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		super.writeCustomDataToNbt(nbt);
 		nbt.putInt("Cell", cell);
 		nbt.putBoolean("Trader", isTrader());
+		nbt.putInt("Variant", getVariant());
+		nbt.putString("Personality", personality.name());
 	}
 
 	@Override
@@ -166,6 +283,12 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		super.readCustomDataFromNbt(nbt);
 		cell = nbt.getInt("Cell");
 		setTrader(nbt.getBoolean("Trader"));
+		dataTracker.set(VARIANT, nbt.getInt("Variant"));
+		try {
+			personality = Personality.valueOf(nbt.getString("Personality"));
+		} catch (IllegalArgumentException e) {
+			personality = Personality.NEUTRAL;
+		}
 	}
 
 	private CellbreakGame game() {
@@ -186,7 +309,7 @@ public class PrisonerNpcEntity extends MerchantEntity {
 
 		@Override
 		public boolean canStart() {
-			return npc.game() != null && npc.game().isRunning();
+			return npc.game() != null && npc.game().isRunning() && npc.getTarget() == null;
 		}
 
 		@Override
@@ -196,8 +319,26 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				npc.getNavigation().stop();
 				return;
 			}
+			boolean working = game.isWorkingAt(npc.getBlockPos());
+			ItemStack held = npc.getMainHandStack();
+			if (working != held.isOf(CbContent.WORK_PICKAXE)) {
+				npc.equipStack(EquipmentSlot.MAINHAND, working ? new ItemStack(CbContent.WORK_PICKAXE) : ItemStack.EMPTY);
+			}
 			if (waitTicks > 0) {
 				waitTicks--;
+				if (npc.lineupSlot != null && npc.lineupLook != null && npc.getBlockPos().getSquaredDistance(npc.lineupSlot) <= 2) {
+					// Step onto the exact spot in the row and face the front.
+					double x = npc.lineupSlot.getX() + 0.5;
+					double z = npc.lineupSlot.getZ() + 0.5;
+					if (npc.squaredDistanceTo(x, npc.getY(), z) > 0.04) {
+						npc.getMoveControl().moveTo(x, npc.lineupSlot.getY(), z, 0.6);
+					}
+					npc.getLookControl().lookAt(npc.lineupLook.getX() + 0.5, npc.getEyeY(), npc.lineupLook.getZ() + 0.5);
+					float yaw = (float) (Math.toDegrees(Math.atan2(npc.lineupLook.getZ() + 0.5 - z, npc.lineupLook.getX() + 0.5 - x)) - 90);
+					npc.setBodyYaw(yaw);
+				} else if (working && npc.getRandom().nextInt(15) == 0) {
+					npc.swingHand(Hand.MAIN_HAND);
+				}
 				return;
 			}
 			BlockPos wanted = game.npcDestination(npc, destination);
@@ -207,22 +348,25 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			if (!wanted.equals(destination)) {
 				destination = wanted;
 				travelTicks = 0;
-				Path path = npc.getNavigation().findPathTo(destination, 1);
-				npc.getNavigation().startMovingAlong(path, 0.7);
+				Path path = npc.getNavigation().findPathTo(destination, 0);
+				npc.getNavigation().startMovingAlong(path, 1.0);
 			}
 			travelTicks++;
-			if (npc.getBlockPos().getSquaredDistance(destination) <= 4) {
+			if (npc.getBlockPos().getSquaredDistance(destination) <= 2) {
 				npc.getNavigation().stop();
-				waitTicks = 60 + npc.getRandom().nextInt(140);
-				destination = null;
-			} else if (travelTicks > 30 * 20) {
+				// In the line-up they stand still and wait; elsewhere they idle a bit before moving on.
+				waitTicks = npc.lineupSlot != null ? 40 : 40 + npc.getRandom().nextInt(100);
+				if (npc.lineupSlot == null) {
+					destination = null;
+				}
+			} else if (travelTicks > 15 * 20) {
 				// Out of walking reach: the inmate "took another corridor".
 				npc.refreshPositionAndAngles(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5,
 						npc.getYaw(), npc.getPitch());
 				npc.getNavigation().stop();
-				destination = null;
-			} else if (travelTicks % 40 == 0 && npc.getNavigation().isIdle()) {
-				npc.getNavigation().startMovingTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5, 0.7);
+				travelTicks = 0;
+			} else if (travelTicks % 30 == 0 && npc.getNavigation().isIdle()) {
+				npc.getNavigation().startMovingTo(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5, 1.0);
 			}
 		}
 	}

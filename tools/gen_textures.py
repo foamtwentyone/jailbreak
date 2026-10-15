@@ -513,6 +513,333 @@ def main():
         tex16(fn).save(os.path.join(dirs["block"], name + ".png"))
     for name, (rows, pal) in MORE_ITEMS.items():
         from_pixels(rows, pal).save(os.path.join(dirs["item"], name + ".png"))
+    main_v3(root)
+
+
+# ---------------------------------------------------------------- 0.3: variety
+
+SKIN_TONES = [(241, 204, 172), (222, 172, 132), (190, 136, 96), (146, 98, 64), (102, 68, 46), (76, 50, 36)]
+HAIR_COLORS = [(28, 24, 22), (70, 46, 30), (120, 84, 50), (200, 168, 96), (170, 80, 40), (150, 150, 150)]
+EYE_COLORS = [(70, 46, 30), (50, 90, 160), (60, 120, 70), (110, 110, 120), (40, 30, 24)]
+INK = (40, 60, 110)
+
+
+def person_head(face, x, y, look):
+    """A head from a 'look' dict: skin, hair colour and style, eyes, beard, scar, teardrop tattoo."""
+    skin = look["skin"]
+    dark = shade(skin, 0.86)[:3]
+    hair = look["hair"]
+    style = look["style"]
+    beard = look["beard"]
+    if style == "beanie":
+        cap = look["cap"]
+        if face == "top" or (face != "bottom" and y < 2):
+            return shade(cap, 0.85)[:3] if (x + (y if face != "top" else 0)) % 2 else cap
+    if face == "top":
+        if style == "bald":
+            return shade(skin, 1.04)[:3]
+        if style == "mohawk":
+            return hair if 3 <= x <= 4 else dark
+        if style == "buzz":
+            return hair if (x + y) % 2 else shade(hair, 1.25)[:3]
+        return hair
+    if face == "bottom":
+        return hair if beard == "full" else dark
+    hair_rows = {"bald": 0, "buzz": 1, "short": 2, "long": 2, "mohawk": 0, "beanie": 2}[style]
+    if face == "back":
+        if style == "long" and y < 7:
+            return hair
+        if style == "mohawk":
+            return hair if 3 <= x <= 4 and y < 5 else dark
+        return hair if y < hair_rows + 2 and style != "bald" else dark
+    if face in ("left", "right"):
+        if style == "long" and y < 7 and (x < 6 if face == "right" else x > 1):
+            return hair
+        if y < hair_rows and style != "mohawk":
+            return hair
+        if beard == "full" and y >= 5 and (x < 4 if face == "left" else x > 3):
+            return hair
+        if y == 4 and x in (3, 4):
+            return dark
+        return skin
+    # front
+    if style == "mohawk" and y == 0 and 3 <= x <= 4:
+        return hair
+    if y < hair_rows and style != "mohawk":
+        return hair if style != "buzz" or (x % 2 == 0) else skin
+    if style == "long" and x in (0, 7) and y < 6:
+        return hair
+    brow = hair if style not in ("bald", "beanie") else shade(skin, 0.6)[:3]
+    if style == "beanie":
+        brow = look["hair"]
+    if y == 3 and (1 <= x <= 2 or 5 <= x <= 6):
+        return brow
+    if y == 4:
+        if x in (1, 6):
+            return (240, 240, 240)
+        if x in (2, 5):
+            return look["eyes"]
+    if look["scar"] and x == 6 and 2 <= y <= 5 and y != 4:
+        return (170, 90, 90)
+    if look["tear"] and x == 1 and y == 5:
+        return INK
+    if y == 5 and 3 <= x <= 4:
+        return dark  # nose
+    if beard == "mustache" and y == 6 and 2 <= x <= 5:
+        return hair
+    if beard == "goatee" and y >= 6 and 3 <= x <= 4:
+        return hair if y == 7 else (150, 90, 70)
+    if beard == "full" and y >= 5 and not (y == 6 and 3 <= x <= 4):
+        return hair if (x + y) % 3 else shade(hair, 1.2)[:3]
+    if beard == "stubble" and y >= 6 and (x + y) % 2 == 0:
+        return shade(skin, 0.7)[:3]
+    if y == 6 and 3 <= x <= 4:
+        return (150, 90, 70)  # mouth
+    return skin
+
+
+def make_look(r):
+    return {
+        "skin": r.choice(SKIN_TONES),
+        "hair": r.choice(HAIR_COLORS),
+        "style": r.choice(["bald", "buzz", "short", "long", "mohawk", "beanie", "short", "buzz"]),
+        "cap": r.choice([(60, 60, 64), (40, 70, 120), (120, 40, 40), (60, 90, 50)]),
+        "eyes": r.choice(EYE_COLORS),
+        "beard": r.choice(["none", "none", "stubble", "full", "mustache", "goatee"]),
+        "scar": r.random() < 0.25,
+        "tear": r.random() < 0.2,
+        "tattoo": r.choice(["none", "sleeve", "sleeve", "bands", "dots"]),
+        "neck": r.random() < 0.25,
+    }
+
+
+def tattoo_px(kind, part, face, x, y):
+    if kind == "sleeve":
+        return (x * 3 + y * 2) % 5 == 0 or (part == "right_arm" and (x + y) % 4 == 0)
+    if kind == "bands":
+        return y in (5, 8)
+    if kind == "dots":
+        return (x + y) % 3 == 0 and y % 2 == 0
+    return False
+
+
+def inmate_painter(look):
+    def paint(part, face, x, y, w, h):
+        if part == "head":
+            return person_head(face, x, y, look)
+        if part in ("right_arm", "left_arm") and face != "top" and y >= 4:
+            if face != "bottom" and y < 10 and look["tattoo"] != "none" and tattoo_px(look["tattoo"], part, face, x, y):
+                return INK
+            return look["skin"]
+        if part == "body" and look["neck"] and face == "front" and y == 0 and x in (1, 6):
+            return INK
+        if part == "body" and face == "front" and y == 0 and 2 <= x <= 5:
+            return (236, 236, 236)
+        return prisoner_painter(part, face, x, y, w, h)
+    return paint
+
+
+def inmate_trader_painter(look):
+    base = inmate_painter(look)
+
+    def paint(part, face, x, y, w, h):
+        if part == "head" and (face == "top" or y < 2):
+            return (40, 140, 60) if (x + y) % 3 else (30, 110, 45)
+        if part == "body" and face == "front" and y == 1 and 1 <= x <= 6:
+            return (230, 190, 60)
+        return base(part, face, x, y, w, h)
+    return paint
+
+
+def guard_variant_painter(look, shades):
+    def paint(part, face, x, y, w, h):
+        if part == "head":
+            if face == "front" and y in (2, 3, 4, 5, 6, 7) or face in ("left", "right", "back", "bottom") and y >= 3:
+                c = guard_painter(part, face, x, y, w, h)
+                if c == SKIN or c == SKIN_DARK:
+                    if face == "front" and not shades and y == 4 and x in (1, 2, 5, 6):
+                        return (240, 240, 240) if x in (1, 6) else look["eyes"]
+                    if face == "front" and look["beard"] == "mustache" and y == 6 and 2 <= x <= 5:
+                        return look["hair"]
+                    return look["skin"] if c == SKIN else shade(look["skin"], 0.86)[:3]
+                if face == "front" and not shades and y == 4:
+                    return (240, 240, 240) if x in (1, 6) else (look["eyes"] if x in (2, 5) else look["skin"])
+                if face == "front" and y == 3 and not shades:
+                    return look["hair"] if (1 <= x <= 2 or 5 <= x <= 6) else look["skin"]
+                if c == (150, 90, 70) and look["beard"] == "mustache":
+                    return (150, 90, 70)
+                return c
+        c = guard_painter(part, face, x, y, w, h)
+        if c == SKIN:
+            return look["skin"]
+        return c
+    return paint
+
+
+def cut_broken(img):
+    """The same tool snapped in the middle of the handle: a gap and a darker tint."""
+    src = img.load()
+    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    px = out.load()
+    for y in range(16):
+        for x in range(16):
+            c = src[x, y]
+            if c[3] == 0:
+                continue
+            d = x - y
+            if d in (-4, -3):
+                continue
+            if d < -4:
+                nx, ny = x - 1, y + 1
+            else:
+                nx, ny = x, y
+            if 0 <= nx < 16 and 0 <= ny < 16:
+                px[nx, ny] = shade(c, 0.8)
+    return out
+
+
+GRAFFITI = [
+    [  # smiley
+        "................", "................", ".....wwwwww.....", "....w......w....", "...w........w...",
+        "...w..w..w..w...", "...w........w...", "...w........w...", "...w.w....w.w...", "...w..wwww..w...",
+        "....w......w....", ".....wwwwww.....", "................", "................", "................", "................"],
+    [  # heart with arrow
+        "................", "................", "...rr....rr.....", "..rrrr..rrrr....", ".rrrrrrrrrrrr...",
+        ".rrrrrrrrrrrr..w", ".rrrrrrrrrrrr.w.", "..rrrrrrrrrrw...", "...rrrrrrrww....", "....rrrrrw......",
+        ".....rrww.......", "......ww........", "....ww..........", "..ww............", "................", "................"],
+    [  # tally marks
+        "................", "................", "................", "..w.w.w.w.......", "..w.w.w.w...w...",
+        "..w.w.w.ww.w....", "..w.w.wwww......", "..w.w.ww.w......", "..w.ww.w.w......", "..www.w.w.......",
+        "..ww.w.w.w......", ".ww.w.w.w.......", "................", "................", "................", "................"],
+    [  # skull
+        "................", "................", ".....wwwwww.....", "....wwwwwwww....", "...wwwwwwwwww...",
+        "...ww..ww..ww...", "...ww..ww..ww...", "...wwwwwwwwww...", "....wwww.www....", ".....wwwwww.....",
+        ".....w.w.w.w....", ".....wwwwww.....", "................", "................", "................", "................"],
+    [  # crown
+        "................", "................", "................", "...y...y...y....", "...yy.yyy.yy....",
+        "...yyyyyyyyy....", "...yyyyyyyyy....", "...yryyyyyry....", "...yyyyyyyyy....", "...yyyyyyyyy....",
+        "................", "................", "................", "................", "................", "................"],
+    [  # anarchy A in a circle
+        "................", ".....wwwwww.....", "....w...w..w....", "...w...w.w..w...", "..w...w...w..w..",
+        "..w..w.....w.w..", "..w.wwwwwwwww.w..", "..w.w.......ww...", "..ww.........w..", "..w..........w..",
+        "...w........w...", "....w......w....", ".....wwwwww.....", "................", "................", "................"],
+]
+GRAFFITI_PAL = {"w": (236, 236, 228), "r": (220, 60, 60), "y": (240, 200, 60)}
+
+
+def graffiti_img(rows):
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch != ".":
+                c = GRAFFITI_PAL[ch]
+                px[x, y] = jitter(c, 12)[:3] + (rng.randint(190, 240),)
+    return img
+
+
+def detector_side(x, y):
+    if x in (0, 15):
+        return jitter((92, 96, 104), 3)
+    if y % 5 == 0:
+        return jitter((70, 74, 80), 3)
+    return jitter((168, 172, 180), 5)
+
+
+def detector_panel(x, y):
+    if y % 3 == 0 and 2 <= x <= 13:
+        return (80, 220, 120, 255)
+    return jitter((24, 28, 30), 3)
+
+
+def lamp(color):
+    def f(x, y):
+        k = 1.25 if 5 <= x <= 10 and 5 <= y <= 10 else 1.0
+        return jitter(shade(color, k), 6)
+    return f
+
+
+NEW_ITEMS = {
+    "work_pickaxe": ([
+        "................",
+        "...ooooooooo....",
+        "..osssssssssoo..",
+        ".osllllooollso..",
+        "..oo..ohyo..oo..",
+        "......ohyo......",
+        ".....ohyo.......",
+        ".....ohyo.......",
+        "....ohyo........",
+        "....owwo........",
+        "...owwo.........",
+        "...owwo.........",
+        "..owwo..........",
+        "..owwo..........",
+        "..ooo...........",
+        "................",
+    ], {"o": OUT, "s": (190, 194, 202), "l": (120, 124, 132), "h": (150, 100, 60), "y": (230, 190, 40), "w": (150, 100, 60)}),
+    "work_axe": ([
+        "................",
+        "........oooo....",
+        ".......osssso...",
+        "......osssllso..",
+        "......osslllso..",
+        ".......ohslso...",
+        "......ohwooo....",
+        ".....ohwo.......",
+        "....ohwo........",
+        "....oywo........",
+        "...oywo.........",
+        "...owwo.........",
+        "..owwo..........",
+        "..owwo..........",
+        "..ooo...........",
+        "................",
+    ], {"o": OUT, "s": (190, 194, 202), "l": (120, 124, 132), "h": (110, 70, 40), "y": (230, 190, 40), "w": (150, 100, 60)}),
+    "chalk": ([
+        "................",
+        "................",
+        "................",
+        "...........oo...",
+        "..........owwo..",
+        ".........owwwo..",
+        "........owwwo...",
+        ".......owwwo....",
+        "......owwwo.....",
+        ".....owwwo......",
+        "....owwwo.......",
+        "...ogwwo........",
+        "...oggo.........",
+        "....oo..........",
+        "................",
+        "................",
+    ], {"o": (90, 90, 96), "w": (240, 240, 232), "g": (200, 200, 190)}),
+}
+
+
+def main_v3(root):
+    dirs = {k: os.path.join(root, "textures", k) for k in ("entity", "block", "item")}
+    for i in range(16):
+        look = make_look(random.Random(5000 + i))
+        paint_skin(inmate_painter(look)).save(os.path.join(dirs["entity"], "prisoner_%d.png" % i))
+        paint_skin(inmate_trader_painter(look)).save(os.path.join(dirs["entity"], "prisoner_trader_%d.png" % i))
+    for i in range(6):
+        r = random.Random(7000 + i)
+        look = make_look(r)
+        look["beard"] = r.choice(["none", "mustache"])
+        paint_skin(guard_variant_painter(look, shades=i % 2 == 0)).save(os.path.join(dirs["entity"], "guard_%d.png" % i))
+    for name in ("makeshift_pickaxe", "makeshift_shovel", "file"):
+        img = Image.open(os.path.join(dirs["item"], name + ".png")).convert("RGBA")
+        target = {"makeshift_pickaxe": "broken_pickaxe", "makeshift_shovel": "broken_shovel", "file": "broken_file"}[name]
+        cut_broken(img).save(os.path.join(dirs["item"], target + ".png"))
+    for name, (rows, pal) in NEW_ITEMS.items():
+        from_pixels(rows, pal).save(os.path.join(dirs["item"], name + ".png"))
+    for i, rows in enumerate(GRAFFITI):
+        graffiti_img(rows).save(os.path.join(dirs["block"], "graffiti_%d.png" % i))
+    for name, fn in {"detector_side": detector_side, "detector_panel": detector_panel,
+                     "detector_lamp_off": lamp((60, 62, 66)), "detector_lamp_green": lamp((60, 210, 90)),
+                     "detector_lamp_red": lamp((230, 50, 40))}.items():
+        tex16(fn).save(os.path.join(dirs["block"], name + ".png"))
 
 
 if __name__ == "__main__":

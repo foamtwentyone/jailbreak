@@ -16,7 +16,7 @@
   "entity.cellbreak.guard": "Охранник",
   "itemGroup.cellbreak": "Cellbreak",
   "block.cellbreak.job_desk": "Стол сдачи работы",
-  "block.cellbreak.detector": "Металлодетектор",
+  "block.cellbreak.detector": "Сканер-рамка",
   "block.cellbreak.fake_prison_wall": "Муляж стены",
   "block.cellbreak.fake_stone_bricks": "Муляж стены",
   "block.cellbreak.fake_prison_floor": "Муляж пола",
@@ -26,5 +26,15 @@
   "item.cellbreak.fake_wall": "Муляж стены или пола",
   "item.cellbreak.fake_vent": "Муляж решётки вентиляции",
   "item.cellbreak.prisoner_spawn_egg": "Яйцо призыва заключённого",
-  "entity.cellbreak.prisoner": "Заключённый"
+  "entity.cellbreak.prisoner": "Заключённый",
+  "item.cellbreak.broken_pickaxe": "Сломанная самодельная кирка",
+  "item.cellbreak.broken_shovel": "Сломанная самодельная лопата",
+  "item.cellbreak.broken_file": "Сломанный напильник",
+  "item.cellbreak.work_pickaxe": "Рабочая кирка",
+  "item.cellbreak.work_axe": "Рабочий топор",
+  "item.cellbreak.chalk": "Мел",
+  "block.cellbreak.graffiti": "Граффити",
+  "tooltip.cellbreak.contraband": "Контрабанда",
+  "tooltip.cellbreak.work_tool": "Только для работы на поле",
+  "tooltip.cellbreak.broken": "Почини в инвентаре: обломки + %s"
 }

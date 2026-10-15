@@ -165,6 +165,38 @@ public class CellbreakTest implements ModInitializer {
 							reply(c, "attacked, target health " + t.getHealth());
 							return 1;
 						}))))
+				.then(CommandManager.literal("hitnpc").then(CommandManager.argument("name", StringArgumentType.word())
+						.then(CommandManager.argument("times", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 50))
+								.executes(c -> {
+							ServerPlayerEntity p = bot(c).player;
+							var npcs = p.getServerWorld().getEntitiesByClass(cellbreak.entity.PrisonerNpcEntity.class,
+									p.getBoundingBox().expand(6), e -> true);
+							if (npcs.isEmpty()) {
+								reply(c, "no npc near");
+								return 0;
+							}
+							var npc = npcs.get(0);
+							int n = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "times");
+							for (int i = 0; i < n; i++) {
+								p.resetLastAttackedTicks();
+								npc.timeUntilRegen = 0;
+								p.attack(npc);
+							}
+							reply(c, "hit " + npc.getName().getString() + " hp=" + npc.getHealth() + " at " + npc.getBlockPos().toShortString()
+									+ " target=" + (npc.getTarget() == null ? "-" : npc.getTarget().getName().getString()));
+							return 1;
+						}))))
+				.then(CommandManager.literal("lights").executes(c -> {
+					ServerWorld w = c.getSource().getServer().getOverworld();
+					StringBuilder sb = new StringBuilder("lights:");
+					for (BlockPos p : BlockPos.iterate(180, 55, 200, 310, 100, 320)) {
+						if (w.getBlockState(p).isOf(net.minecraft.block.Blocks.LIGHT)) {
+							sb.append(' ').append(p.toShortString()).append(';');
+						}
+					}
+					reply(c, sb.toString());
+					return 1;
+				}))
 				.then(CommandManager.literal("info").then(CommandManager.argument("name", StringArgumentType.word()).executes(c -> {
 					Bot bot = bot(c);
 					ServerPlayerEntity p = bot.player;
@@ -195,6 +227,8 @@ public class CellbreakTest implements ModInitializer {
 						var path = g.getNavigation().getCurrentPath();
 						sb.append("\n  at ").append(g.getBlockPos().toShortString())
 								.append(" target=").append(g.getTarget() == null ? "-" : g.getTarget().getName().getString())
+								.append(" sniper=").append(g.isSniper()).append(" duty=").append(g.hasDuty())
+								.append(" v=").append(g.getVariant())
 								.append(" path=").append(path == null ? "-" : path.getEnd() + " reaches=" + path.reachesTarget()
 										+ " done=" + path.isFinished());
 					}
@@ -215,6 +249,9 @@ public class CellbreakTest implements ModInitializer {
 					reply(c, sb.toString());
 					return 1;
 				})))
+				.then(CommandManager.literal("dump")
+						.then(CommandManager.argument("from", BlockPosArgumentType.blockPos())
+								.then(CommandManager.argument("to", BlockPosArgumentType.blockPos()).executes(CellbreakTest::dump))))
 				.then(CommandManager.literal("scan")
 						.then(CommandManager.argument("from", BlockPosArgumentType.blockPos())
 								.then(CommandManager.argument("to", BlockPosArgumentType.blockPos()).executes(CellbreakTest::scan))))
@@ -362,7 +399,11 @@ public class CellbreakTest implements ModInitializer {
 					StringBuilder sb = new StringBuilder("npc prisoners:");
 					for (var n : w.getEntitiesByType(cellbreak.CbContent.PRISONER, e -> true)) {
 						sb.append("\n  ").append(n.getName().getString()).append(" at ").append(n.getBlockPos().toShortString())
-								.append(" cell=").append(n.cell);
+								.append(" cell=").append(n.cell).append(" v=").append(n.getVariant()).append(' ').append(n.personality)
+								.append(" slot=").append(n.lineupSlot == null ? "-" : n.lineupSlot.toShortString())
+								.append(" inf=").append(n.infirmaryUntil).append(" hp=").append(n.getHealth())
+								.append(" target=").append(n.getTarget() == null ? "-" : n.getTarget().getName().getString())
+								.append(" hand=").append(n.getMainHandStack().getItem());
 					}
 					reply(c, sb.toString());
 					return 1;
@@ -447,6 +488,30 @@ public class CellbreakTest implements ModInitializer {
 			throw new RuntimeException(e);
 		}
 		reply(c, "scan written");
+		return 1;
+	}
+
+	/** Writes every non-air block of a box with its full state to dump.txt ("x y z state"). */
+	private static int dump(CommandContext<ServerCommandSource> c) throws CommandSyntaxException {
+		BlockPos a = BlockPosArgumentType.getBlockPos(c, "from");
+		BlockPos b = BlockPosArgumentType.getBlockPos(c, "to");
+		ServerWorld world = c.getSource().getServer().getOverworld();
+		StringBuilder sb = new StringBuilder();
+		for (BlockPos p : BlockPos.iterate(a, b)) {
+			var state = world.getBlockState(p);
+			if (!state.isAir()) {
+				String s = state.toString();
+				// "Block{minecraft:stone_bricks}[...]" -> "stone_bricks[...]"
+				s = s.substring(s.indexOf(':') + 1).replace("}", "");
+				sb.append(p.getX()).append(' ').append(p.getY()).append(' ').append(p.getZ()).append(' ').append(s).append('\n');
+			}
+		}
+		try {
+			Files.writeString(Path.of("dump.txt"), sb.toString());
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+		reply(c, "dump written");
 		return 1;
 	}
 

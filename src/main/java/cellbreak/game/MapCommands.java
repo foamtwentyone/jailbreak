@@ -93,7 +93,55 @@ public final class MapCommands {
 				})))
 				.then(CommandManager.literal("work").then(box((c, b) -> {
 					layout(c).workZone = b;
-					ok(c, "Место работы: " + str(b) + ". Поставьте там стол сдачи работы (cellbreak:job_desk), печь и склад (map supply).");
+					ok(c, "Рабочее поле: " + str(b) + ". Нужны железная руда и деревья, ящик с рабочими инструментами (map supply)"
+							+ " и стол сдачи работы (cellbreak:job_desk) рядом.");
+				})))
+				.then(CommandManager.literal("workshop").then(box((c, b) -> {
+					layout(c).workshopZone = b;
+					ok(c, "Мастерская (со столом сдачи работы): " + str(b));
+				})))
+				.then(CommandManager.literal("showerhead").then(pos((c, p) -> {
+					if (!world(c).getBlockState(p).isOf(Blocks.LEVER)) {
+						throw error("Здесь нет рычага: кран душа — это рычаг.");
+					}
+					layout(c).showerHeads.add(p);
+					ok(c, "Кран душа №" + layout(c).showerHeads.size() + ": " + p.toShortString());
+				})))
+				.then(CommandManager.literal("infirmary")
+						.then(CommandManager.argument("from", BlockPosArgumentType.blockPos())
+								.then(CommandManager.argument("to", BlockPosArgumentType.blockPos())
+										.then(CommandManager.argument("spawn", BlockPosArgumentType.blockPos()).executes(c -> {
+											PrisonLayout l = layout(c);
+											l.infirmaryZone = BlockBox.create(BlockPosArgumentType.getBlockPos(c, "from"),
+													BlockPosArgumentType.getBlockPos(c, "to"));
+											l.infirmarySpawn = BlockPosArgumentType.getBlockPos(c, "spawn");
+											save(c);
+											ok(c, "Медпункт: " + str(l.infirmaryZone));
+											return 1;
+										})))))
+				.then(CommandManager.literal("detector").then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
+						.then(CommandManager.argument("facing", com.mojang.brigadier.arguments.StringArgumentType.word())
+								.suggests((c, b) -> net.minecraft.command.CommandSource.suggestMatching(
+										List.of("north", "south", "east", "west"), b))
+								.executes(c -> {
+									BlockPos p = BlockPosArgumentType.getBlockPos(c, "pos");
+									Direction facing = Direction.byName(
+											com.mojang.brigadier.arguments.StringArgumentType.getString(c, "facing"));
+									if (facing == null || facing.getAxis() == Direction.Axis.Y) {
+										throw error("Направление прохода: north, south, east или west.");
+									}
+									BlockState lower = CbContent.DETECTOR.getDefaultState()
+											.with(cellbreak.block.DetectorBlock.FACING, facing);
+									int flags = Block.NOTIFY_LISTENERS | Block.FORCE_STATE;
+									world(c).setBlockState(p, lower, flags);
+									world(c).setBlockState(p.up(), lower.with(cellbreak.block.DetectorBlock.HALF,
+											DoubleBlockHalf.UPPER), flags);
+									ok(c, "Сканер-рамка поставлена: " + p.toShortString());
+									return 1;
+								}))))
+				.then(CommandManager.literal("rollcallpost").then(pos((c, p) -> {
+					layout(c).rollCallPosts.add(p);
+					ok(c, "Пост охраны на перекличке №" + layout(c).rollCallPosts.size() + ": " + p.toShortString());
 				})))
 				.then(CommandManager.literal("yard").then(box((c, b) -> {
 					layout(c).yardZone = b;
@@ -155,7 +203,7 @@ public final class MapCommands {
 	private static int info(CommandContext<ServerCommandSource> c) {
 		PrisonLayout l = PrisonState.get(c.getSource().getServer()).getLayout();
 		if (l == null) {
-			c.getSource().sendError(Text.literal("Тюрьмы нет. /cellbreak build или /cellbreak map new"));
+			c.getSource().sendError(Text.literal("Тюрьмы нет. Начните разметку: /cellbreak map new"));
 			return 0;
 		}
 		StringBuilder sb = new StringBuilder();
@@ -165,6 +213,10 @@ public final class MapCommands {
 		sb.append("\nСтоловая: ").append(l.canteenZone == null ? "-" : str(l.canteenZone));
 		sb.append("\nРабота: ").append(l.workZone == null ? "- (работы не будет)" : str(l.workZone))
 				.append(", складов сырья: ").append(l.workSupplies.size());
+		sb.append("\nМастерская: ").append(l.workshopZone == null ? "-" : str(l.workshopZone));
+		sb.append("\nМедпункт: ").append(l.infirmaryZone == null ? "- (избитые идут в карцер)" : str(l.infirmaryZone))
+				.append(", кранов душа: ").append(l.showerHeads.size())
+				.append(", постов на перекличке: ").append(l.rollCallPosts.size());
 		sb.append("\nПрогулка: ").append(l.yardZone == null ? "- (прогулки не будет)" : str(l.yardZone));
 		sb.append("\nДуш: ").append(l.showerZone == null ? "- (душа не будет)" : str(l.showerZone));
 		sb.append("\nСнайперов: ").append(l.sniperPosts.size());

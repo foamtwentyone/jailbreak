@@ -1,0 +1,94 @@
+{
+  "variants": {
+    "facing=north,variant=0": {
+      "model": "cellbreak:block/graffiti_0"
+    },
+    "facing=east,variant=0": {
+      "model": "cellbreak:block/graffiti_0",
+      "y": 90
+    },
+    "facing=south,variant=0": {
+      "model": "cellbreak:block/graffiti_0",
+      "y": 180
+    },
+    "facing=west,variant=0": {
+      "model": "cellbreak:block/graffiti_0",
+      "y": 270
+    },
+    "facing=north,variant=1": {
+      "model": "cellbreak:block/graffiti_1"
+    },
+    "facing=east,variant=1": {
+      "model": "cellbreak:block/graffiti_1",
+      "y": 90
+    },
+    "facing=south,variant=1": {
+      "model": "cellbreak:block/graffiti_1",
+      "y": 180
+    },
+    "facing=west,variant=1": {
+      "model": "cellbreak:block/graffiti_1",
+      "y": 270
+    },
+    "facing=north,variant=2": {
+      "model": "cellbreak:block/graffiti_2"
+    },
+    "facing=east,variant=2": {
+      "model": "cellbreak:block/graffiti_2",
+      "y": 90
+    },
+    "facing=south,variant=2": {
+      "model": "cellbreak:block/graffiti_2",
+      "y": 180
+    },
+    "facing=west,variant=2": {
+      "model": "cellbreak:block/graffiti_2",
+      "y": 270
+    },
+    "facing=north,variant=3": {
+      "model": "cellbreak:block/graffiti_3"
+    },
+    "facing=east,variant=3": {
+      "model": "cellbreak:block/graffiti_3",
+      "y": 90
+    },
+    "facing=south,variant=3": {
+      "model": "cellbreak:block/graffiti_3",
+      "y": 180
+    },
+    "facing=west,variant=3": {
+      "model": "cellbreak:block/graffiti_3",
+      "y": 270
+    },
+    "facing=north,variant=4": {
+      "model": "cellbreak:block/graffiti_4"
+    },
+    "facing=east,variant=4": {
+      "model": "cellbreak:block/graffiti_4",
+      "y": 90
+    },
+    "facing=south,variant=4": {
+      "model": "cellbreak:block/graffiti_4",
+      "y": 180
+    },
+    "facing=west,variant=4": {
+      "model": "cellbreak:block/graffiti_4",
+      "y": 270
+    },
+    "facing=north,variant=5": {
+      "model": "cellbreak:block/graffiti_5"
+    },
+    "facing=east,variant=5": {
+      "model": "cellbreak:block/graffiti_5",
+      "y": 90
+    },
+    "facing=south,variant=5": {
+      "model": "cellbreak:block/graffiti_5",
+      "y": 180
+    },
+    "facing=west,variant=5": {
+      "model": "cellbreak:block/graffiti_5",
+      "y": 270
+    }
+  }
+}

@@ -10,8 +10,8 @@ import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
 
 /**
- * Key places of a prison, in absolute world coordinates. Built by {@link PrisonBuilder} or marked
- * by hand on an existing map with the /cellbreak map commands.
+ * Key places of a prison, in absolute world coordinates. Marked on an existing map
+ * (the MPE map comes marked) with the /cellbreak map commands.
  */
 public class PrisonLayout {
 	/** How far past the prison area a prisoner must get to count as escaped. */
@@ -56,6 +56,15 @@ public class PrisonLayout {
 	public BlockPos npcGuardSpawn;
 	public final List<BlockPos> patrolPoints = new ArrayList<>();
 	public final List<BlockPos> scrapChests = new ArrayList<>();
+	/** Optional: a workshop next to the work field (job desk); being there counts as being at work. */
+	public BlockBox workshopZone;
+	/** Shower faucets: levers that make water run while they are on. */
+	public final List<BlockPos> showerHeads = new ArrayList<>();
+	/** Where a prisoner beaten up in a fight spends a minute. */
+	public BlockPos infirmarySpawn;
+	public BlockBox infirmaryZone;
+	/** Where the guards who do not count stand at roll call (by the exits). */
+	public final List<BlockPos> rollCallPosts = new ArrayList<>();
 
 	public boolean isEscaped(BlockPos pos) {
 		for (BlockBox a : areas) {
@@ -155,6 +164,11 @@ public class PrisonLayout {
 		putPos(nbt, "npcGuardSpawn", npcGuardSpawn);
 		nbt.putLongArray("patrol", longs(patrolPoints));
 		nbt.putLongArray("scrap", longs(scrapChests));
+		putBox(nbt, "workshop", workshopZone);
+		nbt.putLongArray("showerHeads", longs(showerHeads));
+		putPos(nbt, "infirmarySpawn", infirmarySpawn);
+		putBox(nbt, "infirmary", infirmaryZone);
+		nbt.putLongArray("rollCallPosts", longs(rollCallPosts));
 		return nbt;
 	}
 
@@ -194,6 +208,15 @@ public class PrisonLayout {
 		}
 		for (long p : nbt.getLongArray("scrap")) {
 			l.scrapChests.add(BlockPos.fromLong(p));
+		}
+		l.workshopZone = getBox(nbt, "workshop");
+		for (long p : nbt.getLongArray("showerHeads")) {
+			l.showerHeads.add(BlockPos.fromLong(p));
+		}
+		l.infirmarySpawn = getPos(nbt, "infirmarySpawn");
+		l.infirmaryZone = getBox(nbt, "infirmary");
+		for (long p : nbt.getLongArray("rollCallPosts")) {
+			l.rollCallPosts.add(BlockPos.fromLong(p));
 		}
 		return l;
 	}

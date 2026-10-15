@@ -9,13 +9,16 @@ import java.util.Map;
 import java.util.UUID;
 
 import cellbreak.CbContent;
+import cellbreak.block.DetectorBlock;
 import cellbreak.block.FakeBlock;
+import cellbreak.block.GraffitiBlock;
 import cellbreak.entity.GuardEntity;
 import cellbreak.entity.PrisonerNpcEntity;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.DoorBlock;
+import net.minecraft.block.enums.DoubleBlockHalf;
 import net.minecraft.command.argument.EntityAnchorArgumentType;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.DyedColorComponent;
@@ -83,7 +86,7 @@ public class CellbreakGame {
 	public enum Phase {
 		ROLL_CALL("Утренняя перекличка", "Все в зону переклички! Охрана будет обыскивать.", 0, Zone.ROLL_CALL),
 		BREAKFAST("Завтрак", "Все в столовую!", 1000, Zone.CANTEEN),
-		WORK("Работа", "Все на работу! Доски и слитки сдавай на столе за деньги.", 3000, Zone.WORK),
+		WORK("Работа", "На рабочее поле! Добывай руду и брёвна, сдавай на столе в мастерской.", 3000, Zone.WORK),
 		FREE_TIME("Свободное время", "Можно ходить где угодно (кроме улицы ночью).", 6000, Zone.ANYWHERE),
 		EXERCISE("Прогулка", "Все на прогулочный двор!", 7000, Zone.YARD),
 		SHOWER("Душ", "Все в душевую!", 9000, Zone.SHOWER),
@@ -127,6 +130,16 @@ public class CellbreakGame {
 	private static final int SNIPER_RANGE = 96;
 	private static final int SNIPER_AIM_TICKS = 40;
 	private static final int SEARCHED_AT_ROLL_CALL = 4;
+	/** Roll call: the counting guards start walking the line-up, then announce the count and the search. */
+	private static final int COUNT_START_SECONDS = 20;
+	private static final int COUNT_END_SECONDS = 38;
+	private static final int INFIRMARY_SECONDS = 60;
+	/** How long a suspicious act outdoors (breaking, placing a fake, graffiti) keeps a day sniper's eye on you. */
+	private static final int SUSPICIOUS_TICKS = 60;
+	private static final double SEARCHLIGHT_RADIUS = 3.5;
+	private static final int ORE_REGEN_SECONDS = 60;
+	private static final int LOG_REGEN_SECONDS = 90;
+	private static final int MAX_TRADERS = 3;
 	private static final int MAX_NPC_PRISONERS = 16;
 	private static final int PRISONER_ORANGE = 0xE6761E;
 	private static final int GUARD_NAVY = 0x222E54;
@@ -143,9 +156,17 @@ public class CellbreakGame {
 		BlockPos lastSeenPos;
 		long sniperSpotTick;
 		long detectorQuietUntil;
+		/** The HUD line waits while a more important action bar message is shown. */
+		long hudQuietUntil;
 		public GameMode previousMode;
 		boolean heatRaised;
 		boolean warnedContraband;
+		public long infirmaryUntil;
+		long lastScoldTick = -10000;
+		long suspiciousTick = -10000;
+		long lastFightTick = -10000;
+		long lastTalkTick = -10000;
+		BlockPos lineupSlot;
 
 		PlayerData(Role role) {
 			this.role = role;
@@ -166,6 +187,28 @@ public class CellbreakGame {
 	private boolean searchDone;
 	private int npcGuardCount;
 	private List<String> nicknames = List.of(PrisonerNpcEntity.NICKNAMES);
+	/** Ore and logs taken on the work field, and when they grow back. */
+	private final Map<BlockPos, Regrowth> regrowth = new HashMap<>();
+	/** Chalk drawings and who drew them. */
+	private final Map<BlockPos, UUID> graffiti = new HashMap<>();
+	/** Night searchlights of the snipers, by sniper. */
+	private final Map<UUID, Searchlight> searchlights = new HashMap<>();
+	private boolean countStarted;
+	private boolean cleanedLeftovers;
+	private List<BlockPos> lineup = List.of();
+	private BlockPos lineupLook;
+	private GuardEntity countingGuard;
+
+	private record Regrowth(BlockState state, long at) {
+	}
+
+	private static class Searchlight {
+		double angle;
+		double speed;
+		BlockPos light;
+		Vec3d spot;
+		UUID lockedOn;
+	}
 
 	private CellbreakGame(MinecraftServer server) {
 		this.server = server;
@@ -328,7 +371,7 @@ public class CellbreakGame {
 	public String start(int minutes, int npcGuards, int npcPrisoners) {
 		PrisonLayout layout = layout();
 		if (layout == null) {
-			return "Сначала постройте тюрьму (/cellbreak build) или отметьте её на карте (/cellbreak map ...).";
+			return "Тюрьма не отмечена на карте. Откройте карту MPE Cellbreak или разметьте свою (/cellbreak map ...).";
 		}
 		if (running) {
 			return "Раунд уже идёт.";
@@ -346,6 +389,10 @@ public class CellbreakGame {
 		running = true;
 		ticks = 0;
 		endTick = minutes * 60L * 20L;
+		regrowth.clear();
+		graffiti.clear();
+		searchlights.clear();
+		cleanLeftovers();
 		npcGuardCount = npcGuards >= 0 ? npcGuards : Math.max(guards.isEmpty() ? 2 : 1, (prisoners.size() + 2) / 3 - guards.size() + 1);
 		damage.clear();
 
@@ -459,6 +506,13 @@ public class CellbreakGame {
 	// ------------------------------------------------------------------ tick
 
 	public void tick() {
+		if (!cleanedLeftovers) {
+			cleanedLeftovers = true;
+			cleanLeftovers();
+		}
+		if (layout() != null && server.getTicks() % 3 == 0) {
+			runShowers();
+		}
 		if (!running) {
 			return;
 		}
@@ -472,9 +526,21 @@ public class CellbreakGame {
 			nextPhase();
 			beginPhase();
 		}
-		if (phase().isRollCall() && !searchDone && phaseElapsed() >= GRACE_SECONDS * 20) {
-			searchDone = true;
-			rollCallSearch();
+		if (phase().isRollCall()) {
+			if (!countStarted && phaseElapsed() >= COUNT_START_SECONDS * 20) {
+				countStarted = true;
+				startCounting();
+			}
+			if (!searchDone && phaseElapsed() >= COUNT_END_SECONDS * 20) {
+				searchDone = true;
+				rollCallSearch();
+			}
+			if (ticks % 20 == 0) {
+				showLineupSlots();
+			}
+		}
+		if (phase() == Phase.LIGHTS_OUT && ticks % 4 == 0) {
+			moveSearchlights();
 		}
 		if (ticks % 10 == 0) {
 			updatePlayers();
@@ -482,6 +548,7 @@ public class CellbreakGame {
 		if (ticks % 20 == 0) {
 			updateHud();
 			guardsInspectDamage();
+			regrow(false);
 		}
 		if (ticks % (30 * 20) == 0) {
 			replaceMissingGuards();
@@ -527,6 +594,13 @@ public class CellbreakGame {
 		PrisonLayout layout = layout();
 		phaseTicksLeft = (Integer) SCHEDULE[scheduleIndex][1] * 20;
 		searchDone = false;
+		countStarted = false;
+		clearSearchlights();
+		assignGuardDuties(phase);
+		assignLineup(phase);
+		for (PrisonerNpcEntity npc : npcPrisoners()) {
+			npc.skipsMeal = phase.zone == Zone.CANTEEN && world().random.nextInt(5) == 0;
+		}
 		world().setTimeOfDay(phase.timeOfDay);
 		for (PrisonLayout.Cell c : layout.cells) {
 			setDoor(c.door, phase != Phase.LIGHTS_OUT);
@@ -568,6 +642,9 @@ public class CellbreakGame {
 
 	private void endPhase() {
 		Phase phase = phase();
+		if (phase == Phase.WORK) {
+			collectWorkTools();
+		}
 		BlockBox zone = zoneBox(phase.zone);
 		if (zone == null) {
 			return;
@@ -575,7 +652,7 @@ public class CellbreakGame {
 		int penalty = phase.isRollCall() ? 40 : 25;
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			PlayerData d = data(p);
-			if (d.escaped || d.solitaryUntil != 0 || d.attended) {
+			if (d.escaped || d.solitaryUntil != 0 || d.infirmaryUntil != 0 || d.attended) {
 				continue;
 			}
 			addHeat(p, penalty);
@@ -593,7 +670,6 @@ public class CellbreakGame {
 		List<GuardEntity> npcs = npcGuards();
 		List<GuardEntity> snipers = snipers();
 		List<ServerPlayerEntity> playerGuards = online(Role.GUARD);
-		BlockBox zone = zoneBox(phase.zone);
 
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			PlayerData d = data(p);
@@ -612,16 +688,30 @@ public class CellbreakGame {
 				}
 				continue;
 			}
+			if (d.infirmaryUntil != 0) {
+				if (ticks >= d.infirmaryUntil) {
+					d.infirmaryUntil = 0;
+					p.sendMessage(Text.literal("Тебя выписали из медпункта.").formatted(Formatting.GREEN));
+				} else {
+					if (layout.infirmaryZone != null && !layout.infirmaryZone.expand(1).contains(p.getBlockPos())) {
+						teleport(p, layout.infirmarySpawn);
+						p.sendMessage(Text.literal("Лежи, тебе ещё лечиться.").formatted(Formatting.RED), true);
+					}
+					continue;
+				}
+			}
 
 			BlockPos pos = p.getBlockPos();
-			if (zone != null && zone.contains(pos)) {
+			boolean inPlace = isInPlace(p, d, phase);
+			if (inPlace && phase.zone != Zone.ANYWHERE && phase.zone != Zone.CELLS) {
 				if (!d.attended) {
 					rewardAttendance(p, phase);
 				}
 				d.attended = true;
 			}
 
-			boolean seen = isSeen(p, npcs, playerGuards);
+			LivingEntity watcher = seenBy(p, npcs, playerGuards);
+			boolean seen = watcher != null;
 			if (seen) {
 				d.lastSeenTick = ticks;
 				d.lastSeenPos = pos;
@@ -640,8 +730,12 @@ public class CellbreakGame {
 					&& !layout.cells.get(d.cell).interior.contains(pos)) {
 				addHeat(p, 4);
 			}
+			if (seen && !inPlace && !d.wanted && phase.zone != Zone.ANYWHERE && phaseElapsed() > GRACE_SECONDS * 20
+					&& ticks - d.lastScoldTick > 10 * 20) {
+				scold(watcher, p, d, phase);
+			}
 			checkDetector(p, d);
-			checkSnipers(p, d, snipers, phase, zone);
+			checkSnipers(p, d, snipers, phase);
 			if (d.wanted) {
 				if (ticks - d.lastSeenTick > LOSE_PURSUIT_SECONDS * 20L) {
 					d.wanted = false;
@@ -655,6 +749,59 @@ public class CellbreakGame {
 				p.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 30, 0, false, false));
 			}
 		}
+	}
+
+	/** Whether the prisoner is where the routine wants them now. */
+	private boolean isInPlace(ServerPlayerEntity p, PlayerData d, Phase phase) {
+		BlockPos pos = p.getBlockPos();
+		PrisonLayout layout = layout();
+		return switch (phase.zone) {
+			case ANYWHERE -> true;
+			case CELLS -> layout.cells.get(d.cell).interior.contains(pos);
+			case WORK -> layout.workZone.contains(pos) || layout.workshopZone != null && layout.workshopZone.contains(pos);
+			default -> {
+				BlockBox zone = zoneBox(phase.zone);
+				yield zone == null || zone.contains(pos);
+			}
+		};
+	}
+
+	/** Where the prisoner should be: {"where" (в столовой), "whither" (в столовую)}. */
+	private static String[] placeName(Phase phase) {
+		return switch (phase.zone) {
+			case ROLL_CALL -> new String[] { "на перекличке", "на перекличку" };
+			case CANTEEN -> new String[] { "в столовой", "в столовую" };
+			case WORK -> new String[] { "на работе", "на работу" };
+			case YARD -> new String[] { "на прогулке", "на прогулку" };
+			case SHOWER -> new String[] { "в душевой", "в душ" };
+			case CELLS -> new String[] { "в своей камере", "в камеру" };
+			default -> new String[] { "на месте", "на место" };
+		};
+	}
+
+	// %1$s name, %2$s where, %3$s whither.
+	private static final String[] SCOLDS = { "Эй, %1$s! Тебе положено быть %2$s. Бегом!", "%1$s, ты что тут забыл? Марш %3$s!",
+			"%1$s! Я кому сказал? Живо %3$s!", "Шевелись, %1$s! Ты должен быть %2$s.",
+			"%1$s, ещё раз увижу — пойдёшь в карцер. Быстро %3$s!" };
+
+	/** A guard sees a prisoner who is not where the routine says: shouts at them and remembers it. */
+	private void scold(LivingEntity guard, ServerPlayerEntity p, PlayerData d, Phase phase) {
+		d.lastScoldTick = ticks;
+		String[] place = placeName(phase);
+		String line = String.format(SCOLDS[world().random.nextInt(SCOLDS.length)], p.getName().getString(), place[0], place[1]);
+		Text msg = Text.literal(guard instanceof GuardEntity ? "Охранник: " : guard.getName().getString() + ": ")
+				.formatted(Formatting.BLUE).append(Text.literal(line).formatted(Formatting.WHITE));
+		for (ServerPlayerEntity other : allOnline()) {
+			if (other == p || other.squaredDistanceTo(guard) < 16 * 16) {
+				other.sendMessage(msg, false);
+			}
+		}
+		if (guard instanceof GuardEntity g) {
+			g.getLookControl().lookAt(p);
+		}
+		world().playSound(null, guard.getBlockPos(), SoundEvents.ENTITY_VILLAGER_NO, SoundCategory.HOSTILE, 1.0F, 0.7F);
+		addHeat(p, 8);
+		p.sendMessage(Text.literal("Охрана тобой недовольна: подозрение +8").formatted(Formatting.RED), true);
 	}
 
 	private void rewardAttendance(ServerPlayerEntity p, Phase phase) {
@@ -687,12 +834,17 @@ public class CellbreakGame {
 		}
 		for (ServerPlayerEntity p : allOnline()) {
 			PlayerData d = data(p);
+			if (ticks < d.hudQuietUntil) {
+				continue;
+			}
 			Text hud;
 			if (d.role == Role.PRISONER) {
 				if (d.escaped) {
 					hud = Text.literal("Ты на свободе! До конца раунда " + round).formatted(Formatting.GREEN);
 				} else if (d.solitaryUntil != 0) {
 					hud = Text.literal("Карцер: ещё " + (d.solitaryUntil - ticks) / 20 + " с").formatted(Formatting.RED);
+				} else if (d.infirmaryUntil != 0) {
+					hud = Text.literal("Медпункт: ещё " + (d.infirmaryUntil - ticks) / 20 + " с").formatted(Formatting.RED);
 				} else {
 					hud = Text.literal(phase().title + " " + clock).formatted(Formatting.YELLOW)
 							.append(Text.literal("  |  Подозрение: ").formatted(Formatting.GRAY))
@@ -767,17 +919,22 @@ public class CellbreakGame {
 	}
 
 	private boolean isSeen(ServerPlayerEntity p, List<GuardEntity> npcs, List<ServerPlayerEntity> playerGuards) {
+		return seenBy(p, npcs, playerGuards) != null;
+	}
+
+	/** The guard (NPC or player) who sees this prisoner right now, if any. */
+	private LivingEntity seenBy(ServerPlayerEntity p, List<GuardEntity> npcs, List<ServerPlayerEntity> playerGuards) {
 		for (GuardEntity g : npcs) {
 			if (sees(g, p, GUARD_SIGHT, true)) {
-				return true;
+				return g;
 			}
 		}
 		for (ServerPlayerEntity g : playerGuards) {
 			if (sees(g, p, PLAYER_GUARD_SIGHT, true)) {
-				return true;
+				return g;
 			}
 		}
-		return false;
+		return null;
 	}
 
 	private static boolean facing(LivingEntity watcher, Entity target) {
@@ -788,29 +945,46 @@ public class CellbreakGame {
 
 	// ------------------------------------------------------------------ snipers and detectors
 
-	/** Outdoors where a prisoner should not be: at night, or anywhere but the required place. */
-	private boolean outOfBoundsOutside(ServerPlayerEntity p, Phase phase, BlockBox zone) {
-		BlockPos pos = p.getBlockPos();
-		if (!world().isSkyVisible(pos.up()) || phaseElapsed() < GRACE_SECONDS * 20) {
-			return false;
-		}
-		if (phase == Phase.LIGHTS_OUT) {
-			return true;
-		}
-		return zone != null && !zone.contains(pos);
-	}
-
-	private void checkSnipers(ServerPlayerEntity p, PlayerData d, List<GuardEntity> snipers, Phase phase, BlockBox zone) {
+	/**
+	 * Day: a sniper only shoots at a prisoner seen doing something suspicious outdoors (breaking a
+	 * wall, digging, placing blocks). Night: the snipers sweep the yard with searchlights and shoot
+	 * whoever gets caught in the light.
+	 */
+	private void checkSnipers(ServerPlayerEntity p, PlayerData d, List<GuardEntity> snipers, Phase phase) {
 		GuardEntity spotter = null;
-		if (!snipers.isEmpty() && outOfBoundsOutside(p, phase, zone)) {
+		BlockPos pos = p.getBlockPos();
+		boolean outdoors = world().isSkyVisible(pos.up());
+		if (!snipers.isEmpty() && outdoors) {
 			for (GuardEntity s : snipers) {
-				if (s.squaredDistanceTo(p) < SNIPER_RANGE * SNIPER_RANGE && s.canSee(p)) {
+				if (s.squaredDistanceTo(p) >= SNIPER_RANGE * SNIPER_RANGE || !s.canSee(p)) {
+					continue;
+				}
+				boolean caught;
+				if (phase == Phase.LIGHTS_OUT) {
+					Searchlight light = searchlights.get(s.getUuid());
+					caught = phaseElapsed() >= GRACE_SECONDS * 20 && light != null && light.spot != null
+							&& (p.getUuid().equals(light.lockedOn) || horizontalDistance(p.getPos(), light.spot) < SEARCHLIGHT_RADIUS
+									&& Math.abs(p.getY() - light.spot.y) < 4);
+					if (caught) {
+						light.lockedOn = p.getUuid();
+					}
+				} else {
+					caught = ticks - d.suspiciousTick < SUSPICIOUS_TICKS;
+				}
+				if (caught) {
 					spotter = s;
 					break;
 				}
 			}
 		}
 		if (spotter == null) {
+			if (d.sniperSpotTick != 0) {
+				searchlights.values().forEach(l -> {
+					if (p.getUuid().equals(l.lockedOn)) {
+						l.lockedOn = null;
+					}
+				});
+			}
 			d.sniperSpotTick = 0;
 			return;
 		}
@@ -822,56 +996,396 @@ public class CellbreakGame {
 			addHeat(p, MAX_HEAT);
 			d.lastSeenTick = ticks;
 			d.lastSeenPos = p.getBlockPos();
-			title(p, Text.literal("Снайпер!").formatted(Formatting.DARK_RED), Text.literal("Тебе здесь нельзя. В укрытие!"));
+			title(p, Text.literal("Снайпер!").formatted(Formatting.DARK_RED),
+					Text.literal(phase == Phase.LIGHTS_OUT ? "Ты в луче прожектора. В укрытие!" : "Он видел, что ты делаешь. В укрытие!"));
 			p.playSoundToPlayer(SoundEvents.ITEM_CROSSBOW_LOADING_END.value(), SoundCategory.HOSTILE, 1.0F, 1.0F);
 		} else if (ticks - d.sniperSpotTick >= SNIPER_AIM_TICKS) {
 			d.sniperSpotTick = 0;
 			world().playSound(null, spotter.getBlockPos(), SoundEvents.ITEM_CROSSBOW_SHOOT, SoundCategory.HOSTILE, 3.0F, 1.0F);
 			p.playSoundToPlayer(SoundEvents.ENTITY_ARROW_HIT_PLAYER, SoundCategory.HOSTILE, 1.0F, 1.0F);
+			Searchlight light = searchlights.get(spotter.getUuid());
+			if (light != null) {
+				light.lockedOn = null;
+			}
 			arrest(p, "подстрелен снайпером");
 		}
 	}
 
+	private static double horizontalDistance(Vec3d a, Vec3d b) {
+		double dx = a.x - b.x;
+		double dz = a.z - b.z;
+		return Math.sqrt(dx * dx + dz * dz);
+	}
+
+	/** Remembers that the prisoner did something a sniper would shoot for, if they are outdoors. */
+	private void suspiciousOutdoors(ServerPlayerEntity p, BlockPos where) {
+		PlayerData d = data(p);
+		if (d != null && (world().isSkyVisible(where.up()) || world().isSkyVisible(p.getBlockPos().up()))) {
+			d.suspiciousTick = ticks;
+		}
+	}
+
+	/**
+	 * Night: every sniper's searchlight sweeps back and forth over the prison grounds in front of
+	 * them. The lit spot is a real light on the ground plus a beam of particles.
+	 */
+	private void moveSearchlights() {
+		ServerWorld world = world();
+		BlockBox bounds = layout().bounds();
+		Vec3d center = Vec3d.ofCenter(bounds.getCenter());
+		for (GuardEntity sniper : snipers()) {
+			Searchlight light = searchlights.computeIfAbsent(sniper.getUuid(), id -> {
+				Searchlight l = new Searchlight();
+				l.angle = world.random.nextDouble() * Math.PI * 2;
+				// Radians per update (4 ticks): the lit spot moves about as fast as a walking prisoner.
+				l.speed = (0.008 + world.random.nextDouble() * 0.004) * (world.random.nextBoolean() ? 1 : -1);
+				return l;
+			});
+			Vec3d target;
+			ServerPlayerEntity locked = light.lockedOn == null ? null : server.getPlayerManager().getPlayer(light.lockedOn);
+			if (locked != null) {
+				target = locked.getPos();
+			} else {
+				light.angle += light.speed;
+				Vec3d base = center.subtract(sniper.getPos());
+				double baseYaw = Math.atan2(base.z, base.x);
+				double reach = Math.min(45, Math.sqrt(base.x * base.x + base.z * base.z) * 1.4);
+				double yaw = baseYaw + Math.sin(light.angle) * 1.1;
+				double dist = 8 + (reach - 8) * (0.5 + 0.5 * Math.sin(light.angle * 0.37 + 1));
+				double x = MathHelper.clamp(sniper.getX() + Math.cos(yaw) * dist, bounds.getMinX() + 3, bounds.getMaxX() - 3);
+				double z = MathHelper.clamp(sniper.getZ() + Math.sin(yaw) * dist, bounds.getMinZ() + 3, bounds.getMaxZ() - 3);
+				int y = world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, MathHelper.floor(x),
+						MathHelper.floor(z));
+				target = new Vec3d(x, y, z);
+			}
+			light.spot = target;
+			sniper.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, target);
+			sniper.setHeadYaw(sniper.getYaw());
+			sniper.setBodyYaw(sniper.getYaw());
+			BlockPos lightPos = BlockPos.ofFloored(target.x, target.y + 0.5, target.z);
+			if (!lightPos.equals(light.light)) {
+				removeLight(light.light);
+				if (world.getBlockState(lightPos).isAir()) {
+					world.setBlockState(lightPos, Blocks.LIGHT.getDefaultState().with(net.minecraft.block.LightBlock.LEVEL_15, 15));
+					light.light = lightPos;
+					addLeftover(lightPos);
+				} else {
+					light.light = null;
+				}
+			}
+			drawBeam(sniper.getEyePos(), target);
+		}
+	}
+
+	private void drawBeam(Vec3d from, Vec3d to) {
+		ServerWorld world = world();
+		List<ServerPlayerEntity> viewers = world.getPlayers();
+		Vec3d dir = to.subtract(from);
+		double len = dir.length();
+		boolean beam = ticks % 8 == 0;
+		for (ServerPlayerEntity v : viewers) {
+			// The lit spot: a soft flash on the ground and a ring of light around it.
+			world.spawnParticles(v, net.minecraft.particle.ParticleTypes.FLASH, true, to.x, to.y + 0.3, to.z, 1, 0, 0, 0, 0);
+			for (int i = 0; i < 8; i++) {
+				double a = Math.PI * 2 * i / 8 + ticks * 0.05;
+				world.spawnParticles(v, net.minecraft.particle.ParticleTypes.END_ROD, true, to.x + Math.cos(a) * SEARCHLIGHT_RADIUS,
+						to.y + 0.2, to.z + Math.sin(a) * SEARCHLIGHT_RADIUS, 1, 0, 0, 0, 0);
+			}
+			if (beam) {
+				for (double t = 3; t < len - 1; t += 3) {
+					Vec3d p = from.add(dir.multiply(t / len));
+					world.spawnParticles(v, net.minecraft.particle.ParticleTypes.END_ROD, true, p.x, p.y, p.z, 1, 0, 0, 0, 0);
+				}
+			}
+		}
+	}
+
+	private void removeLight(BlockPos pos) {
+		if (pos != null && world().getBlockState(pos).isOf(Blocks.LIGHT)) {
+			world().setBlockState(pos, Blocks.AIR.getDefaultState());
+		}
+		if (pos != null) {
+			PrisonState.get(server).leftovers().remove(pos.asLong());
+			PrisonState.get(server).markDirty();
+		}
+	}
+
+	private void addLeftover(BlockPos pos) {
+		PrisonState.get(server).leftovers().add(pos.asLong());
+		PrisonState.get(server).markDirty();
+	}
+
+	/** Lights and drawings left from a round the server did not finish (it was stopped mid-round). */
+	private void cleanLeftovers() {
+		PrisonState state = PrisonState.get(server);
+		if (state.leftovers().isEmpty()) {
+			return;
+		}
+		for (long l : state.leftovers()) {
+			BlockPos pos = BlockPos.fromLong(l);
+			BlockState b = world().getBlockState(pos);
+			if (b.isOf(Blocks.LIGHT) || b.isOf(CbContent.GRAFFITI)) {
+				world().setBlockState(pos, Blocks.AIR.getDefaultState());
+			}
+		}
+		state.leftovers().clear();
+		state.markDirty();
+	}
+
+	private void clearSearchlights() {
+		for (Searchlight l : searchlights.values()) {
+			removeLight(l.light);
+		}
+		searchlights.clear();
+	}
+
+	/**
+	 * The scanner arch: whoever walks through it gets scanned. Clean: green light. Contraband: red
+	 * light, siren and the list of what was found.
+	 */
 	private void checkDetector(ServerPlayerEntity p, PlayerData d) {
 		if (ticks < d.detectorQuietUntil) {
 			return;
 		}
 		ServerWorld world = world();
-		BlockPos pos = p.getBlockPos();
-		if (!world.getBlockState(pos).isOf(CbContent.DETECTOR) && !world.getBlockState(pos.up()).isOf(CbContent.DETECTOR)) {
+		BlockPos feet = p.getBlockPos();
+		BlockPos lower = null;
+		for (BlockPos q : new BlockPos[] { feet, feet.up() }) {
+			BlockState state = world.getBlockState(q);
+			if (state.isOf(CbContent.DETECTOR)) {
+				lower = state.get(DetectorBlock.HALF) == DoubleBlockHalf.UPPER ? q.down() : q;
+				break;
+			}
+		}
+		if (lower == null) {
 			return;
 		}
-		if (countContraband(p) == 0) {
+		d.detectorQuietUntil = ticks + 60;
+		List<Text> found = contrabandNames(p);
+		DetectorBlock.flash(world, lower, !found.isEmpty());
+		if (found.isEmpty()) {
+			world.playSound(null, lower, SoundEvents.BLOCK_NOTE_BLOCK_CHIME.value(), SoundCategory.BLOCKS, 1.0F, 1.6F);
+			p.sendMessage(Text.literal("Сканер: чисто.").formatted(Formatting.GREEN), true);
+			d.hudQuietUntil = ticks + 40;
 			return;
 		}
-		d.detectorQuietUntil = ticks + 100;
-		world.playSound(null, pos, SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), SoundCategory.BLOCKS, 3.0F, 2.0F);
-		world.playSound(null, pos, SoundEvents.BLOCK_NOTE_BLOCK_BIT.value(), SoundCategory.BLOCKS, 3.0F, 0.5F);
+		for (int i = 0; i < 3; i++) {
+			world.playSound(null, lower, SoundEvents.BLOCK_NOTE_BLOCK_BIT.value(), SoundCategory.BLOCKS, 3.0F, 0.5F + i * 0.1F);
+		}
+		world.playSound(null, lower, SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), SoundCategory.BLOCKS, 3.0F, 2.0F);
 		d.lastSeenTick = ticks;
-		d.lastSeenPos = pos;
+		d.lastSeenPos = feet;
 		addHeat(p, 60);
-		p.sendMessage(Text.literal("Металлодетектор сработал! Подозрение +60").formatted(Formatting.RED));
+		Text list = joined(found);
+		p.sendMessage(Text.literal("Сканер сработал! Найдено: ").append(list).append(". Подозрение +60").formatted(Formatting.RED));
 		for (ServerPlayerEntity g : online(Role.GUARD)) {
-			g.sendMessage(Text.literal("Металлодетектор сработал на " + p.getName().getString()).formatted(Formatting.RED));
+			g.sendMessage(Text.literal("Сканер сработал на " + p.getName().getString() + ": ").append(list).formatted(Formatting.RED));
 		}
+	}
+
+	/** Names of the contraband a prisoner carries (translated on each player's side). */
+	private static List<Text> contrabandNames(PlayerEntity p) {
+		List<Text> names = new ArrayList<>();
+		List<Item> seen = new ArrayList<>();
+		PlayerInventory inv = p.getInventory();
+		for (int i = 0; i < inv.size(); i++) {
+			ItemStack stack = inv.getStack(i);
+			if (CbContent.CONTRABAND.contains(stack.getItem()) && !seen.contains(stack.getItem())) {
+				seen.add(stack.getItem());
+				names.add(stack.getName());
+			}
+		}
+		return names;
+	}
+
+	private static Text joined(List<Text> parts) {
+		return net.minecraft.text.Texts.join(parts, Text.literal(", "));
 	}
 
 	// ------------------------------------------------------------------ roll call search
 
-	private void rollCallSearch() {
-		BlockBox zone = layout().rollCallZone;
-		List<Object> pool = new ArrayList<>();
+	/**
+	 * Line-up places in the roll call zone: two rows along its longer side, everyone facing the
+	 * front line where the guards walk.
+	 */
+	private void assignLineup(Phase phase) {
+		for (PlayerData d : players.values()) {
+			d.lineupSlot = null;
+		}
+		List<PrisonerNpcEntity> npcs = npcPrisoners();
+		for (PrisonerNpcEntity npc : npcs) {
+			npc.lineupSlot = null;
+			npc.lineupLook = null;
+		}
+		lineup = List.of();
+		lineupLook = null;
+		if (!phase.isRollCall()) {
+			return;
+		}
+		BlockBox z = layout().rollCallZone;
+		boolean alongX = z.getBlockCountX() >= z.getBlockCountZ();
+		int y = z.getMinY();
+		List<BlockPos> slots = new ArrayList<>();
+		if (alongX) {
+			int cz = (z.getMinZ() + z.getMaxZ()) / 2;
+			for (int row = 0; row < 2; row++) {
+				for (int x = z.getMinX() + 2; x <= z.getMaxX() - 2; x += 2) {
+					slots.add(new BlockPos(x, y, cz + row * 2));
+				}
+			}
+			lineupLook = new BlockPos((z.getMinX() + z.getMaxX()) / 2, y, cz - 4);
+		} else {
+			int cx = (z.getMinX() + z.getMaxX()) / 2;
+			for (int row = 0; row < 2; row++) {
+				for (int zz = z.getMinZ() + 2; zz <= z.getMaxZ() - 2; zz += 2) {
+					slots.add(new BlockPos(cx + row * 2, y, zz));
+				}
+			}
+			lineupLook = new BlockPos(cx - 4, y, (z.getMinZ() + z.getMaxZ()) / 2);
+		}
+		// Fill the rows from the middle out, so a small group stands together.
+		int perRow = slots.size() / 2;
+		List<BlockPos> ordered = new ArrayList<>();
+		for (int i = 0; i < perRow; i++) {
+			int k = perRow / 2 + (i % 2 == 0 ? i / 2 : -(i + 1) / 2);
+			ordered.add(slots.get(k));
+			ordered.add(slots.get(perRow + k));
+		}
+		lineup = ordered;
+		int i = 0;
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			PlayerData d = data(p);
-			if (!d.escaped && d.solitaryUntil == 0 && zone.contains(p.getBlockPos())) {
+			if (!d.escaped && i < lineup.size()) {
+				d.lineupSlot = lineup.get(i++);
+			}
+		}
+		for (PrisonerNpcEntity npc : npcs) {
+			if (i < lineup.size()) {
+				npc.lineupSlot = lineup.get(i++);
+				npc.lineupLook = lineupLook;
+			}
+		}
+	}
+
+	/** Shows each prisoner player their place in the line-up. */
+	private void showLineupSlots() {
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			PlayerData d = data(p);
+			if (d.lineupSlot != null && d.solitaryUntil == 0 && d.infirmaryUntil == 0
+					&& p.getBlockPos().getSquaredDistance(d.lineupSlot) > 1) {
+				world().spawnParticles(p, net.minecraft.particle.ParticleTypes.HAPPY_VILLAGER, true,
+						d.lineupSlot.getX() + 0.5, d.lineupSlot.getY() + 0.3, d.lineupSlot.getZ() + 0.5, 6, 0.25, 0.1, 0.25, 0);
+			}
+		}
+	}
+
+	/**
+	 * Roll call: every NPC guard comes to the hall. Two of them will count the line-up, the others
+	 * stand by the exits. The rest of the day the guards patrol.
+	 */
+	private void assignGuardDuties(Phase phase) {
+		List<GuardEntity> guards = new ArrayList<>(npcGuards());
+		guards.sort(java.util.Comparator.comparing(Entity::getUuid));
+		countingGuard = null;
+		PrisonLayout layout = layout();
+		BlockBox z = layout.rollCallZone;
+		if (!phase.isRollCall()) {
+			guards.forEach(g -> g.setDuty(null, null));
+			return;
+		}
+		BlockPos center = new BlockPos(z.getCenter().getX(), z.getMinY(), z.getCenter().getZ());
+		List<BlockPos> posts = new ArrayList<>(layout.rollCallPosts);
+		if (posts.isEmpty()) {
+			posts.add(new BlockPos(z.getMinX(), z.getMinY(), z.getMinZ()));
+			posts.add(new BlockPos(z.getMaxX(), z.getMinY(), z.getMaxZ()));
+			posts.add(new BlockPos(z.getMinX(), z.getMinY(), z.getMaxZ()));
+			posts.add(new BlockPos(z.getMaxX(), z.getMinY(), z.getMinZ()));
+		}
+		int post = 0;
+		for (int i = 0; i < guards.size(); i++) {
+			GuardEntity g = guards.get(i);
+			if (i < 2) {
+				// Counters wait at the front until the count starts.
+				BlockPos start = countLine(i).get(0);
+				g.setDuty(List.of(start), center);
+				if (i == 0) {
+					countingGuard = g;
+				}
+			} else {
+				g.setDuty(List.of(posts.get(post++ % posts.size())), center);
+			}
+		}
+	}
+
+	/** The line the i-th counting guard walks: in front of the first row, behind the second. */
+	private List<BlockPos> countLine(int i) {
+		BlockBox z = layout().rollCallZone;
+		int y = z.getMinY();
+		if (z.getBlockCountX() >= z.getBlockCountZ()) {
+			int cz = (z.getMinZ() + z.getMaxZ()) / 2;
+			int lineZ = i == 0 ? cz - 2 : cz + 4;
+			return List.of(new BlockPos(z.getMinX() + 1, y, lineZ), new BlockPos((z.getMinX() + z.getMaxX()) / 2, y, lineZ),
+					new BlockPos(z.getMaxX() - 1, y, lineZ));
+		}
+		int cx = (z.getMinX() + z.getMaxX()) / 2;
+		int lineX = i == 0 ? cx - 2 : cx + 4;
+		return List.of(new BlockPos(lineX, y, z.getMinZ() + 1), new BlockPos(lineX, y, (z.getMinZ() + z.getMaxZ()) / 2),
+				new BlockPos(lineX, y, z.getMaxZ() - 1));
+	}
+
+	private void startCounting() {
+		List<GuardEntity> guards = new ArrayList<>(npcGuards());
+		guards.sort(java.util.Comparator.comparing(Entity::getUuid));
+		BlockPos center = new BlockPos(layout().rollCallZone.getCenter().getX(), layout().rollCallZone.getMinY(),
+				layout().rollCallZone.getCenter().getZ());
+		for (int i = 0; i < Math.min(2, guards.size()); i++) {
+			guards.get(i).setDuty(countLine(i), center);
+		}
+		guardSays(countingGuard, "Стоять смирно! Начинаем пересчёт.");
+	}
+
+	/** A guard speaks to everyone nearby (or to all, if the guard is gone). */
+	private void guardSays(GuardEntity guard, String line) {
+		Text msg = Text.literal("Охранник: ").formatted(Formatting.BLUE).append(Text.literal(line).formatted(Formatting.WHITE));
+		for (ServerPlayerEntity p : allOnline()) {
+			if (guard == null || !guard.isAlive() || p.squaredDistanceTo(guard) < 48 * 48) {
+				p.sendMessage(msg, false);
+			}
+		}
+	}
+
+	/** End of the count: who is missing, then four random inmates in the line-up are searched. */
+	private void rollCallSearch() {
+		BlockBox zone = layout().rollCallZone;
+		BlockBox area = zone.expand(2);
+		List<Object> pool = new ArrayList<>();
+		List<String> missing = new ArrayList<>();
+		int expected = 0;
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			PlayerData d = data(p);
+			if (d.escaped || d.solitaryUntil != 0 || d.infirmaryUntil != 0) {
+				continue;
+			}
+			expected++;
+			if (area.contains(p.getBlockPos())) {
 				pool.add(p);
+			} else {
+				missing.add(p.getName().getString());
 			}
 		}
 		for (PrisonerNpcEntity npc : npcPrisoners()) {
-			if (npc.solitaryUntil == 0) {
+			if (npc.solitaryUntil != 0 || npc.infirmaryUntil != 0) {
+				continue;
+			}
+			expected++;
+			if (area.contains(npc.getBlockPos())) {
 				pool.add(npc);
+			} else {
+				missing.add(npc.getName().getString());
 			}
 		}
+		guardSays(countingGuard, "Пересчёт окончен: на месте " + pool.size() + " из " + expected + "."
+				+ (missing.isEmpty() ? " Все на месте." : " Нет: " + String.join(", ", missing) + "."));
 		if (pool.isEmpty()) {
 			return;
 		}
@@ -881,16 +1395,19 @@ public class CellbreakGame {
 		for (Object o : chosen) {
 			names.add(o instanceof ServerPlayerEntity p ? p.getName().getString() : ((PrisonerNpcEntity) o).getName().getString());
 		}
-		broadcast(Text.literal("Обыск на перекличке: " + String.join(", ", names)).formatted(Formatting.GOLD));
+		guardSays(countingGuard, "На обыск: " + String.join(", ", names) + ". Шаг вперёд!");
 		for (Object o : chosen) {
 			if (o instanceof ServerPlayerEntity p) {
-				if (countContraband(p) > 0) {
+				List<Text> found = contrabandNames(p);
+				if (!found.isEmpty()) {
+					p.sendMessage(Text.literal("При обыске у тебя нашли: ").append(joined(found)).formatted(Formatting.RED));
 					arrest(p, "запрещёнка найдена при обыске на перекличке");
 				} else {
 					p.sendMessage(Text.literal("Тебя обыскали. Чисто.").formatted(Formatting.GREEN), false);
 				}
 			} else if (o instanceof PrisonerNpcEntity npc && world().random.nextInt(5) == 0) {
 				npc.solitaryUntil = ticks + SOLITARY_SECONDS * 20L;
+				npc.lineupSlot = null;
 				BlockPos s = layout().solitarySpawn;
 				npc.refreshPositionAndAngles(s.getX() + 0.5, s.getY(), s.getZ() + 0.5, 0, 0);
 				broadcast(Text.literal("У " + npc.getName().getString() + " нашли заточку. Отправлен в карцер.")
@@ -928,6 +1445,7 @@ public class CellbreakGame {
 			return;
 		}
 		damage.putIfAbsent(pos.toImmutable(), original);
+		suspiciousOutdoors(p, pos);
 		if (isSeen(p, npcGuards(), online(Role.GUARD))) {
 			addHeat(p, 40);
 			p.sendMessage(Text.literal("Охрана заметила, как ты ломаешь тюрьму! Подозрение +40").formatted(Formatting.RED));
@@ -970,6 +1488,7 @@ public class CellbreakGame {
 		d.heat = 0;
 		d.wanted = false;
 		d.sniperSpotTick = 0;
+		d.infirmaryUntil = 0;
 		d.solitaryUntil = ticks + SOLITARY_SECONDS * 20L;
 		p.setHealth(p.getMaxHealth());
 		p.extinguish();
@@ -979,19 +1498,96 @@ public class CellbreakGame {
 		broadcast(Text.literal(p.getName().getString() + " отправлен в карцер (" + reason + ")").formatted(Formatting.GRAY));
 	}
 
-	/** A participant would die: knock them out instead. Returns true if the death was handled. */
-	public boolean onFatalDamage(ServerPlayerEntity p) {
+	/**
+	 * A participant would die: knock them out instead. Beaten by guards: solitary; beaten by another
+	 * prisoner (or fell): the infirmary. Returns true if the death was handled.
+	 */
+	public boolean onFatalDamage(ServerPlayerEntity p, net.minecraft.entity.damage.DamageSource source) {
 		PlayerData d = data(p);
 		if (!running || d == null || d.escaped) {
 			return false;
 		}
 		p.setHealth(p.getMaxHealth());
+		Entity attacker = source.getAttacker();
+		boolean byGuard = attacker instanceof GuardEntity || attacker instanceof ServerPlayerEntity g && isGuard(g);
 		if (d.role == Role.PRISONER) {
-			arrest(p, "потерял сознание");
+			if (d.infirmaryUntil != 0 || d.solitaryUntil != 0) {
+				return true;
+			}
+			if (byGuard || layout().infirmarySpawn == null) {
+				arrest(p, "потерял сознание");
+			} else {
+				sendToInfirmary(p, d, attacker instanceof LivingEntity l ? l.getName().getString() : null);
+			}
 		} else {
 			teleport(p, layout().guardSpawn);
 			p.sendMessage(Text.literal("Тебя вырубили. Ты очнулся в комнате охраны.").formatted(Formatting.RED));
 		}
+		return true;
+	}
+
+	private void sendToInfirmary(ServerPlayerEntity p, PlayerData d, String by) {
+		d.infirmaryUntil = ticks + INFIRMARY_SECONDS * 20L;
+		d.sniperSpotTick = 0;
+		p.extinguish();
+		p.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, INFIRMARY_SECONDS * 20, 1));
+		p.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, INFIRMARY_SECONDS * 20, 1));
+		teleport(p, layout().infirmarySpawn);
+		title(p, Text.literal("Медпункт").formatted(Formatting.RED),
+				Text.literal((by != null ? "Тебя избил " + by : "Ты потерял сознание") + ". Минуту лечишься."));
+		broadcast(Text.literal(p.getName().getString() + " попал в медпункт" + (by != null ? " (избил " + by + ")" : ""))
+				.formatted(Formatting.GRAY));
+	}
+
+	/** A prisoner player hit another prisoner (player or NPC): a fight. Guards who see it get suspicious. */
+	public void onPrisonerFight(ServerPlayerEntity attacker) {
+		PlayerData d = data(attacker);
+		if (!isPrisoner(attacker) || ticks - d.lastFightTick < 40) {
+			return;
+		}
+		d.lastFightTick = ticks;
+		LivingEntity watcher = seenBy(attacker, npcGuards(), online(Role.GUARD));
+		if (watcher != null) {
+			addHeat(attacker, 15);
+			attacker.sendMessage(Text.literal("Охрана видит, как ты дерёшься! Подозрение +15").formatted(Formatting.RED), true);
+			if (watcher instanceof GuardEntity g) {
+				guardSays(g, "Эй! А ну прекратить драку, " + attacker.getName().getString() + "!");
+			}
+		}
+	}
+
+	/** An NPC inmate lost a fight: they spend a minute in the infirmary instead of dying. */
+	public boolean onNpcKnockedOut(PrisonerNpcEntity npc, net.minecraft.entity.damage.DamageSource source) {
+		if (!running) {
+			return false;
+		}
+		npc.setHealth(npc.getMaxHealth());
+		npc.setTarget(null);
+		npc.setAttacker(null);
+		BlockPos s = layout().infirmarySpawn != null ? layout().infirmarySpawn
+				: layout().cells.get(Math.max(0, Math.min(npc.cell, layout().cells.size() - 1))).spawn;
+		npc.infirmaryUntil = ticks + INFIRMARY_SECONDS * 20L;
+		npc.lineupSlot = null;
+		npc.refreshPositionAndAngles(s.getX() + 0.5, s.getY(), s.getZ() + 0.5, 0, 0);
+		npc.getNavigation().stop();
+		String by = source.getAttacker() instanceof LivingEntity l ? " (избил " + l.getName().getString() + ")" : "";
+		broadcast(Text.literal(npc.getName().getString() + " попал в медпункт" + by).formatted(Formatting.GRAY));
+		return true;
+	}
+
+	/** In solitary or in the infirmary: nobody may pick a fight with them. */
+	public boolean isOutOfPlay(PlayerEntity p) {
+		PlayerData d = data(p);
+		return d == null || d.escaped || d.solitaryUntil != 0 || d.infirmaryUntil != 0;
+	}
+
+	/** NPC inmates do not pester the same player every few seconds. */
+	public boolean mayTalkTo(ServerPlayerEntity p) {
+		PlayerData d = data(p);
+		if (d == null || ticks - d.lastTalkTick < 15 * 20) {
+			return false;
+		}
+		d.lastTalkTick = ticks;
 		return true;
 	}
 
@@ -1014,13 +1610,34 @@ public class CellbreakGame {
 
 	// ------------------------------------------------------------------ damage, fakes, vents
 
-	/** NPC guards on patrol notice holes and cracks they can see and have them repaired. */
+	/** NPC guards on patrol notice holes, cracks and graffiti they can see and have them repaired. */
 	private void guardsInspectDamage() {
+		ServerWorld world = world();
+		List<GuardEntity> guards = npcGuards();
+		for (Iterator<Map.Entry<BlockPos, UUID>> it = graffiti.entrySet().iterator(); it.hasNext();) {
+			Map.Entry<BlockPos, UUID> e = it.next();
+			BlockPos pos = e.getKey();
+			if (!world.getBlockState(pos).isOf(CbContent.GRAFFITI)) {
+				it.remove();
+				continue;
+			}
+			for (GuardEntity g : guards) {
+				if (g.getBlockPos().getSquaredDistance(pos) < 100 && canSeeBlock(g, pos)) {
+					world.setBlockState(pos, Blocks.AIR.getDefaultState());
+					it.remove();
+					guardSays(g, "Опять кто-то стены разрисовал! Закрасить. Найду художника — пойдёт в карцер.");
+					ServerPlayerEntity author = server.getPlayerManager().getPlayer(e.getValue());
+					if (author != null && isPrisoner(author)) {
+						addHeat(author, 15);
+						author.sendMessage(Text.literal("Охрана нашла твоё граффити. Подозрение +15").formatted(Formatting.RED), true);
+					}
+					break;
+				}
+			}
+		}
 		if (damage.isEmpty()) {
 			return;
 		}
-		ServerWorld world = world();
-		List<GuardEntity> guards = npcGuards();
 		for (Iterator<Map.Entry<BlockPos, BlockState>> it = damage.entrySet().iterator(); it.hasNext();) {
 			Map.Entry<BlockPos, BlockState> e = it.next();
 			BlockPos pos = e.getKey();
@@ -1094,6 +1711,120 @@ public class CellbreakGame {
 		ServerWorld world = world();
 		damage.forEach((pos, state) -> world.setBlockState(pos, state));
 		damage.clear();
+		for (BlockPos pos : graffiti.keySet()) {
+			if (world.getBlockState(pos).isOf(CbContent.GRAFFITI)) {
+				world.setBlockState(pos, Blocks.AIR.getDefaultState());
+			}
+		}
+		graffiti.clear();
+		PrisonState.get(server).leftovers().clear();
+		PrisonState.get(server).markDirty();
+		regrow(true);
+		clearSearchlights();
+	}
+
+	// ------------------------------------------------------------------ graffiti
+
+	/** A prisoner draws on a wall with chalk. Returns true if something was drawn. */
+	public boolean drawGraffiti(ServerPlayerEntity p, BlockPos wall, Direction side) {
+		if (!running || side.getAxis() == Direction.Axis.Y) {
+			return false;
+		}
+		ServerWorld world = world();
+		BlockPos pos = wall.offset(side);
+		if (!world.getBlockState(pos).isAir() || !world.getBlockState(wall).isSideSolidFullSquare(world, wall, side)) {
+			p.sendMessage(Text.literal("Рисовать можно только на ровной стене.").formatted(Formatting.GRAY), true);
+			return true;
+		}
+		world.setBlockState(pos, CbContent.GRAFFITI.getDefaultState().with(GraffitiBlock.FACING, side)
+				.with(GraffitiBlock.VARIANT, world.random.nextInt(GraffitiBlock.VARIANTS)));
+		world.playSound(null, pos, SoundEvents.BLOCK_SAND_HIT, SoundCategory.PLAYERS, 1.0F, 1.4F);
+		p.getMainHandStack().damage(1, p, EquipmentSlot.MAINHAND);
+		graffiti.put(pos, p.getUuid());
+		addLeftover(pos);
+		if (isPrisoner(p)) {
+			suspiciousOutdoors(p, pos);
+			if (isSeen(p, npcGuards(), online(Role.GUARD))) {
+				addHeat(p, 25);
+				p.sendMessage(Text.literal("Охрана видела, как ты рисуешь на стене! Подозрение +25").formatted(Formatting.RED));
+			}
+		}
+		return true;
+	}
+
+	/** A guard player wipes a drawing off. */
+	public void wipeGraffiti(ServerPlayerEntity guard, BlockPos pos) {
+		world().setBlockState(pos, Blocks.AIR.getDefaultState());
+		world().playSound(null, pos, SoundEvents.BLOCK_WOOL_BREAK, SoundCategory.BLOCKS, 1.0F, 1.0F);
+		UUID author = graffiti.remove(pos);
+		ServerPlayerEntity p = author == null ? null : server.getPlayerManager().getPlayer(author);
+		guard.sendMessage(Text.literal("Граффити стёрто" + (p != null ? ". Рисовал: " + p.getName().getString() : "."))
+				.formatted(Formatting.GRAY), true);
+	}
+
+	// ------------------------------------------------------------------ the work field
+
+	/** Work tools only work on the work field during work. */
+	public boolean canWorkAt(BlockPos pos) {
+		PrisonLayout l = layout();
+		return running && phase() == Phase.WORK && l.workZone != null && l.workZone.contains(pos);
+	}
+
+	/** Whether this spot counts as working right now (NPC inmates swing a pickaxe there). */
+	public boolean isWorkingAt(BlockPos pos) {
+		return canWorkAt(pos);
+	}
+
+	/** A prisoner mined ore or felled a log on the work field: drop the goods, it grows back later. */
+	public void onWorkBlockBroken(ServerPlayerEntity p, BlockPos pos, BlockState original) {
+		ServerWorld world = world();
+		boolean ore = CbContent.WORK_ORES.contains(original.getBlock());
+		if (ore) {
+			p.giveItemStack(new ItemStack(Items.IRON_NUGGET, 1 + world.random.nextInt(3)));
+			world.setBlockState(pos, Blocks.STONE.getDefaultState());
+		} else {
+			p.giveItemStack(new ItemStack(original.getBlock().asItem()));
+		}
+		regrowth.putIfAbsent(pos.toImmutable(), new Regrowth(original,
+				ticks + (ore ? ORE_REGEN_SECONDS : LOG_REGEN_SECONDS) * 20L));
+	}
+
+	/** Puts mined ore and felled logs back once their time is up (or all of them, at the end of a round). */
+	private void regrow(boolean all) {
+		ServerWorld world = world();
+		for (Iterator<Map.Entry<BlockPos, Regrowth>> it = regrowth.entrySet().iterator(); it.hasNext();) {
+			Map.Entry<BlockPos, Regrowth> e = it.next();
+			if (!all && ticks < e.getValue().at()) {
+				continue;
+			}
+			BlockPos pos = e.getKey();
+			BlockState now = world.getBlockState(pos);
+			if (!all && !world.getOtherEntities(null, new Box(pos)).isEmpty()) {
+				continue;
+			}
+			if (now.isAir() || now.isOf(Blocks.STONE)) {
+				world.setBlockState(pos, e.getValue().state());
+			}
+			it.remove();
+		}
+	}
+
+	/** End of work: work tools still in pockets are taken away, and that is noted. */
+	private void collectWorkTools() {
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			PlayerInventory inv = p.getInventory();
+			int n = 0;
+			for (int i = 0; i < inv.size(); i++) {
+				if (CbContent.WORK_TOOLS.contains(inv.getStack(i).getItem())) {
+					inv.setStack(i, ItemStack.EMPTY);
+					n++;
+				}
+			}
+			if (n > 0 && isPrisoner(p)) {
+				addHeat(p, 15);
+				p.sendMessage(Text.literal("Ты не сдал рабочий инструмент, его забрали. Подозрение +15").formatted(Formatting.RED));
+			}
+		}
 	}
 
 	/**
@@ -1130,6 +1861,7 @@ public class CellbreakGame {
 			}
 			world().setBlockState(pos, fake.getDefaultState());
 			world().playSound(null, pos, SoundEvents.BLOCK_WOOL_PLACE, SoundCategory.BLOCKS, 1.0F, 1.0F);
+			suspiciousOutdoors(p, pos);
 			if (!p.isCreative()) {
 				stack.decrement(1);
 			}
@@ -1216,42 +1948,88 @@ public class CellbreakGame {
 
 	// ------------------------------------------------------------------ work and money
 
-	/** A prisoner uses the job desk: hands in planks and iron ingots for money during work. */
+	/**
+	 * A prisoner uses the job desk: hands in what they got on the work field for money. Taken during
+	 * work and the free time after it.
+	 */
 	public void useJobDesk(ServerPlayerEntity p) {
 		if (!isPrisoner(p)) {
 			p.sendMessage(Text.literal("Стол сдачи работы — для заключённых.").formatted(Formatting.GRAY), true);
 			return;
 		}
-		if (phase() != Phase.WORK) {
-			p.sendMessage(Text.literal("Работу принимают только во время работы.").formatted(Formatting.RED), true);
+		if (phase() != Phase.WORK && phase() != Phase.FREE_TIME) {
+			p.sendMessage(Text.literal("Работу принимают во время работы и сразу после неё.").formatted(Formatting.RED), true);
 			return;
 		}
 		ItemStack stack = p.getMainHandStack();
-		int pay;
-		if (stack.isIn(ItemTags.PLANKS) && stack.getCount() >= 4) {
-			int sets = stack.getCount() / 4;
-			stack.decrement(sets * 4);
-			pay = sets;
+		int per;
+		int value;
+		if (stack.isOf(Items.IRON_NUGGET)) {
+			per = 3;
+			value = 1;
 		} else if (stack.isOf(Items.IRON_INGOT)) {
-			pay = stack.getCount() * 2;
-			stack.decrement(stack.getCount());
+			per = 1;
+			value = 3;
+		} else if (stack.isIn(ItemTags.LOGS)) {
+			per = 2;
+			value = 1;
+		} else if (stack.isIn(ItemTags.PLANKS)) {
+			per = 8;
+			value = 1;
 		} else {
-			p.sendMessage(Text.literal("Сюда сдают доски (4 шт = 1 монета) и железные слитки (1 шт = 2 монеты). "
-					+ "Сырьё — на складе, переплавка — в печи.").formatted(Formatting.YELLOW), false);
+			p.sendMessage(Text.literal("Сюда сдают добычу с рабочего поля: 3 самородка = 1 монета, слиток = 3, "
+					+ "2 бревна = 1. Возьми в руку и нажми ПКМ.").formatted(Formatting.YELLOW), false);
 			return;
 		}
+		int sets = stack.getCount() / per;
+		if (sets == 0) {
+			p.sendMessage(Text.literal("Мало: нужно хотя бы " + per + " шт.").formatted(Formatting.RED), true);
+			return;
+		}
+		stack.decrement(sets * per);
+		int pay = sets * value;
 		p.giveItemStack(new ItemStack(CbContent.MONEY, pay));
 		world().playSound(null, p.getBlockPos(), SoundEvents.ENTITY_VILLAGER_YES, SoundCategory.PLAYERS, 1.0F, 1.0F);
 		p.sendMessage(Text.literal("Работа принята: +" + pay + " монет.").formatted(Formatting.GREEN), true);
 	}
 
+	/** Work starts: the tool boxes at the field get work pickaxes and axes. */
 	private void refillSupplies() {
 		for (BlockPos pos : layout().workSupplies) {
 			if (world().getBlockEntity(pos) instanceof Inventory chest) {
 				chest.clear();
-				chest.setStack(0, new ItemStack(Items.OAK_LOG, 8));
-				chest.setStack(1, new ItemStack(Items.RAW_IRON, 4));
-				chest.setStack(2, new ItemStack(Items.COAL, 4));
+				for (int i = 0; i < 4 && i < chest.size(); i++) {
+					chest.setStack(i, new ItemStack(CbContent.WORK_PICKAXE));
+				}
+				for (int i = 4; i < 6 && i < chest.size(); i++) {
+					chest.setStack(i, new ItemStack(CbContent.WORK_AXE));
+				}
+			}
+		}
+	}
+
+	// ------------------------------------------------------------------ showers
+
+	/** Water runs from every shower whose faucet (a lever) is on. */
+	private void runShowers() {
+		ServerWorld world = world();
+		for (BlockPos head : layout().showerHeads) {
+			BlockState state = world.getBlockState(head);
+			if (!state.isOf(Blocks.LEVER) || !state.get(net.minecraft.block.LeverBlock.POWERED)
+					|| world.getClosestPlayer(head.getX(), head.getY(), head.getZ(), 48, false) == null) {
+				continue;
+			}
+			double x = head.getX() + 0.5;
+			double z = head.getZ() + 0.5;
+			world.spawnParticles(net.minecraft.particle.ParticleTypes.FALLING_WATER, x, head.getY() + 0.9, z, 4, 0.18, 0.02, 0.18, 0);
+			int floor = head.getY();
+			while (floor > head.getY() - 5 && world.getBlockState(new BlockPos(head.getX(), floor - 1, head.getZ()))
+					.getCollisionShape(world, head).isEmpty()) {
+				floor--;
+			}
+			world.spawnParticles(net.minecraft.particle.ParticleTypes.SPLASH, x, floor + 0.1, z, 3, 0.25, 0, 0.25, 0.1);
+			if (server.getTicks() % 30 == 0) {
+				world.playSound(null, head, SoundEvents.WEATHER_RAIN, SoundCategory.BLOCKS, 0.25F, 1.9F + world.random.nextFloat() * 0.1F);
 			}
 		}
 	}
@@ -1317,8 +2095,8 @@ public class CellbreakGame {
 		npc.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
 		npc.initialize(world(), world().getLocalDifficulty(pos), SpawnReason.EVENT, null);
 		npc.cell = cellIndex;
-		// Every third inmate trades; the second one always does, so the market is never empty.
-		boolean trader = number % 3 == 1;
+		// About one inmate in six trades (at most three); the second one always does.
+		boolean trader = number % 6 == 1 && number / 6 < MAX_TRADERS;
 		npc.setTrader(trader);
 		String nick = nicknames.get(number % nicknames.size());
 		npc.setCustomName(trader ? Text.literal(nick + " [торговец]").formatted(Formatting.GREEN)
@@ -1340,6 +2118,16 @@ public class CellbreakGame {
 			npc.solitaryUntil = 0;
 			current = null;
 		}
+		if (npc.infirmaryUntil != 0) {
+			if (ticks < npc.infirmaryUntil && layout.infirmarySpawn != null) {
+				return layout.infirmarySpawn;
+			}
+			npc.infirmaryUntil = 0;
+			current = null;
+		}
+		if (npc.lineupSlot != null) {
+			return npc.lineupSlot;
+		}
 		BlockPos cellSpawn = npc.cell >= 0 && npc.cell < layout.cells.size() ? layout.cells.get(npc.cell).spawn
 				: layout.npcGuardSpawn;
 		Phase phase = phase();
@@ -1347,7 +2135,7 @@ public class CellbreakGame {
 			return cellSpawn;
 		}
 		BlockBox zone = zoneBox(phase.zone);
-		if (zone != null) {
+		if (zone != null && !(npc.skipsMeal && phase.zone == Zone.CANTEEN)) {
 			return current != null && zone.contains(current) ? current : randomSpotIn(zone);
 		}
 		if (current != null) {
@@ -1372,7 +2160,9 @@ public class CellbreakGame {
 			int z = box.getMinZ() + r.nextInt(box.getBlockCountZ());
 			for (int y = box.getMaxY(); y >= box.getMinY(); y--) {
 				BlockPos p = new BlockPos(x, y, z);
-				if (!empty(world, p.down()) && empty(world, p) && empty(world, p.up())) {
+				BlockState below = world.getBlockState(p.down());
+				if (!empty(world, p.down()) && empty(world, p) && empty(world, p.up()) && !below.isIn(BlockTags.LEAVES)
+						&& !below.isIn(BlockTags.LOGS)) {
 					return p;
 				}
 			}
@@ -1445,9 +2235,21 @@ public class CellbreakGame {
 		return stack;
 	}
 
-	private static boolean holdsContraband(PlayerEntity p) {
-		return CbContent.CONTRABAND.contains(p.getMainHandStack().getItem())
-				|| CbContent.CONTRABAND.contains(p.getOffHandStack().getItem());
+	/** Whether a guard who looks at the prisoner sees forbidden things in their hands (work tools at work are fine). */
+	private boolean holdsContraband(ServerPlayerEntity p) {
+		return isForbidden(p, p.getMainHandStack().getItem()) || isForbidden(p, p.getOffHandStack().getItem());
+	}
+
+	private boolean isForbidden(ServerPlayerEntity p, Item item) {
+		if (CbContent.WORK_TOOLS.contains(item) && phase() == Phase.WORK) {
+			PrisonLayout l = layout();
+			BlockPos pos = p.getBlockPos();
+			if (l.workZone != null && l.workZone.expand(3).contains(pos)
+					|| l.workshopZone != null && l.workshopZone.contains(pos)) {
+				return false;
+			}
+		}
+		return CbContent.CONTRABAND.contains(item);
 	}
 
 	private static int countContraband(PlayerEntity p) {

@@ -9,8 +9,15 @@ import net.minecraft.client.render.entity.model.PlayerEntityModel;
 import net.minecraft.util.Identifier;
 
 public class PrisonerRenderer extends BipedEntityRenderer<PrisonerNpcEntity, PlayerEntityModel<PrisonerNpcEntity>> {
-	private static final Identifier TEXTURE = CbContent.id("textures/entity/prisoner.png");
-	private static final Identifier TRADER_TEXTURE = CbContent.id("textures/entity/prisoner_trader.png");
+	private static final Identifier[] TEXTURES = new Identifier[PrisonerNpcEntity.VARIANTS];
+	private static final Identifier[] TRADER_TEXTURES = new Identifier[PrisonerNpcEntity.VARIANTS];
+
+	static {
+		for (int i = 0; i < TEXTURES.length; i++) {
+			TEXTURES[i] = CbContent.id("textures/entity/prisoner_" + i + ".png");
+			TRADER_TEXTURES[i] = CbContent.id("textures/entity/prisoner_trader_" + i + ".png");
+		}
+	}
 
 	public PrisonerRenderer(EntityRendererFactory.Context ctx) {
 		super(ctx, new PlayerEntityModel<>(ctx.getPart(EntityModelLayers.PLAYER), false), 0.5F);
@@ -18,6 +25,7 @@ public class PrisonerRenderer extends BipedEntityRenderer<PrisonerNpcEntity, Pla
 
 	@Override
 	public Identifier getTexture(PrisonerNpcEntity entity) {
-		return entity.isTrader() ? TRADER_TEXTURE : TEXTURE;
+		int v = Math.floorMod(entity.getVariant(), TEXTURES.length);
+		return entity.isTrader() ? TRADER_TEXTURES[v] : TEXTURES[v];
 	}
 }
