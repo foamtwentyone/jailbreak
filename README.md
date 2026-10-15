@@ -9,6 +9,8 @@
 | ![Камера](docs/screenshots/cell.png) | ![Охранник](docs/screenshots/guard.png) |
 | ![Перекличка](docs/screenshots/roll_call.png) | ![Розыск](docs/screenshots/wanted.png) |
 | ![Тюрьма сверху](docs/screenshots/overview.png) | ![План тюрьмы](docs/screenshots/map.png) |
+| ![NPC-заключённые и снайперы](docs/screenshots/npc_inmates.png) | ![Металлодетектор](docs/screenshots/detector.png) |
+| ![В вентиляции](docs/screenshots/vent.png) | |
 
 Все текстуры и модели сделаны скриптом, ресурсов The Escapists в моде нет:
 
