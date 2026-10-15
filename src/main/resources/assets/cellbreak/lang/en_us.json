@@ -1,0 +1,18 @@
+{
+  "block.cellbreak.prison_wall": "Prison Wall",
+  "block.cellbreak.cracked_prison_wall": "Cracked Prison Wall",
+  "block.cellbreak.reinforced_wall": "Reinforced Wall",
+  "block.cellbreak.cell_bars": "Cell Bars",
+  "block.cellbreak.vent_cover": "Vent Cover",
+  "block.cellbreak.prison_floor": "Prison Floor",
+  "item.cellbreak.shiv": "Shiv",
+  "item.cellbreak.file": "File",
+  "item.cellbreak.makeshift_pickaxe": "Makeshift Pickaxe",
+  "item.cellbreak.makeshift_shovel": "Makeshift Shovel",
+  "item.cellbreak.cell_key": "Cell Key",
+  "item.cellbreak.handcuffs": "Handcuffs",
+  "item.cellbreak.baton": "Baton",
+  "item.cellbreak.guard_spawn_egg": "Guard Spawn Egg",
+  "entity.cellbreak.guard": "Guard",
+  "itemGroup.cellbreak": "Cellbreak"
+}

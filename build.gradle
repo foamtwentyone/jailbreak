@@ -1,0 +1,65 @@
+plugins {
+	id 'fabric-loom' version '1.11-SNAPSHOT'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+sourceSets {
+	// Dev-only helpers (fake players for testing). Not part of the released jar.
+	testmod {
+		compileClasspath += main.compileClasspath + main.output
+		runtimeClasspath += main.runtimeClasspath + main.output
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"cellbreak" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+		"cellbreak_test" {
+			sourceSet sourceSets.testmod
+		}
+	}
+
+	runs {
+		testServer {
+			server()
+			name = "Test Server"
+			source sourceSets.testmod
+			runDir "run"
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+}
+
+processResources {
+	inputs.property "version", project.version
+	filesMatching("fabric.mod.json") {
+		expand "version": project.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = 'UTF-8'
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}

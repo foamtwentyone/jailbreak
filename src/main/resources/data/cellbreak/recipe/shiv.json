@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [{"item":"minecraft:flint"},{"item":"minecraft:paper"}],
+  "result": { "id": "cellbreak:shiv", "count": 1 }
+}

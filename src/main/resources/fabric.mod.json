@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "cellbreak",
+	"version": "${version}",
+	"name": "Cellbreak",
+	"description": "Побег из тюрьмы: заключённые против охраны.",
+	"authors": ["foamtwentyone"],
+	"license": "All rights reserved",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["cellbreak.Cellbreak"],
+		"client": ["cellbreak.client.CellbreakClient"]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

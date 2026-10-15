@@ -1,0 +1,18 @@
+{
+  "block.cellbreak.prison_wall": "Тюремная стена",
+  "block.cellbreak.cracked_prison_wall": "Тюремная стена с трещиной",
+  "block.cellbreak.reinforced_wall": "Усиленная стена",
+  "block.cellbreak.cell_bars": "Решётка",
+  "block.cellbreak.vent_cover": "Решётка вентиляции",
+  "block.cellbreak.prison_floor": "Тюремный пол",
+  "item.cellbreak.shiv": "Заточка",
+  "item.cellbreak.file": "Напильник",
+  "item.cellbreak.makeshift_pickaxe": "Самодельная кирка",
+  "item.cellbreak.makeshift_shovel": "Самодельная лопата",
+  "item.cellbreak.cell_key": "Ключ от камер",
+  "item.cellbreak.handcuffs": "Наручники",
+  "item.cellbreak.baton": "Дубинка",
+  "item.cellbreak.guard_spawn_egg": "Яйцо призыва охранника",
+  "entity.cellbreak.guard": "Охранник",
+  "itemGroup.cellbreak": "Cellbreak"
+}
