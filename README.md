@@ -4,6 +4,14 @@
 в тюрьме и готовят побег, другие их охраняют. Если охранников-игроков мало, недостающие
 посты занимают NPC-охранники.
 
+| | |
+|---|---|
+| ![Камера](docs/screenshots/cell.png) | ![Охранник](docs/screenshots/guard.png) |
+| ![Перекличка](docs/screenshots/roll_call.png) | ![Розыск](docs/screenshots/wanted.png) |
+| ![Тюрьма сверху](docs/screenshots/overview.png) | ![План тюрьмы](docs/screenshots/map.png) |
+
+Все текстуры и модели сделаны скриптом, ресурсов The Escapists в моде нет:
+
 ![Текстуры](preview.png)
 
 ## Установка (нужна каждому игроку)

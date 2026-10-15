@@ -49,7 +49,7 @@ loom {
 			name = "Test Client"
 			source sourceSets.testmodClient
 			runDir "run_client"
-			programArgs "--username", "Tester"
+			programArgs "--username", "Tester", "--width", "1280", "--height", "720"
 		}
 	}
 }
