@@ -26,6 +26,8 @@ import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import cellbreak.block.FakeBlock;
 import net.minecraft.util.TypedActionResult;
 import net.minecraft.block.BedBlock;
+import net.minecraft.block.ButtonBlock;
+import net.minecraft.block.LeverBlock;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.DoorBlock;
@@ -154,6 +156,12 @@ public class Cellbreak implements ModInitializer {
 					return ActionResult.FAIL;
 				}
 				return ActionResult.PASS;
+			}
+			// The map's own door buttons and levers are dead during a round: the routine (and keys) run the doors.
+			if ((state.getBlock() instanceof ButtonBlock || state.getBlock() instanceof LeverBlock) && sp != null
+					&& game.isRunning() && !sp.isCreative() && nearIronDoor(world, pos)) {
+				sp.sendMessage(Text.literal("Не работает. Двери открывает только охрана.").formatted(Formatting.GRAY), true);
+				return ActionResult.FAIL;
 			}
 			// Chalk drawings: prisoners draw, guards wipe them off.
 			if (state.isOf(CbContent.GRAFFITI) && sp != null && game.isGuard(sp)) {
@@ -385,5 +393,14 @@ public class Cellbreak implements ModInitializer {
 		game.data(p).wanted = false;
 		game.addHeat(p, IntegerArgumentType.getInteger(c, "value"));
 		return 1;
+	}
+
+	private static boolean nearIronDoor(net.minecraft.world.World world, BlockPos pos) {
+		for (BlockPos p : BlockPos.iterate(pos.add(-2, -2, -2), pos.add(2, 2, 2))) {
+			if (world.getBlockState(p).isOf(Blocks.IRON_DOOR)) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

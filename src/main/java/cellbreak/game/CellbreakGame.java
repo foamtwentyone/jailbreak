@@ -476,7 +476,8 @@ public class CellbreakGame {
 
 		scheduleIndex = 0;
 		beginPhase();
-		broadcast(Text.literal("Раунд начался! Заключённых: " + prisoners.size() + " (+" + npcCount + " NPC), охранников: "
+		broadcast(Text.literal("Раунд начался (Cellbreak " + net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("cellbreak")
+				.map(m -> m.getMetadata().getVersion().getFriendlyString()).orElse("?") + ")! Заключённых: " + prisoners.size() + " (+" + npcCount + " NPC), охранников: "
 				+ guards.size() + " (+" + npcGuardCount + " NPC, " + layout.sniperPosts.size() + " снайперов). Длительность: "
 				+ minutes + " мин.").formatted(Formatting.GOLD));
 		return null;

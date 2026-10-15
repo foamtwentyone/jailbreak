@@ -444,6 +444,10 @@ public class CellbreakTest implements ModInitializer {
 					reply(c, sb.toString());
 					return 1;
 				}))
+				.then(CommandManager.literal("reach").then(CommandManager.argument("pos", BlockPosArgumentType.blockPos()).executes(c -> {
+					reply(c, reach(c.getSource().getWorld(), BlockPosArgumentType.getBlockPos(c, "pos")));
+					return 1;
+				})))
 				.then(CommandManager.literal("map").executes(CellbreakTest::map)));
 	}
 
@@ -620,5 +624,72 @@ public class CellbreakTest implements ModInitializer {
 		@Override
 		public void transitionOutbound(NetworkState<?> state) {
 		}
+	}
+
+	private static boolean passable(ServerWorld w, BlockPos p) {
+		net.minecraft.block.BlockState s = w.getBlockState(p);
+		if (s.isOf(net.minecraft.block.Blocks.IRON_DOOR)) {
+			return s.get(net.minecraft.block.DoorBlock.OPEN);
+		}
+		if (s.getBlock() instanceof net.minecraft.block.DoorBlock || s.getBlock() instanceof net.minecraft.block.FenceGateBlock
+				|| s.getBlock() instanceof net.minecraft.block.TrapdoorBlock && !s.isOf(net.minecraft.block.Blocks.IRON_TRAPDOOR)) {
+			return true;
+		}
+		return s.getCollisionShape(w, p).isEmpty();
+	}
+
+	/** Flood fill over walkable spots from pos; reports the first places with open sky and the route there. */
+	private static String reach(ServerWorld w, BlockPos start) {
+		java.util.Map<BlockPos, BlockPos> parent = new java.util.HashMap<>();
+		java.util.ArrayDeque<BlockPos> q = new java.util.ArrayDeque<>();
+		parent.put(start, start);
+		q.add(start);
+		while (!q.isEmpty() && parent.size() < 300000) {
+			BlockPos cur = q.poll();
+			if (w.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING, cur.getX(), cur.getZ()) <= cur.getY()) {
+				StringBuilder sb = new StringBuilder("SKY at " + cur.toShortString() + " visited=" + parent.size() + " route:");
+				java.util.List<BlockPos> route = new java.util.ArrayList<>();
+				for (BlockPos b = cur; !b.equals(start); b = parent.get(b)) route.add(b);
+				java.util.Collections.reverse(route);
+				for (int i = 0; i < route.size(); i++) {
+					BlockPos b = route.get(i);
+					boolean door = w.getBlockState(b).getBlock() instanceof net.minecraft.block.DoorBlock;
+					if (door || i % 6 == 0 || i == route.size() - 1) sb.append(door ? " DOOR " : " ").append(b.toShortString());
+				}
+				return sb.toString();
+			}
+			boolean ladder = w.getBlockState(cur).isIn(net.minecraft.registry.tag.BlockTags.CLIMBABLE);
+			for (net.minecraft.util.math.Direction d : net.minecraft.util.math.Direction.values()) {
+				for (int dy = -1; dy <= 1; dy++) {
+					BlockPos n;
+					if (d.getAxis().isVertical()) {
+						if (dy != 0 || !ladder && d == net.minecraft.util.math.Direction.UP) continue;
+						n = cur.offset(d);
+					} else {
+						n = cur.offset(d).up(dy);
+					}
+					if (parent.containsKey(n) || !passable(w, n) || !passable(w, n.up())) continue;
+					if (dy == 1 && !passable(w, cur.up(2))) continue;
+					boolean ground = !w.getBlockState(n.down()).getCollisionShape(w, n.down()).isEmpty()
+							|| w.getBlockState(n).isIn(net.minecraft.registry.tag.BlockTags.CLIMBABLE)
+							|| w.getBlockState(n.down()).isIn(net.minecraft.registry.tag.BlockTags.CLIMBABLE)
+							|| !w.getFluidState(n).isEmpty();
+					if (!ground && !(dy == -1 || d == net.minecraft.util.math.Direction.DOWN)) {
+						// walking off a ledge: fall down to the floor
+						BlockPos f = n;
+						while (f.getY() > w.getBottomY() && passable(w, f.down())) f = f.down();
+						if (parent.containsKey(f)) continue;
+						parent.put(n, cur);
+						parent.put(f, n);
+						q.add(f);
+						continue;
+					}
+					if (!ground) continue;
+					parent.put(n, cur);
+					q.add(n);
+				}
+			}
+		}
+		return "no sky reachable, visited=" + parent.size();
 	}
 }
