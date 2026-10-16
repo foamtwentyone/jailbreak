@@ -44,6 +44,10 @@ public class PrisonLayout {
 	public BlockBox workZone;
 	public BlockBox yardZone;
 	public BlockBox showerZone;
+	/** The gym (optional): machines and punching bags work there. */
+	public BlockBox gymZone;
+	public final List<BlockPos> gymMachines = new ArrayList<>();
+	public final List<BlockPos> punchBags = new ArrayList<>();
 	/** Chests refilled with raw materials (logs, raw iron, coal) when work starts. */
 	public final List<BlockPos> workSupplies = new ArrayList<>();
 	/** Where snipers stand (on towers or walls). */
@@ -164,6 +168,9 @@ public class PrisonLayout {
 		putBox(nbt, "work", workZone);
 		putBox(nbt, "yard", yardZone);
 		putBox(nbt, "shower", showerZone);
+		putBox(nbt, "gym", gymZone);
+		nbt.putLongArray("gymMachines", longs(gymMachines));
+		nbt.putLongArray("punchBags", longs(punchBags));
 		nbt.putLongArray("workSupplies", longs(workSupplies));
 		nbt.putLongArray("snipers", longs(sniperPosts));
 		putPos(nbt, "solitarySpawn", solitarySpawn);
@@ -207,6 +214,13 @@ public class PrisonLayout {
 		l.workZone = getBox(nbt, "work");
 		l.yardZone = getBox(nbt, "yard");
 		l.showerZone = getBox(nbt, "shower");
+		l.gymZone = getBox(nbt, "gym");
+		for (long p : nbt.getLongArray("gymMachines")) {
+			l.gymMachines.add(BlockPos.fromLong(p));
+		}
+		for (long p : nbt.getLongArray("punchBags")) {
+			l.punchBags.add(BlockPos.fromLong(p));
+		}
 		for (long p : nbt.getLongArray("workSupplies")) {
 			l.workSupplies.add(BlockPos.fromLong(p));
 		}

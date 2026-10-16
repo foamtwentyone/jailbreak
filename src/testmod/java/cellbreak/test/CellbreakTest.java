@@ -239,7 +239,11 @@ public class CellbreakTest implements ModInitializer {
 					StringBuilder sb = new StringBuilder();
 					sb.append(p.getName().getString()).append(" at ").append(p.getBlockPos().toShortString())
 							.append(" mode=").append(p.interactionManager.getGameMode()).append(" hp=").append(p.getHealth())
-							.append(" glowing=").append(p.isGlowing()).append(" pose=").append(p.getPose()).append("\ninventory:");
+							.append(" glowing=").append(p.isGlowing()).append(" pose=").append(p.getPose())
+							.append(" heat=").append(cellbreak.game.CellbreakGame.get(p.getServer()).data(p) == null ? -1
+									: (int) cellbreak.game.CellbreakGame.get(p.getServer()).data(p).heat)
+							.append(" effects=").append(p.getStatusEffects().stream().map(e -> e.getEffectType().getIdAsString()).toList())
+							.append("\ninventory:");
 					for (int i = 0; i < p.getInventory().size(); i++) {
 						if (!p.getInventory().getStack(i).isEmpty()) {
 							sb.append(' ').append(p.getInventory().getStack(i));

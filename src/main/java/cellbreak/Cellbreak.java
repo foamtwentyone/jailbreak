@@ -163,6 +163,15 @@ public class Cellbreak implements ModInitializer {
 				sp.sendMessage(Text.literal("Не работает. Двери открывает только охрана.").formatted(Formatting.GRAY), true);
 				return ActionResult.FAIL;
 			}
+			// Gym machines and punching bags: one rep per click.
+			if (sp != null && game.useGym(sp, pos)) {
+				return ActionResult.SUCCESS;
+			}
+			// The kitchen chest: anybody may open it, but not unnoticed.
+			if (sp != null && game.isFoodChest(pos)) {
+				game.onFoodChestOpened(sp, pos);
+				return ActionResult.PASS;
+			}
 			// Chalk drawings: prisoners draw, guards wipe them off.
 			if (state.isOf(CbContent.GRAFFITI) && sp != null && game.isGuard(sp)) {
 				game.wipeGraffiti(sp, pos);

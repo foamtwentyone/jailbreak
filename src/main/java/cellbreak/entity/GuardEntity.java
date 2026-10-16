@@ -49,7 +49,7 @@ import net.minecraft.world.World;
  * A guard can also be a sniper: standing on a tower, watching the yard.
  */
 public class GuardEntity extends PathAwareEntity {
-	public static final int VARIANTS = 6;
+	public static final int VARIANTS = 12;
 	private static final TrackedData<Integer> VARIANT = DataTracker.registerData(GuardEntity.class,
 			TrackedDataHandlerRegistry.INTEGER);
 	private static final int HITS_TO_ARREST = 3;

@@ -103,6 +103,18 @@ public class CookEntity extends PathAwareEntity {
 						.formatted(isCheerful() ? Formatting.YELLOW : Formatting.GRAY));
 	}
 
+	private static final String[] CHEST_GLOOMY = { "Руки убрал от продуктов. Сейчас охрану позову.",
+			"Это общак кухни, а не твой. Положи на место.", "Ещё раз полезешь — без ужина неделю." };
+	private static final String[] CHEST_CHEERFUL = { "Эй-эй, дорогой, это же на всех! Охрана, тут гость!",
+			"Ай-яй-яй, в сундук к повару? Нехорошо!", "Ну куда, ну куда?! Это на ужин всему блоку!" };
+
+	/** What the cook says to someone rummaging in the kitchen chest. */
+	public Text chestLine() {
+		String[] lines = isCheerful() ? CHEST_CHEERFUL : CHEST_GLOOMY;
+		return Text.literal(getName().getString() + ": ").formatted(Formatting.GOLD)
+				.append(Text.literal(lines[random.nextInt(lines.length)]).formatted(Formatting.RED));
+	}
+
 	@Override
 	public ActionResult interactMob(PlayerEntity player, Hand hand) {
 		if (hand != Hand.MAIN_HAND) {

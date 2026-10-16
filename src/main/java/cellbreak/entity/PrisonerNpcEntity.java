@@ -153,10 +153,10 @@ public class PrisonerNpcEntity extends MerchantEntity {
 
 	/** What the black-market traders can have on offer: price in money, item, count. */
 	private static final Object[][] BLACK_MARKET = {
-			{ 15, CbContent.FILE, 1 }, { 20, CbContent.MAKESHIFT_PICKAXE, 1 }, { 15, CbContent.MAKESHIFT_SHOVEL, 1 },
-			{ 12, CbContent.SHIV, 1 }, { 10, CbContent.FAKE_WALL, 1 }, { 10, CbContent.FAKE_VENT, 1 },
-			{ 6, CbContent.CHALK, 1 }, { 5, CbContent.RAG, 1 }, { 5, Items.STRING, 2 }, { 5, Items.FLINT, 1 },
-			{ 4, Items.PAPER, 2 }, { 5, Items.CLAY_BALL, 1 }, { 6, Items.IRON_NUGGET, 2 }, { 5, Items.COOKED_BEEF, 2 } };
+			{ 40, CbContent.FILE, 1 }, { 55, CbContent.MAKESHIFT_PICKAXE, 1 }, { 40, CbContent.MAKESHIFT_SHOVEL, 1 },
+			{ 30, CbContent.SHIV, 1 }, { 25, CbContent.FAKE_WALL, 1 }, { 25, CbContent.FAKE_VENT, 1 },
+			{ 12, CbContent.CHALK, 1 }, { 10, CbContent.RAG, 1 }, { 10, Items.STRING, 2 }, { 10, Items.FLINT, 1 },
+			{ 8, Items.PAPER, 2 }, { 10, Items.CLAY_BALL, 1 }, { 12, Items.IRON_NUGGET, 2 }, { 8, Items.COOKED_BEEF, 2 } };
 
 	public int cell = -1;
 	/** While above 0 the inmate sits in solitary (found with contraband at a search). */
@@ -561,6 +561,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 					npc.setBodyYaw(yaw);
 				} else if (working && npc.getRandom().nextInt(15) == 0) {
 					npc.swingHand(Hand.MAIN_HAND);
+				} else if (npc.getRandom().nextInt(10) == 0 && game.isTrainingAt(npc.getBlockPos())) {
+					game.npcTrains(npc);
 				}
 				return;
 			}
@@ -611,7 +613,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				npc.getNavigation().stop();
 				// In the line-up they stand still and wait; elsewhere they idle a bit before moving on.
 				// In the food queue they step up as soon as the one in front is served.
-				waitTicks = npc.lineupSlot != null ? 40 : game.isQueuing(npc) ? 4 : 40 + npc.getRandom().nextInt(100);
+				waitTicks = npc.lineupSlot != null ? 40 : game.isQueuing(npc) ? 4
+						: game.isTrainingAt(destination) ? 160 + npc.getRandom().nextInt(160) : 40 + npc.getRandom().nextInt(100);
 				if (npc.lineupSlot == null) {
 					destination = null;
 				}

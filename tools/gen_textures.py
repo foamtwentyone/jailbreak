@@ -1015,3 +1015,282 @@ def main_v4(root):
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------- 0.3.8: better guards
+
+OVERLAY_PARTS = {
+    "hat": (32, 0, 8, 8, 8),
+    "jacket": (16, 32, 8, 12, 4),
+    "right_sleeve": (40, 32, 4, 12, 4),
+    "left_sleeve": (48, 48, 4, 12, 4),
+    "right_pants": (0, 32, 4, 12, 4),
+    "left_pants": (0, 48, 4, 12, 4),
+}
+
+
+def paint_skin_layers(painter, seed):
+    """Like paint_skin, but also paints the outer layer and uses fine fabric noise."""
+    r = random.Random(seed)
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    px = img.load()
+    for parts in (PARTS, OVERLAY_PARTS):
+        for part, (u, v, w, h, d) in parts.items():
+            for face, (fx, fy, fw, fh) in face_rects(u, v, w, h, d).items():
+                for y in range(fh):
+                    for x in range(fw):
+                        c = painter(part, face, x, y, fw, fh)
+                        if c is None:
+                            continue
+                        n = r.randint(-4, 4)
+                        a = c[3] if len(c) == 4 else 255
+                        px[fx + x, fy + y] = tuple(max(0, min(255, v + n)) for v in c[:3]) + (a,)
+    return img
+
+
+def mix(a, b, t):
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+UNIFORMS = {
+    # name: top, trousers, cap kind, accent
+    "police": dict(top=(40, 52, 92), low=(30, 38, 68), cap="peaked", band=(176, 40, 44), accent=(212, 176, 60),
+                   patch=(176, 40, 44), stripe=(176, 40, 44)),
+    "shirt": dict(top=(150, 172, 204), low=(32, 40, 70), cap="peaked", band=(176, 40, 44), accent=(212, 176, 60),
+                  patch=(40, 60, 120), stripe=None, short=True, tie=(30, 36, 60)),
+    "fsin": dict(top=(88, 100, 116), low=(76, 88, 104), cap="beret", band=(24, 24, 28), accent=(220, 180, 60),
+                 patch=(230, 196, 60), stripe=None, camo=((70, 80, 96), (110, 122, 136))),
+    "tactical": dict(top=(34, 34, 38), low=(30, 30, 34), cap="helmet", band=(44, 46, 42), accent=(150, 150, 150),
+                     patch=(200, 200, 200), stripe=None, vest=(52, 54, 46), gloves=True),
+    "officer": dict(top=(92, 96, 64), low=(58, 62, 44), cap="peaked", band=(60, 110, 60), accent=(220, 186, 70),
+                    patch=(60, 110, 60), stripe=(60, 110, 60)),
+    "winter": dict(top=(54, 60, 74), low=(40, 44, 56), cap="ushanka", band=(150, 142, 128), accent=(212, 176, 60),
+                   patch=(176, 40, 44), stripe=None, fur=(150, 142, 128)),
+}
+
+
+def guard_v5_painter(look, uni, seed):
+    u = UNIFORMS[uni]
+    r = random.Random(seed)
+    balaclava = uni == "tactical" and look.get("balaclava")
+    shades = look.get("shades")
+    black = (20, 20, 24)
+    boot = (26, 24, 24)
+    camo_cache = {}
+
+    def cloth(base, part, face, x, y, h):
+        c = base
+        if "camo" in u and base in (u["top"], u["low"]):
+            key = (part, face, x // 2, y // 2)
+            if key not in camo_cache:
+                camo_cache[key] = r.choice([base, base, u["camo"][0], u["camo"][1]])
+            c = camo_cache[key]
+        # light from above: a soft gradient down the part
+        return shade(c, 1.08 - 0.16 * y / max(1, h - 1))[:3]
+
+    def head(face, x, y):
+        if balaclava:
+            if face == "front" and y == 4 and 1 <= x <= 6:
+                return (240, 240, 240) if x in (1, 6) else (look["eyes"] if x in (2, 5) else look["skin"])
+            if face == "front" and y == 3 and 1 <= x <= 6:
+                return look["skin"]
+            return (24, 24, 26) if (x + y) % 3 else (32, 32, 34)
+        c = person_head(face, x, y, look)
+        if shades and face == "front" and y == 4 and 1 <= x <= 6:
+            return (18, 18, 22) if x != 3 and x != 4 else (70, 70, 74)
+        if look.get("glasses") and face == "front" and y == 4 and x in (0, 3, 4, 7):
+            return (60, 60, 64)
+        return c
+
+    def hat(face, x, y):
+        cap = u["cap"]
+        if cap == "peaked":
+            crown = shade(u["top"], 0.9)[:3] if uni != "shirt" else (34, 42, 74)
+            if face == "top":
+                return mix(crown, (255, 255, 255), 0.06) if 1 <= x <= 6 and 1 <= y <= 6 else crown
+            if face == "bottom":
+                return None
+            if y == 0:
+                return crown
+            if y == 1:
+                if face == "front" and 3 <= x <= 4:
+                    return u["accent"]  # cockade
+                return u["band"]
+            if y == 2 and face == "front":
+                return black  # visor
+            return None
+        if cap == "beret":
+            b = (22, 22, 26)
+            if face == "top":
+                return b
+            if face == "bottom":
+                return None
+            if y == 0:
+                return b
+            if y == 1 and (face == "right" or (face == "front" and x <= 3) or (face == "back" and x >= 4)):
+                return b
+            if face == "front" and y == 1 and x == 5:
+                return u["accent"]
+            return None
+        if cap == "helmet":
+            hm = (40, 44, 38)
+            if face == "top":
+                return shade(hm, 1.1)[:3] if (x + y) % 4 else hm
+            if face == "bottom":
+                return None
+            if y <= 1:
+                return hm
+            if y == 2 and face != "front":
+                return hm
+            if y == 2 and face == "front":
+                return (30, 30, 30) if x in (0, 7) else (90, 110, 120)  # goggles on the brim
+            if face in ("left", "right") and y in (3, 4, 5) and x in (3, 4):
+                return (30, 30, 30)  # strap
+            return None
+        if cap == "ushanka":
+            f = u["fur"]
+            fur = shade(f, 1.18)[:3] if (x * 7 + y * 3) % 5 == 0 else (shade(f, 0.85)[:3] if (x * 3 + y * 5) % 7 == 0 else f)
+            if face == "top":
+                return shade(u["top"], 0.9)[:3] if 2 <= x <= 5 and 2 <= y <= 5 else fur  # cloth crown, fur rim
+            if face == "bottom":
+                return None
+            if y <= 1:
+                if face == "front" and y == 1 and 3 <= x <= 4:
+                    return u["accent"]
+                return fur
+            if face in ("left", "right") and y <= 6:
+                return fur  # ear flaps
+            if face == "back" and y <= 3:
+                return fur
+            return None
+        return None
+
+    def body(face, x, y, h):
+        top, low = u["top"], u["low"]
+        if face in ("top", "bottom"):
+            return cloth(top if face == "top" else low, "body", face, x, y, h)
+        if y == 9:
+            if face == "front" and 3 <= x <= 4:
+                return (200, 200, 206) if uni == "tactical" else u["accent"]  # buckle
+            if face == "left" and x in (1, 2):
+                return (60, 40, 28)  # holster
+            return black
+        if y > 9:
+            if face == "left" and x in (1, 2) and y == 10:
+                return (60, 40, 28)
+            return cloth(low, "body", face, x, y, h)
+        if face == "front":
+            if y == 0 and 2 <= x <= 5:
+                if "fur" in u:
+                    return u["fur"]
+                return (230, 232, 236) if uni not in ("tactical", "shirt") else shade(top, 0.8)[:3]
+            if u.get("tie") and x in (3, 4) and 1 <= y <= 6:
+                return u["tie"] if y < 6 or x == 3 else shade(u["tie"], 0.8)[:3]
+            if (1 <= x <= 2 or 5 <= x <= 6) and y in (2, 3):
+                return shade(top, 0.82)[:3] if y == 2 else cloth(top, "body", face, x, y, h)  # pocket flaps
+            if x == 5 and y == 4 and uni != "tactical":
+                return u["accent"]  # badge
+            if x == 1 and y == 4 and uni not in ("tactical",):
+                return (226, 226, 230)  # name tag
+            if x in (3, 4) and y > 0 and not u.get("tie") and uni != "tactical":
+                return shade(top, 0.86)[:3] if y % 3 else (190, 190, 196)  # placket, buttons
+            return cloth(top, "body", face, x, y, h)
+        if face == "back" and y == 0 and "fur" in u:
+            return u["fur"]
+        if face == "back" and 2 <= y <= 3 and 1 <= x <= 6 and uni in ("police", "fsin", "winter"):
+            # a reflective word across the back ("ОХРАНА" from afar)
+            return (210, 210, 200) if (x + y) % 2 == 0 or y == 2 else shade(top, 0.9)[:3]
+        return cloth(top, "body", face, x, y, h)
+
+    def jacket(face, x, y, h):
+        if uni != "tactical":
+            return None
+        v = u["vest"]
+        if face in ("top", "bottom"):
+            return None
+        if y < 1 or y > 8:
+            return None
+        if face == "front":
+            if 6 <= y <= 8:
+                return shade(v, 0.8)[:3] if x in (0, 3, 4, 7) else v  # magazine pouches
+            if y == 3 and 1 <= x <= 6:
+                return (220, 220, 220) if x % 2 else v  # "ПОЛИЦИЯ" patch, from afar
+            if x == 6 and y in (1, 2):
+                return black  # radio
+            return v
+        if face == "back":
+            if 3 <= y <= 4 and 1 <= x <= 6:
+                return (220, 220, 220) if (x + y) % 2 else v
+            return v
+        return v if y <= 7 else None
+
+    def arm(part, face, x, y, h):
+        top = u["top"]
+        sleeve_end = 4 if u.get("short") else 9
+        outer = "right" if part == "right_arm" else "left"
+        if face == "bottom" or y >= 10:
+            return (28, 28, 30) if u.get("gloves") else look["skin"]
+        if y >= sleeve_end:
+            if y == 9 and not u.get("short"):
+                return shade(top, 0.75)[:3]  # cuff
+            return look["skin"] if not u.get("gloves") or y < 9 else (28, 28, 30)
+        if face == "top":
+            if uni in ("police", "officer", "shirt"):
+                return u["accent"] if x in (1, 2) else shade(top, 0.9)[:3]  # epaulette
+            return cloth(top, part, face, x, y, h)
+        if face == outer and 1 <= y <= 3 and 1 <= x <= 2:
+            return u["patch"] if not (x == 2 and y == 3) else shade(u["patch"], 0.7)[:3]  # shoulder patch
+        if y == sleeve_end - 1 and u.get("short"):
+            return shade(top, 0.85)[:3]
+        return cloth(top, part, face, x, y, h)
+
+    def leg(part, face, x, y, h):
+        low = u["low"]
+        if face == "bottom" or y >= 9:
+            if y == 9 and face != "bottom":
+                return (44, 40, 38)  # boot top
+            if y == 10 and face == "front" and x in (1, 2):
+                return (70, 66, 60)  # laces
+            return boot
+        outer = "right" if part == "right_leg" else "left"
+        if u.get("stripe") and face == outer and x == 2:
+            return u["stripe"]
+        if uni in ("tactical", "fsin") and face == outer and 4 <= y <= 6 and 1 <= x <= 2:
+            return shade(low, 0.8)[:3] if y == 4 else low  # cargo pocket
+        if face == "front" and y == 0:
+            return shade(low, 0.85)[:3]
+        return cloth(low, part, face, x, y, h)
+
+    def paint(part, face, x, y, w, h):
+        if part == "head":
+            return head(face, x, y)
+        if part == "hat":
+            return hat(face, x, y)
+        if part == "body":
+            return body(face, x, y, h)
+        if part == "jacket":
+            return jacket(face, x, y, h)
+        if part in ("right_arm", "left_arm"):
+            return arm(part, face, x, y, h)
+        if part in ("right_leg", "left_leg"):
+            return leg(part, face, x, y, h)
+        return None
+    return paint
+
+
+GUARD_V5 = ["police", "police", "shirt", "fsin", "fsin", "tactical", "tactical", "officer", "winter", "winter", "police", "shirt"]
+
+
+def main_v5(root):
+    entity = os.path.join(root, "textures", "entity")
+    for i, uni in enumerate(GUARD_V5):
+        r = random.Random(8100 + i)
+        look = make_look(r)
+        look["style"] = r.choice(["short", "buzz", "bald", "short"])
+        look["beard"] = r.choice(["none", "none", "mustache", "stubble"])
+        look["scar"] = r.random() < 0.15
+        look["tear"] = False
+        look["shades"] = r.random() < 0.3
+        look["glasses"] = not look["shades"] and r.random() < 0.2
+        look["balaclava"] = i == 6
+        paint_skin_layers(guard_v5_painter(look, uni, 8200 + i), 8300 + i).save(os.path.join(entity, "guard_%d.png" % i))

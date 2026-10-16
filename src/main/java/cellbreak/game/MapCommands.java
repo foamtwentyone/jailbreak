@@ -141,6 +141,18 @@ public final class MapCommands {
 					layout(c).foodChests.add(p);
 					ok(c, "Сундук с едой на кухне №" + layout(c).foodChests.size() + ": " + p.toShortString());
 				})))
+				.then(CommandManager.literal("gym").then(box((c, b) -> {
+					layout(c).gymZone = b;
+					ok(c, "Качалка: " + str(b));
+				})))
+				.then(CommandManager.literal("gymmachine").then(pos((c, p) -> {
+					layout(c).gymMachines.add(p);
+					ok(c, "Тренажёр (блок) №" + layout(c).gymMachines.size() + ": " + p.toShortString());
+				})))
+				.then(CommandManager.literal("punchbag").then(pos((c, p) -> {
+					layout(c).punchBags.add(p);
+					ok(c, "Боксёрская груша (блок) №" + layout(c).punchBags.size() + ": " + p.toShortString());
+				})))
 				.then(CommandManager.literal("walk").then(pos((c, p) -> {
 					layout(c).walkPoints.add(p);
 					ok(c, "Точка прогулочной тропинки №" + layout(c).walkPoints.size() + ": " + p.toShortString());

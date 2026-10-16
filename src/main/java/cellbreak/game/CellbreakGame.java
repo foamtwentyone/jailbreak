@@ -82,7 +82,7 @@ public class CellbreakGame {
 
 	/** Where prisoners must be during a part of the routine. */
 	public enum Zone {
-		ROLL_CALL, CANTEEN, WORK, YARD, SHOWER, CELLS, ANYWHERE
+		ROLL_CALL, CANTEEN, WORK, YARD, GYM, SHOWER, CELLS, ANYWHERE
 	}
 
 	public enum Phase {
@@ -92,6 +92,7 @@ public class CellbreakGame {
 		WORK("Работа", "На рабочее поле! Добывай руду и брёвна, сдавай на столе в мастерской.", 3000, Zone.WORK),
 		FREE_TIME("Свободное время", "Можно ходить где угодно (кроме улицы ночью).", 6000, Zone.ANYWHERE),
 		EXERCISE("Прогулка", "Все на прогулочный двор!", 7000, Zone.YARD),
+		GYM("Качалка", "Все в качалку! Тренажёры и груша — ПКМ.", 8000, Zone.GYM),
 		SHOWER("Душ", "Все в душевую!", 9000, Zone.SHOWER),
 		DINNER("Ужин", "Все в столовую!", 11000, Zone.CANTEEN),
 		EVENING_FREE("Свободное время", "Можно ходить где угодно.", 12000, Zone.ANYWHERE),
@@ -117,8 +118,8 @@ public class CellbreakGame {
 
 	/** The daily routine, in seconds: about 12.5 minutes per day. */
 	private static final Object[][] SCHEDULE = {
-			{ Phase.WAKE_UP, 12 }, { Phase.ROLL_CALL, 50 }, { Phase.BREAKFAST, 60 }, { Phase.WORK, 120 }, { Phase.FREE_TIME, 90 },
-			{ Phase.EXERCISE, 60 }, { Phase.SHOWER, 45 }, { Phase.DINNER, 60 }, { Phase.EVENING_FREE, 60 },
+			{ Phase.WAKE_UP, 12 }, { Phase.ROLL_CALL, 50 }, { Phase.BREAKFAST, 60 }, { Phase.WORK, 120 }, { Phase.FREE_TIME, 60 },
+			{ Phase.EXERCISE, 60 }, { Phase.GYM, 60 }, { Phase.SHOWER, 45 }, { Phase.DINNER, 60 }, { Phase.EVENING_FREE, 60 },
 			{ Phase.EVENING_ROLL_CALL, 50 }, { Phase.LIGHTS_OUT, 150 },
 	};
 
@@ -174,6 +175,10 @@ public class CellbreakGame {
 		long lastFightTick = -10000;
 		/** The last punch thrown at another inmate, seen or not. */
 		long lastHitTick = -10000;
+		long lastChestFuss = -10000;
+		long lastRepTick = -10000;
+		int reps;
+		String exercise;
 		long lastTalkTick = -10000;
 		BlockPos lineupSlot;
 
@@ -214,6 +219,8 @@ public class CellbreakGame {
 	/** The doors to the outside are shut for the evening (they stay open a little after the evening free time). */
 	private boolean outdoorsClosed;
 	private static final int OUTDOOR_GRACE_SECONDS = 15;
+	/** Time to get to the roll call before missing it starts to count. */
+	private static final int ROLL_CALL_GRACE_SECONDS = 15;
 	private boolean cleanedLeftovers;
 	private List<BlockPos> lineup = List.of();
 	private BlockPos lineupLook;
@@ -292,6 +299,7 @@ public class CellbreakGame {
 			case WORK -> l.workZone;
 			case YARD -> l.yardZone;
 			case SHOWER -> l.showerZone;
+			case GYM -> l.gymZone;
 			default -> null;
 		};
 	}
@@ -600,7 +608,7 @@ public class CellbreakGame {
 		if (phase().zone == Zone.CANTEEN && ticks % 10 == 0) {
 			serveQueue();
 		}
-		if (phase().zone == Zone.CANTEEN && ticks % 20 == 0) {
+		if (phase().zone == Zone.CANTEEN && ticks % 2 == 0) {
 			eatAnimations();
 		}
 		if (ticks % 20 == 0) {
@@ -683,7 +691,7 @@ public class CellbreakGame {
 		// At lights out the doors stay open a little longer: everybody walks to their cell first.
 		// At wake-up everything is still locked; doors to the outside open from the walk until the
 		// evening roll call.
-		boolean outdoors = phase == Phase.EXERCISE || phase == Phase.SHOWER || phase == Phase.DINNER
+		boolean outdoors = phase == Phase.EXERCISE || phase == Phase.GYM || phase == Phase.SHOWER || phase == Phase.DINNER
 				|| phase == Phase.EVENING_FREE || phase == Phase.EVENING_ROLL_CALL;
 		outdoorsClosed = !outdoors;
 		setDoors(phase != Phase.WAKE_UP, outdoors);
@@ -727,7 +735,7 @@ public class CellbreakGame {
 		if (zone == null) {
 			return;
 		}
-		int penalty = phase.isRollCall() ? 40 : 25;
+		int penalty = phase.isRollCall() ? 20 : 25;
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			PlayerData d = data(p);
 			if (d.escaped || d.solitaryUntil != 0 || d.infirmaryUntil != 0 || d.attended) {
@@ -781,6 +789,13 @@ public class CellbreakGame {
 
 			BlockPos pos = p.getBlockPos();
 			boolean inPlace = isInPlace(p, d, phase);
+			if (phase.isRollCall() && !inPlace && phaseElapsed() > ROLL_CALL_GRACE_SECONDS * 20) {
+				// Missing from the count: the longer, the worse.
+				addHeat(p, 0.75);
+				if (ticks % 100 == 0) {
+					p.sendMessage(Text.literal("Тебя нет на перекличке! Подозрение растёт.").formatted(Formatting.RED), true);
+				}
+			}
 			if (inPlace && phase.zone != Zone.ANYWHERE && phase.zone != Zone.CELLS) {
 				if (!d.attended) {
 					rewardAttendance(p, phase);
@@ -825,7 +840,7 @@ public class CellbreakGame {
 					p.sendMessage(Text.literal("Ты оторвался от охраны. Пока...").formatted(Formatting.GREEN));
 				}
 			} else if (!d.heatRaised && d.heat > 0) {
-				d.heat = Math.max(0, d.heat - 0.15);
+				d.heat = Math.max(0, d.heat - 0.07);
 			}
 			if (isWanted(p)) {
 				p.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 30, 0, false, false));
@@ -1030,6 +1045,7 @@ public class CellbreakGame {
 			case WORK -> new String[] { "на работе", "на работу" };
 			case YARD -> new String[] { "на прогулке", "на прогулку" };
 			case SHOWER -> new String[] { "в душевой", "в душ" };
+			case GYM -> new String[] { "в качалке", "в качалку" };
 			case CELLS -> new String[] { "в своей камере", "в камеру" };
 			default -> new String[] { "на месте", "на место" };
 		};
@@ -1067,9 +1083,8 @@ public class CellbreakGame {
 				p.sendMessage(Text.literal("Ты помылся. Здоровье восстанавливается.").formatted(Formatting.AQUA), true);
 			}
 			case EXERCISE -> {
-				p.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 20 * 120, 0));
 				p.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 20 * 120, 0));
-				p.sendMessage(Text.literal("Тренировка: ты сильнее и быстрее на 2 минуты.").formatted(Formatting.AQUA), true);
+				p.sendMessage(Text.literal("Свежий воздух: ты быстрее на 2 минуты.").formatted(Formatting.AQUA), true);
 			}
 			default -> {
 			}
@@ -2833,6 +2848,143 @@ public class CellbreakGame {
 		return spot;
 	}
 
+	// ------------------------------------------------------------------ gym
+
+	private static final int SET_REPS = 10;
+	private static final int BAG_REPS = 15;
+	private List<BlockPos> gymSpots;
+
+	/** Where NPCs stand to train: free floor right next to each machine and bag. */
+	private List<BlockPos> gymSpots() {
+		if (gymSpots == null) {
+			gymSpots = new ArrayList<>();
+			PrisonLayout l = layout();
+			List<BlockPos> all = new ArrayList<>(l.gymMachines);
+			all.addAll(l.punchBags);
+			for (BlockPos m : all) {
+				for (Direction d : Direction.Type.HORIZONTAL) {
+					for (int dy = -2; dy <= 0; dy++) {
+						BlockPos p = m.offset(d).up(dy);
+						if (l.gymZone != null && l.gymZone.contains(p) && empty(world(), p) && empty(world(), p.up())
+								&& !empty(world(), p.down()) && !gymSpots.contains(p)) {
+							gymSpots.add(p.toImmutable());
+							break;
+						}
+					}
+				}
+			}
+		}
+		return gymSpots;
+	}
+
+	/** An NPC stands at a machine: it trains (the caller swings its arms). */
+	public boolean isTrainingAt(BlockPos pos) {
+		return running && phase() == Phase.GYM && gymSpots().contains(pos);
+	}
+
+	public void npcTrains(PrisonerNpcEntity npc) {
+		npc.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+		if (world().random.nextInt(3) == 0) {
+			world().playSound(null, npc.getBlockPos(), SoundEvents.ITEM_ARMOR_EQUIP_IRON.value(), SoundCategory.NEUTRAL, 0.5F,
+					0.7F + world().random.nextFloat() * 0.3F);
+		}
+	}
+
+	private static String exerciseName(BlockState st, boolean bag) {
+		if (bag) {
+			return "Груша";
+		}
+		if (st.getBlock() instanceof net.minecraft.block.SlabBlock) {
+			return "Жим лёжа";
+		}
+		if (st.isOf(Blocks.GRINDSTONE)) {
+			return "Велотренажёр";
+		}
+		return "Подтягивания";
+	}
+
+	/** Right click on a machine or a punching bag: one rep. Returns false if the block is not gym gear. */
+	public boolean useGym(ServerPlayerEntity p, BlockPos pos) {
+		PrisonLayout l = layout();
+		if (!running || l == null) {
+			return false;
+		}
+		boolean bag = l.punchBags.contains(pos);
+		if (!bag && !l.gymMachines.contains(pos)) {
+			return false;
+		}
+		PlayerData d = data(p);
+		if (d == null || d.role != Role.PRISONER) {
+			return true;
+		}
+		if (ticks - d.lastRepTick < 8) {
+			return true;
+		}
+		String name = exerciseName(world().getBlockState(pos), bag);
+		if (!name.equals(d.exercise) || ticks - d.lastRepTick > 10 * 20) {
+			d.exercise = name;
+			d.reps = 0;
+		}
+		d.lastRepTick = ticks;
+		d.reps++;
+		p.swingHand(net.minecraft.util.Hand.MAIN_HAND, true);
+		p.addExhaustion(0.4F);
+		world().playSound(null, pos, bag ? SoundEvents.BLOCK_WOOL_HIT : SoundEvents.ITEM_ARMOR_EQUIP_IRON.value(),
+				SoundCategory.PLAYERS, bag ? 1.0F : 0.6F, 0.8F + world().random.nextFloat() * 0.3F);
+		if (bag) {
+			world().spawnParticles(net.minecraft.particle.ParticleTypes.CRIT, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
+					4, 0.3, 0.3, 0.3, 0.1);
+		}
+		int need = bag ? BAG_REPS : SET_REPS;
+		if (d.reps >= need) {
+			d.reps = 0;
+			d.exercise = null;
+			p.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 20 * 240, 0));
+			if (!bag) {
+				p.addStatusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 20 * 240, 0));
+			}
+			p.sendMessage(Text.literal(name + ": подход сделан! Сила на 4 минуты" + (bag ? "." : " и запас здоровья."))
+					.formatted(Formatting.AQUA), true);
+		} else {
+			p.sendMessage(Text.literal(name + ": " + d.reps + "/" + need).formatted(Formatting.YELLOW), true);
+		}
+		return true;
+	}
+
+	public boolean isFoodChest(BlockPos pos) {
+		return running && layout() != null && layout().foodChests.contains(pos);
+	}
+
+	/** Somebody opened the kitchen chest: the cooks raise a fuss and a guard comes over. */
+	public void onFoodChestOpened(ServerPlayerEntity p, BlockPos pos) {
+		PlayerData d = data(p);
+		if (d == null || d.role != Role.PRISONER || ticks - d.lastChestFuss < 15 * 20) {
+			return;
+		}
+		d.lastChestFuss = ticks;
+		for (CookEntity cook : cooks()) {
+			if (cook.squaredDistanceTo(p) < 16 * 16) {
+				cook.getLookControl().lookAt(p);
+				Text line = cook.chestLine();
+				for (ServerPlayerEntity o : world().getPlayers()) {
+					if (o.squaredDistanceTo(cook) < 16 * 16) {
+						o.sendMessage(line, false);
+					}
+				}
+			}
+		}
+		npcGuards().stream().filter(g -> !g.isSniper() && g.squaredDistanceTo(p) < 40 * 40)
+				.min(java.util.Comparator.comparingDouble(g -> g.squaredDistanceTo(p)))
+				.ifPresent(g -> {
+					g.goCheck(p.getBlockPos(), p.getBlockPos(), 15);
+					guardSays(g, p.getName().getString() + "! Что ты забыл в кухонном сундуке? Отошёл от продуктов!");
+				});
+		addHeat(p, 20);
+		d.lastSeenTick = ticks;
+		d.lastSeenPos = p.getBlockPos();
+		p.sendMessage(Text.literal("Тебя застали у кухонного сундука. Подозрение +20").formatted(Formatting.RED), true);
+	}
+
 	public boolean isQueuing(PrisonerNpcEntity npc) {
 		return foodQueue.contains(npc.getUuid());
 	}
@@ -2967,7 +3119,8 @@ public class CellbreakGame {
 	/** Seated inmates eat now and then. */
 	private void eatAnimations() {
 		for (PrisonerNpcEntity npc : npcPrisoners()) {
-			if (npc.hasVehicle() && world().random.nextInt(4) == 0) {
+			// Each one chews at its own pace (checked every other tick): no eating in chorus.
+			if (npc.hasVehicle() && world().random.nextInt(40) == 0) {
 				npc.swingHand(net.minecraft.util.Hand.MAIN_HAND);
 				world().playSound(null, npc.getBlockPos(), SoundEvents.ENTITY_GENERIC_EAT, SoundCategory.NEUTRAL, 0.5F,
 						0.9F + world().random.nextFloat() * 0.2F);
@@ -3161,6 +3314,10 @@ public class CellbreakGame {
 		}
 		if (phase.zone == Zone.YARD && !layout.walkPoints.isEmpty()) {
 			return walkDestination(npc, current);
+		}
+		if (phase.zone == Zone.GYM && !gymSpots().isEmpty()) {
+			List<BlockPos> spots = gymSpots();
+			return current != null && spots.contains(current) ? current : spots.get(world().random.nextInt(spots.size()));
 		}
 		if (zone != null && !(npc.skipsMeal && phase.zone == Zone.CANTEEN)) {
 			return current != null && zone.contains(current) ? current : randomSpotIn(zone);
