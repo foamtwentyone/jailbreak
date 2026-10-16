@@ -24,7 +24,7 @@
 1. Minecraft **Java Edition 1.21.1**.
 2. Установщик **Fabric Loader** с fabricmc.net: выбрать версию 1.21.1 и нажать «Install».
 3. Мод **Fabric API** для 1.21.1 (Modrinth или CurseForge) положить в папку `mods`.
-4. Файл `cellbreak-0.3.10.jar` из папки [`dist`](dist) положить туда же, в `mods`.
+4. Файл `cellbreak-0.3.11.jar` из папки [`dist`](dist) положить туда же, в `mods`.
 5. Запустить игру с профилем «fabric-loader-1.21.1».
 
 ## Как играть с друзьями
@@ -38,7 +38,7 @@
 - или через **Radmin VPN / ZeroTier**: все в одной виртуальной сети, адрес как в локальной.
 
 **Через сервер.** Сервер Fabric 1.21.1 (fabricmc.net → Server), в его `mods` кладутся
-Fabric API и `cellbreak-0.3.10.jar`. Чтобы друзья зашли через интернет, удобно использовать
+Fabric API и `cellbreak-0.3.11.jar`. Чтобы друзья зашли через интернет, удобно использовать
 **playit.gg**. Чтобы вводить команды, хост должен быть оператором (`/op ник`).
 
 ## Команды
@@ -297,7 +297,7 @@ Fabric API и `cellbreak-0.3.10.jar`. Чтобы друзья зашли чер�
 
 ## Для разработчиков
 
-- Сборка: `./gradlew build` → `build/libs/cellbreak-0.3.10.jar`.
+- Сборка: `./gradlew build` → `build/libs/cellbreak-0.3.11.jar`.
 - Текстуры генерируются скриптом `tools/gen_textures.py`, превью рисует `tools/preview.py`.
 - `./gradlew runTestServer` запускает сервер с тестовыми ботами (`src/testmod`, команды
   `/cbtest ...`). `./gradlew runTestClient` запускает клиент, который сам подключается к
