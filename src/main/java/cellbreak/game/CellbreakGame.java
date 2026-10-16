@@ -128,7 +128,7 @@ public class CellbreakGame {
 	/** A wanted prisoner nobody has seen for this long gets away. */
 	private static final int LOSE_PURSUIT_SECONDS = 20;
 	/** Time to get to the right place after a bell before snipers and checks care. */
-	private static final int GRACE_SECONDS = 25;
+	static final int GRACE_SECONDS = 25;
 	private static final int GUARD_SIGHT = 16;
 	private static final int PLAYER_GUARD_SIGHT = 24;
 	private static final int SNIPER_RANGE = 96;
@@ -142,14 +142,14 @@ public class CellbreakGame {
 	private static final int SEARCH_SECONDS = 42;
 	private static final int INFIRMARY_SECONDS = 30;
 	/** How long a suspicious act outdoors (breaking, placing a fake, graffiti) keeps a day sniper's eye on you. */
-	private static final int SUSPICIOUS_TICKS = 60;
+	static final int SUSPICIOUS_TICKS = 60;
 	private static final double SEARCHLIGHT_RADIUS = 6.5;
 	private static final int ORE_REGEN_SECONDS = 60;
 	private static final int LOG_REGEN_SECONDS = 90;
 	private static final int MAX_TRADERS = 3;
 	private static final int MAX_NPC_PRISONERS = 16;
 	private static final int PRISONER_ORANGE = 0xE6761E;
-	private static final int GUARD_NAVY = 0x222E54;
+	static final int GUARD_NAVY = 0x222E54;
 
 	public static class PlayerData {
 		public Role role;
@@ -195,14 +195,19 @@ public class CellbreakGame {
 
 	private static final Map<MinecraftServer, CellbreakGame> GAMES = new HashMap<>();
 
-	private final MinecraftServer server;
-	private final Map<UUID, PlayerData> players = new HashMap<>();
+	final MinecraftServer server;
+	final CellbreakExtras extras = new CellbreakExtras(this);
+
+	public CellbreakExtras extras() {
+		return extras;
+	}
+	final Map<UUID, PlayerData> players = new HashMap<>();
 	/** Blocks broken by prisoners and what was there before; guards repair what they notice. */
 	private final Map<BlockPos, BlockState> damage = new HashMap<>();
 	private boolean running;
-	private long ticks;
+	long ticks;
 	/** The day of the stay, counted from the start of the round. */
-	private int day;
+	int day;
 	private int scheduleIndex;
 	private int phaseTicksLeft;
 	private boolean searchDone;
@@ -221,7 +226,7 @@ public class CellbreakGame {
 	/** Night searchlights of the snipers, by sniper. */
 	private final Map<UUID, Searchlight> searchlights = new HashMap<>();
 	private boolean countStarted;
-	private boolean doorsLocked;
+	boolean doorsLocked;
 	/** The doors to the outside are shut for the evening (they stay open a little after the evening free time). */
 	private boolean outdoorsClosed;
 	private static final int OUTDOOR_GRACE_SECONDS = 15;
@@ -293,11 +298,11 @@ public class CellbreakGame {
 		return (Phase) SCHEDULE[scheduleIndex][0];
 	}
 
-	private int phaseElapsed() {
+	int phaseElapsed() {
 		return (Integer) SCHEDULE[scheduleIndex][1] * 20 - phaseTicksLeft;
 	}
 
-	private BlockBox zoneBox(Zone zone) {
+	BlockBox zoneBox(Zone zone) {
 		PrisonLayout l = layout();
 		return switch (zone) {
 			case ROLL_CALL -> l.rollCallZone;
@@ -496,6 +501,7 @@ public class CellbreakGame {
 		setDoor(layout.solitaryDoor, false);
 
 		scheduleIndex = 0;
+		extras.onStart();
 		beginPhase();
 		broadcast(Text.literal("Раунд начался (Cellbreak " + net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("cellbreak")
 				.map(m -> m.getMetadata().getVersion().getFriendlyString()).orElse("?") + ")! Заключённых: " + prisoners.size() + " (+" + npcCount + " NPC), охранников: "
@@ -508,6 +514,7 @@ public class CellbreakGame {
 		if (!running) {
 			return;
 		}
+		extras.onStop();
 		running = false;
 		clearSearchlights();
 		removeNpcs();
@@ -542,6 +549,7 @@ public class CellbreakGame {
 			return;
 		}
 		ticks++;
+		extras.tick();
 		if (--phaseTicksLeft <= 0) {
 			endPhase();
 			nextPhase();
@@ -583,7 +591,9 @@ public class CellbreakGame {
 		if (phase() == Phase.EVENING_ROLL_CALL && !outdoorsClosed && phaseElapsed() >= OUTDOOR_GRACE_SECONDS * 20) {
 			// Everybody had a moment to come in from outside.
 			outdoorsClosed = true;
-			setDoors(true, false);
+			if (!extras.lockdownActive()) {
+				setDoors(true, false);
+			}
 			for (ServerPlayerEntity p : allOnline()) {
 				p.sendMessage(Text.literal("Двери на улицу закрыты.").formatted(Formatting.GRAY), true);
 			}
@@ -707,7 +717,11 @@ public class CellbreakGame {
 		outdoorsClosed = !outdoors;
 		setDoors(phase != Phase.WAKE_UP, outdoors);
 		doorsLocked = false;
+		if (extras.lockdownActive()) {
+			extras.applyLockdownDoors();
+		}
 		lockServiceDoors();
+		extras.onPhase(phase);
 		for (PlayerData d : players.values()) {
 			d.attended = false;
 			if (phase == Phase.LIGHTS_OUT) {
@@ -1037,13 +1051,14 @@ public class CellbreakGame {
 			"%s, ты мне ещё за вчерашнее должен!", "Отойди от моего места, %s!" };
 
 	/** Whether the prisoner is where the routine wants them now. */
-	private boolean isInPlace(ServerPlayerEntity p, PlayerData d, Phase phase) {
+	boolean isInPlace(ServerPlayerEntity p, PlayerData d, Phase phase) {
 		BlockPos pos = p.getBlockPos();
 		PrisonLayout layout = layout();
 		return switch (phase.zone) {
 			case ANYWHERE -> true;
 			case CELLS -> layout.cells.get(d.cell).interior.contains(pos);
-			case WORK -> layout.workZone.contains(pos) || layout.workshopZone != null && layout.workshopZone.contains(pos);
+			case WORK -> layout.workZone.contains(pos) || layout.workshopZone != null && layout.workshopZone.contains(pos)
+					|| extras.nearJob(pos);
 			default -> {
 				BlockBox zone = zoneBox(phase.zone);
 				yield zone == null || zone.contains(pos);
@@ -1130,7 +1145,8 @@ public class CellbreakGame {
 	private void updateHud() {
 		int secs = phaseTicksLeft / 20;
 		String clock = String.format("%d:%02d", secs / 60, secs % 60);
-		String round = "День " + day + ", " + gameClock();
+		String round = "День " + day + ", " + gameClock()
+				+ (extras.lockdownActive() ? "  |  ИЗОЛЯЦИЯ " + extras.lockdownLeft() / 20 + " с" : "");
 		List<String> wanted = new ArrayList<>();
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			if (isWanted(p)) {
@@ -1196,7 +1212,7 @@ public class CellbreakGame {
 		return r;
 	}
 
-	private boolean sees(LivingEntity watcher, PlayerEntity p, double base, boolean needFacing) {
+	boolean sees(LivingEntity watcher, PlayerEntity p, double base, boolean needFacing) {
 		double r = sightRange(p, base);
 		return watcher.getWorld() == p.getWorld() && watcher.squaredDistanceTo(p) < r * r
 				&& (!needFacing || facing(watcher, p)) && watcher.canSee(p);
@@ -1223,19 +1239,19 @@ public class CellbreakGame {
 		return d == null ? Long.MAX_VALUE : ticks - d.lastSeenTick;
 	}
 
-	private boolean isSeen(ServerPlayerEntity p, List<GuardEntity> npcs, List<ServerPlayerEntity> playerGuards) {
+	boolean isSeen(ServerPlayerEntity p, List<GuardEntity> npcs, List<ServerPlayerEntity> playerGuards) {
 		return seenBy(p, npcs, playerGuards) != null;
 	}
 
 	/** The guard (NPC or player) who sees this prisoner right now, if any. */
 	private LivingEntity seenBy(ServerPlayerEntity p, List<GuardEntity> npcs, List<ServerPlayerEntity> playerGuards) {
 		for (GuardEntity g : npcs) {
-			if (sees(g, p, GUARD_SIGHT, true)) {
+			if (sees(g, p, GUARD_SIGHT, true) && !extras.passesAsGuard(p, g)) {
 				return g;
 			}
 		}
 		for (ServerPlayerEntity g : playerGuards) {
-			if (sees(g, p, PLAYER_GUARD_SIGHT, true)) {
+			if (sees(g, p, PLAYER_GUARD_SIGHT, true) && !extras.passesAsGuard(p, g)) {
 				return g;
 			}
 		}
@@ -1916,6 +1932,9 @@ public class CellbreakGame {
 			}
 			for (GuardEntity g : npcGuards()) {
 				if (g.getBlockPos().getSquaredDistance(c.door) < 4 * 4) {
+					if (extras.dummyFools(p, d, g)) {
+						break;
+					}
 					d.reportedMissing = true;
 					g.getLookControl().lookAt(c.spawn.getX() + 0.5, c.spawn.getY() + 1, c.spawn.getZ() + 0.5);
 					guardSays(g, "Камера " + p.getName().getString() + " пуста! Побег! Тревога!");
@@ -1983,7 +2002,7 @@ public class CellbreakGame {
 	}
 
 	/** A guard speaks to everyone nearby (or to all, if the guard is gone). */
-	private void guardSays(GuardEntity guard, String line) {
+	void guardSays(GuardEntity guard, String line) {
 		String who = guard != null && guard.hasCustomName() ? guard.getName().getString() : "Охранник";
 		Text msg = Text.literal(who + ": ").formatted(Formatting.BLUE).append(Text.literal(line).formatted(Formatting.WHITE));
 		for (ServerPlayerEntity p : allOnline()) {
@@ -2131,6 +2150,9 @@ public class CellbreakGame {
 		if (d == null || d.role != Role.PRISONER || d.solitaryUntil != 0) {
 			return;
 		}
+		if (amount > 0) {
+			amount = extras.heatFactor(p, amount);
+		}
 		d.heat = MathHelper.clamp(d.heat + amount, 0, MAX_HEAT);
 		d.heatRaised = true;
 		if (d.wanted) {
@@ -2152,7 +2174,9 @@ public class CellbreakGame {
 		if (!isPrisoner(p)) {
 			return;
 		}
-		damage.putIfAbsent(pos.toImmutable(), original);
+		if (damage.putIfAbsent(pos.toImmutable(), original) == null) {
+			extras.stats(p.getUuid()).holes++;
+		}
 		suspiciousOutdoors(p, pos);
 		makeNoise(p, pos);
 		PlayerData d = data(p);
@@ -2234,12 +2258,12 @@ public class CellbreakGame {
 		}
 	}
 
-	private void makeNoise(ServerPlayerEntity p, BlockPos pos) {
+	void makeNoise(ServerPlayerEntity p, BlockPos pos) {
 		makeNoise(pos, p.getBlockPos());
 	}
 
 	/** A noise at pos: the snipers look, the nearest free guard comes to check the spot. */
-	private void makeNoise(BlockPos pos, BlockPos checkAt) {
+	void makeNoise(BlockPos pos, BlockPos checkAt) {
 		makeNoise(pos, checkAt, false);
 	}
 
@@ -2251,7 +2275,7 @@ public class CellbreakGame {
 	 * A fight is heard further than other noises, and the guard who comes deals with whoever is still
 	 * fighting there (or just was).
 	 */
-	private void makeNoise(BlockPos pos, BlockPos checkAt, boolean fight) {
+	void makeNoise(BlockPos pos, BlockPos checkAt, boolean fight) {
 		alertSnipers(pos);
 		int range = fight ? 32 : 24;
 		int dutyRange = fight ? 20 : 12;
@@ -2356,6 +2380,7 @@ public class CellbreakGame {
 		d.sniperSpotTick = 0;
 		d.infirmaryUntil = 0;
 		d.solitaryUntil = ticks + SOLITARY_SECONDS * 20L;
+		extras.stats(p.getUuid()).solitary++;
 		p.setHealth(p.getMaxHealth());
 		p.extinguish();
 		p.removeStatusEffect(StatusEffects.GLOWING);
@@ -2375,7 +2400,8 @@ public class CellbreakGame {
 		}
 		p.setHealth(p.getMaxHealth());
 		Entity attacker = source.getAttacker();
-		boolean byGuard = attacker instanceof GuardEntity || attacker instanceof ServerPlayerEntity g && isGuard(g);
+		boolean byGuard = attacker instanceof GuardEntity || attacker instanceof cellbreak.entity.GuardDogEntity
+				|| attacker instanceof ServerPlayerEntity g && isGuard(g);
 		if (d.role == Role.PRISONER) {
 			if (d.infirmaryUntil != 0 || d.solitaryUntil != 0) {
 				return true;
@@ -2394,6 +2420,7 @@ public class CellbreakGame {
 
 	private void sendToInfirmary(ServerPlayerEntity p, PlayerData d, String by) {
 		d.infirmaryUntil = ticks + INFIRMARY_SECONDS * 20L;
+		extras.stats(p.getUuid()).infirmary++;
 		d.sniperSpotTick = 0;
 		p.extinguish();
 		p.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, INFIRMARY_SECONDS * 20, 1));
@@ -2505,6 +2532,7 @@ public class CellbreakGame {
 			return;
 		}
 		d.lastFightTick = ticks;
+		extras.stats(attacker.getUuid()).fights++;
 		LivingEntity watcher = seenBy(attacker, npcGuards(), online(Role.GUARD));
 		if (watcher != null) {
 			fightsSeen++;
@@ -2569,6 +2597,7 @@ public class CellbreakGame {
 		d.wanted = false;
 		p.changeGameMode(GameMode.SPECTATOR);
 		long secs = ticks / 20;
+		extras.onEscape(p);
 		broadcast(Text.literal(p.getName().getString() + " СБЕЖАЛ! (" + secs / 60 + " мин " + secs % 60 + " с)")
 				.formatted(Formatting.GREEN, Formatting.BOLD));
 		for (ServerPlayerEntity other : allOnline()) {
@@ -2687,7 +2716,7 @@ public class CellbreakGame {
 	}
 
 	/** The prisoner whose cell (with its walls) contains this position, if any. */
-	private ServerPlayerEntity cellOwner(BlockPos pos) {
+	ServerPlayerEntity cellOwner(BlockPos pos) {
 		List<PrisonLayout.Cell> cells = layout().cells;
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			PlayerData d = data(p);
@@ -2934,7 +2963,7 @@ public class CellbreakGame {
 		return empty(world, p) && !empty(world, p.up()) && !empty(world, p.down());
 	}
 
-	private static boolean empty(ServerWorld world, BlockPos p) {
+	static boolean empty(ServerWorld world, BlockPos p) {
 		return world.getBlockState(p).getCollisionShape(world, p).isEmpty();
 	}
 
@@ -3477,7 +3506,7 @@ public class CellbreakGame {
 
 	// ------------------------------------------------------------------ NPCs
 
-	private Box npcArea() {
+	Box npcArea() {
 		BlockBox b = layout().bounds();
 		return new Box(b.getMinX() - 16, world().getBottomY(), b.getMinZ() - 16, b.getMaxX() + 16, world().getTopY(),
 				b.getMaxZ() + 16);
@@ -3492,7 +3521,7 @@ public class CellbreakGame {
 		return world().getEntitiesByClass(GuardEntity.class, npcArea(), g -> g.isAlive() && !g.isSniper() && !g.gatekeeper);
 	}
 
-	private List<GuardEntity> snipers() {
+	List<GuardEntity> snipers() {
 		return world().getEntitiesByClass(GuardEntity.class, npcArea(), g -> g.isAlive() && g.isSniper());
 	}
 
@@ -3500,7 +3529,7 @@ public class CellbreakGame {
 		return world().getEntitiesByClass(PrisonerNpcEntity.class, npcArea(), Entity::isAlive);
 	}
 
-	private void spawnNpcGuard() {
+	void spawnNpcGuard() {
 		GuardEntity guard = CbContent.GUARD.create(world());
 		if (guard == null) {
 			return;
@@ -3558,6 +3587,13 @@ public class CellbreakGame {
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			PlayerData d = data(p);
 			if (d.escaped || d.solitaryUntil != 0 || d.infirmaryUntil != 0 || p.squaredDistanceTo(g) > 9 * 9 || !g.canSee(p)) {
+				continue;
+			}
+			if (!d.wanted && CellbreakExtras.disguised(p)) {
+				// The major does not bother colleagues (and does not look closely at them).
+				if (ticks % 200 == 0) {
+					guardSays(g, "Смену сдал? Проходи, не мешай.");
+				}
 				continue;
 			}
 			if (!d.wanted) {
@@ -3622,13 +3658,16 @@ public class CellbreakGame {
 			npc.infirmaryUntil = 0;
 			current = null;
 		}
+		BlockPos cellSpawn = npc.cell >= 0 && npc.cell < layout.cells.size() ? layout.cells.get(npc.cell).spawn
+				: layout.npcGuardSpawn;
+		if (extras.lockdownActive()) {
+			return cellSpawn;
+		}
 		if (npc.lineupSlot != null) {
 			return npc.lineupSlot;
 		}
-		BlockPos cellSpawn = npc.cell >= 0 && npc.cell < layout.cells.size() ? layout.cells.get(npc.cell).spawn
-				: layout.npcGuardSpawn;
 		Phase phase = phase();
-		if (phase == Phase.LIGHTS_OUT || phase == Phase.WAKE_UP) {
+		if (phase == Phase.LIGHTS_OUT || phase == Phase.WAKE_UP || extras.lockdownActive()) {
 			return cellSpawn;
 		}
 		BlockBox zone = zoneBox(phase.zone);
@@ -3779,10 +3818,11 @@ public class CellbreakGame {
 		p.giveItemStack(new ItemStack(CbContent.BATON));
 		p.giveItemStack(new ItemStack(CbContent.HANDCUFFS));
 		p.giveItemStack(new ItemStack(CbContent.CELL_KEY));
+		p.giveItemStack(new ItemStack(CbContent.TABLET));
 		p.giveItemStack(new ItemStack(Items.COOKED_BEEF, 8));
 	}
 
-	private static ItemStack dyed(Item item, int color) {
+	static ItemStack dyed(Item item, int color) {
 		ItemStack stack = new ItemStack(item);
 		stack.set(DataComponentTypes.DYED_COLOR, new DyedColorComponent(color, false));
 		stack.set(DataComponentTypes.UNBREAKABLE, new UnbreakableComponent(false));
@@ -3790,7 +3830,7 @@ public class CellbreakGame {
 	}
 
 	/** Whether a guard who looks at the prisoner sees forbidden things in their hands (work tools at work are fine). */
-	private boolean holdsContraband(ServerPlayerEntity p) {
+	boolean holdsContraband(ServerPlayerEntity p) {
 		return isForbidden(p, p.getMainHandStack().getItem()) || isForbidden(p, p.getOffHandStack().getItem());
 	}
 
@@ -3811,7 +3851,7 @@ public class CellbreakGame {
 		return CbContent.isContraband(item);
 	}
 
-	private static int countContraband(PlayerEntity p) {
+	static int countContraband(PlayerEntity p) {
 		int n = 0;
 		PlayerInventory inv = p.getInventory();
 		for (int i = 0; i < inv.size(); i++) {
@@ -3833,7 +3873,7 @@ public class CellbreakGame {
 		return n;
 	}
 
-	private static int removeContraband(PlayerEntity p) {
+	static int removeContraband(PlayerEntity p) {
 		int n = 0;
 		PlayerInventory inv = p.getInventory();
 		for (int i = 0; i < inv.size(); i++) {
@@ -3897,12 +3937,23 @@ public class CellbreakGame {
 		}
 	}
 
-	private void setDoors(boolean open) {
+	/** Puts every door back the way the current phase wants it (after a lock-down). */
+	void reapplyDoors() {
+		Phase phase = phase();
+		if (phase == Phase.LIGHTS_OUT && doorsLocked) {
+			setDoors(false);
+		} else {
+			setDoors(phase != Phase.WAKE_UP, !outdoorsClosed);
+		}
+		lockServiceDoors();
+	}
+
+	void setDoors(boolean open) {
 		setDoors(open, open);
 	}
 
 	/** Cell doors and indoor day doors follow cellsOpen; day doors that lead outdoors follow outdoorsOpen. */
-	private void setDoors(boolean cellsOpen, boolean outdoorsOpen) {
+	void setDoors(boolean cellsOpen, boolean outdoorsOpen) {
 		for (PrisonLayout.Cell c : layout().cells) {
 			setDoor(c.door, cellsOpen);
 		}
@@ -3954,7 +4005,7 @@ public class CellbreakGame {
 		}
 	}
 
-	private void setDoor(BlockPos pos, boolean open) {
+	void setDoor(BlockPos pos, boolean open) {
 		if (pos == null) {
 			return;
 		}
@@ -3964,25 +4015,25 @@ public class CellbreakGame {
 		}
 	}
 
-	private void teleport(ServerPlayerEntity p, BlockPos pos) {
+	void teleport(ServerPlayerEntity p, BlockPos pos) {
 		p.teleport(world(), pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, p.getYaw(), p.getPitch());
 	}
 
-	private static void title(ServerPlayerEntity p, Text title, Text subtitle) {
+	static void title(ServerPlayerEntity p, Text title, Text subtitle) {
 		p.networkHandler.sendPacket(new SubtitleS2CPacket(subtitle));
 		p.networkHandler.sendPacket(new TitleS2CPacket(title));
 	}
 
-	private void broadcast(Text text) {
+	void broadcast(Text text) {
 		server.getPlayerManager().broadcast(text, false);
 	}
 
-	private String name(UUID id) {
+	String name(UUID id) {
 		ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
 		return p != null ? p.getName().getString() : id.toString().substring(0, 8);
 	}
 
-	private List<ServerPlayerEntity> online(Role role) {
+	List<ServerPlayerEntity> online(Role role) {
 		List<ServerPlayerEntity> list = new ArrayList<>();
 		for (Map.Entry<UUID, PlayerData> e : players.entrySet()) {
 			ServerPlayerEntity p = server.getPlayerManager().getPlayer(e.getKey());
@@ -3993,7 +4044,7 @@ public class CellbreakGame {
 		return list;
 	}
 
-	private List<ServerPlayerEntity> allOnline() {
+	List<ServerPlayerEntity> allOnline() {
 		List<ServerPlayerEntity> list = new ArrayList<>();
 		for (UUID id : players.keySet()) {
 			ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);

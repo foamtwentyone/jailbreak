@@ -139,10 +139,20 @@ public final class CbContent {
 	public static final Item MONEY = item("money", new Item(new Item.Settings()));
 	public static final Item FAKE_WALL = item("fake_wall", new Item(new Item.Settings().maxCount(16)));
 	public static final Item FAKE_VENT = item("fake_vent", new Item(new Item.Settings().maxCount(16)));
+	/** A pillow-and-rag dummy: put in your bed, it fools the night round (mostly). */
+	public static final Item DUMMY = item("dummy", new Item(new Item.Settings().maxCount(1)));
+	/** Opens the main gate, with somebody else turning the winch. */
+	public static final Item GATE_KEY = item("gate_key", new Item(new Item.Settings().maxCount(1)));
+	/** Thrown up a wall, it lets you climb over (slowly, and loudly). */
+	public static final Item ROPE_HOOK = item("rope_hook", new Item(new Item.Settings().maxCount(1)));
+	/** The guards' tablet: who is where and how suspicious. */
+	public static final Item TABLET = item("tablet", new Item(new Item.Settings().maxCount(1)));
+	/** A parcel from home. */
+	public static final Item PARCEL = item("parcel", new Item(new Item.Settings().maxCount(1)));
 
 	/** Items a prisoner is not allowed to carry. */
 	public static final Set<Item> CONTRABAND = Set.of(MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, SHIV, CELL_KEY,
-			BATON, HANDCUFFS, FAKE_WALL, FAKE_VENT, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, WORK_PICKAXE, WORK_AXE,
+			BATON, HANDCUFFS, FAKE_WALL, FAKE_VENT, DUMMY, GATE_KEY, ROPE_HOOK, TABLET, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, WORK_PICKAXE, WORK_AXE,
 			net.minecraft.item.Items.IRON_NUGGET);
 	/** Tools: carried through a scanner they make the guards go to full alert. */
 	public static final Set<Item> TOOLS = Set.of(MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, BROKEN_PICKAXE, BROKEN_SHOVEL,
@@ -178,6 +188,10 @@ public final class CbContent {
 			EntityType.Builder.create(CookEntity::new, SpawnGroup.MISC).dimensions(0.6F, 1.8F).maxTrackingRange(10)
 					.build("cook"));
 
+	public static final EntityType<cellbreak.entity.GuardDogEntity> DOG = Registry.register(Registries.ENTITY_TYPE, id("guard_dog"),
+			EntityType.Builder.create(cellbreak.entity.GuardDogEntity::new, SpawnGroup.MISC).dimensions(0.6F, 0.85F)
+					.maxTrackingRange(10).build("guard_dog"));
+
 	public static final Item PRISONER_SPAWN_EGG = item("prisoner_spawn_egg",
 			new SpawnEggItem(PRISONER, 0xE6761E, 0x3A2A20, new Item.Settings()));
 
@@ -185,12 +199,15 @@ public final class CbContent {
 		FabricDefaultAttributeRegistry.register(GUARD, GuardEntity.createGuardAttributes());
 		FabricDefaultAttributeRegistry.register(PRISONER, PrisonerNpcEntity.createPrisonerAttributes());
 		FabricDefaultAttributeRegistry.register(COOK, CookEntity.createCookAttributes());
+		FabricDefaultAttributeRegistry.register(DOG, net.minecraft.entity.passive.WolfEntity.createWolfAttributes()
+				.add(net.minecraft.entity.attribute.EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.3)
+				.add(net.minecraft.entity.attribute.EntityAttributes.GENERIC_FOLLOW_RANGE, 64));
 
 		List<Item> tabItems = List.of(PRISON_WALL.asItem(), CRACKED_PRISON_WALL.asItem(), REINFORCED_WALL.asItem(),
 				CELL_BARS.asItem(), VENT_COVER.asItem(), PRISON_FLOOR.asItem(), JOB_DESK.asItem(), DETECTOR.asItem(),
 				MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, SHIV, CELL_KEY,
 				FAKE_WALL, FAKE_VENT, CHALK, RAG, WORK_PICKAXE, WORK_AXE, MONEY, HANDCUFFS, BATON,
-				GUARD_SPAWN_EGG, PRISONER_SPAWN_EGG);
+				DUMMY, GATE_KEY, ROPE_HOOK, TABLET, PARCEL, GUARD_SPAWN_EGG, PRISONER_SPAWN_EGG);
 		Registry.register(Registries.ITEM_GROUP, id("main"), FabricItemGroup.builder()
 				.icon(() -> new ItemStack(MAKESHIFT_PICKAXE))
 				.displayName(Text.translatable("itemGroup.cellbreak"))

@@ -56,6 +56,8 @@ public class Cellbreak implements ModInitializer {
 
 	private static void registerEvents() {
 		ServerTickEvents.END_SERVER_TICK.register(server -> CellbreakGame.get(server).tick());
+		net.fabricmc.fabric.api.message.v1.ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, params) ->
+				!CellbreakGame.get(sender.getServer()).extras().radio(sender, message.getSignedContent()));
 		ServerLifecycleEvents.SERVER_STOPPED.register(CellbreakGame::remove);
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
 				CellbreakGame.get(server).onJoin(handler.getPlayer()));
@@ -66,6 +68,13 @@ public class Cellbreak implements ModInitializer {
 			}
 			if (entity instanceof PrisonerNpcEntity npc && npc.getServer() != null) {
 				return !CellbreakGame.get(npc.getServer()).onNpcKnockedOut(npc, source);
+			}
+			if (entity instanceof GuardEntity && source.getAttacker() instanceof ServerPlayerEntity p) {
+				CellbreakGame game = CellbreakGame.get(p.getServer());
+				if (game.isRunning() && game.isPrisoner(p)) {
+					// A guard down: the whole prison goes into lock-down.
+					game.extras().lockdown("нападение на охранника");
+				}
 			}
 			return true;
 		});
@@ -126,7 +135,16 @@ public class Cellbreak implements ModInitializer {
 		});
 
 		UseEntityCallback.EVENT.register((player, world, hand, target, hit) -> {
-			if (hand != Hand.MAIN_HAND || !player.getMainHandStack().isOf(CbContent.HANDCUFFS)) {
+			if (hand != Hand.MAIN_HAND) {
+				return ActionResult.PASS;
+			}
+			// The snitch whispers to a guard (sneaking, right click).
+			if (player instanceof ServerPlayerEntity s && player.isSneaking()
+					&& (target instanceof GuardEntity || target instanceof ServerPlayerEntity tg && CellbreakGame.get(s.getServer()).isGuard(tg))
+					&& CellbreakGame.get(s.getServer()).isRunning() && CellbreakGame.get(s.getServer()).extras().reportToGuard(s)) {
+				return ActionResult.SUCCESS;
+			}
+			if (!player.getMainHandStack().isOf(CbContent.HANDCUFFS)) {
 				return ActionResult.PASS;
 			}
 			if (player instanceof ServerPlayerEntity guard && target instanceof ServerPlayerEntity prisoner) {
@@ -151,6 +169,14 @@ public class Cellbreak implements ModInitializer {
 			ServerPlayerEntity sp = player instanceof ServerPlayerEntity s ? s : null;
 			CellbreakGame game = sp != null ? CellbreakGame.get(sp.getServer()) : null;
 
+			// A dummy in the bed (or taking it back).
+			if (state.getBlock() instanceof BedBlock && sp != null && game.isRunning()) {
+				BlockPos head = state.get(BedBlock.PART) == net.minecraft.block.enums.BedPart.HEAD ? pos
+						: pos.offset(state.get(BedBlock.FACING));
+				if (game.extras().useBed(sp, head)) {
+					return ActionResult.SUCCESS;
+				}
+			}
 			// No sleeping through the routine.
 			if (state.getBlock() instanceof BedBlock) {
 				if (sp != null && game.isRunning() && game.phase() != CellbreakGame.Phase.LIGHTS_OUT) {
@@ -164,6 +190,35 @@ public class Cellbreak implements ModInitializer {
 					&& game.isRunning() && !sp.isCreative() && nearIronDoor(world, pos)) {
 				sp.sendMessage(Text.literal("Не работает. Двери открывает только охрана.").formatted(Formatting.GRAY), true);
 				return ActionResult.FAIL;
+			}
+			if (sp != null && game.isRunning()) {
+				var ex = game.extras();
+				// CCTV: a rag over the lens.
+				if (stack.isOf(CbContent.RAG) && ex.cameraAt(pos) >= 0 && game.isPrisoner(sp)) {
+					return ex.blindCamera(sp, pos) ? ActionResult.SUCCESS : ActionResult.FAIL;
+				}
+				if (ex.cameraAt(pos) >= 0) {
+					return ActionResult.FAIL;
+				}
+				if (ex.useMonitor(sp, pos)) {
+					return ActionResult.SUCCESS;
+				}
+				if (ex.jobAt(pos) >= 0) {
+					return ex.work(sp, pos) ? ActionResult.SUCCESS : ActionResult.FAIL;
+				}
+				if (stack.isOf(CbContent.GATE_KEY) && state.isOf(Blocks.IRON_DOOR)) {
+					if (!ex.useGateKey(sp, pos)) {
+						sp.sendMessage(Text.literal("Этот ключ — от ворот.").formatted(Formatting.GRAY), true);
+					}
+					return ActionResult.SUCCESS;
+				}
+				if (stack.isOf(CbContent.CELL_KEY) && state.isOf(Blocks.IRON_DOOR) && ex.isGateDoor(pos) && !game.isGuard(sp)) {
+					sp.sendMessage(Text.literal("Ключ от камер к воротам не подходит.").formatted(Formatting.GRAY), true);
+					return ActionResult.FAIL;
+				}
+				if (stack.isOf(CbContent.ROPE_HOOK) && ex.useRope(sp, hit)) {
+					return ActionResult.SUCCESS;
+				}
 			}
 			// Gym machines and punching bags: one rep per click.
 			if (sp != null && game.useGym(sp, pos)) {
@@ -229,6 +284,19 @@ public class Cellbreak implements ModInitializer {
 
 		UseItemCallback.EVENT.register((player, world, hand) -> {
 			var stack = player.getStackInHand(hand);
+			if (hand == Hand.MAIN_HAND && player instanceof ServerPlayerEntity sp && CellbreakGame.get(sp.getServer()).isRunning()) {
+				var ex = CellbreakGame.get(sp.getServer()).extras();
+				if (ex.nextCamera(sp)) {
+					return TypedActionResult.success(stack);
+				}
+				if (stack.isOf(CbContent.TABLET) && ex.useTablet(sp)) {
+					sp.getItemCooldownManager().set(CbContent.TABLET, 40);
+					return TypedActionResult.success(stack);
+				}
+				if (stack.isOf(CbContent.PARCEL) && ex.openParcel(sp)) {
+					return TypedActionResult.success(stack);
+				}
+			}
 			if (hand == Hand.MAIN_HAND && player instanceof ServerPlayerEntity sp
 					&& (stack.isOf(CbContent.FAKE_WALL) || stack.isOf(CbContent.FAKE_VENT))
 					&& CellbreakGame.get(sp.getServer()).placeFake(sp)) {
@@ -263,6 +331,17 @@ public class Cellbreak implements ModInitializer {
 					return 1;
 				}))
 				.then(CommandManager.literal("leave").executes(Cellbreak::leave))
+				.then(CommandManager.literal("donos")
+						.then(CommandManager.argument("player", EntityArgumentType.player()).executes(c -> {
+							ServerPlayerEntity s = c.getSource().getPlayerOrThrow();
+							CellbreakGame game = CellbreakGame.get(c.getSource().getServer());
+							if (!game.isRunning()) {
+								c.getSource().sendError(Text.literal("Раунд не идёт."));
+								return 0;
+							}
+							game.extras().report(s, EntityArgumentType.getPlayer(c, "player"));
+							return 1;
+						})))
 				.then(CommandManager.literal("role").requires(s -> s.hasPermissionLevel(2))
 						.then(CommandManager.argument("players", EntityArgumentType.players())
 								.then(CommandManager.literal("prisoner").executes(c -> role(c, Role.PRISONER)))

@@ -240,7 +240,7 @@ public class CellbreakTest implements ModInitializer {
 					sb.append(p.getName().getString()).append(" at ").append(p.getBlockPos().toShortString())
 							.append(" mode=").append(p.interactionManager.getGameMode()).append(" hp=").append(p.getHealth())
 							.append(" glowing=").append(p.isGlowing()).append(" pose=").append(p.getPose())
-							.append(" heat=").append(cellbreak.game.CellbreakGame.get(p.getServer()).data(p) == null ? -1
+							.append(" cell=").append(cellbreak.game.CellbreakGame.get(p.getServer()).data(p) == null ? -1 : cellbreak.game.CellbreakGame.get(p.getServer()).data(p).cell).append(" heat=").append(cellbreak.game.CellbreakGame.get(p.getServer()).data(p) == null ? -1
 									: (int) cellbreak.game.CellbreakGame.get(p.getServer()).data(p).heat)
 							.append(" effects=").append(p.getStatusEffects().stream().map(e -> e.getEffectType().getIdAsString()).toList())
 							.append("\ninventory:");
@@ -370,6 +370,15 @@ public class CellbreakTest implements ModInitializer {
 											+ p.getBlockPos().toShortString() + " pose=" + p.getPose());
 									return 1;
 								})))))
+				.then(CommandManager.literal("useas").then(CommandManager.argument("player", net.minecraft.command.argument.EntityArgumentType.player())
+						.then(CommandManager.argument("pos", BlockPosArgumentType.blockPos()).executes(c -> {
+							ServerPlayerEntity p = net.minecraft.command.argument.EntityArgumentType.getPlayer(c, "player");
+							BlockPos pos = BlockPosArgumentType.getBlockPos(c, "pos");
+							BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(pos), Direction.UP, pos, false);
+							var result = UseBlockCallback.EVENT.invoker().interact(p, p.getServerWorld(), Hand.MAIN_HAND, hit);
+							reply(c, "useas " + pos.toShortString() + " -> " + result);
+							return 1;
+						}))))
 				.then(CommandManager.literal("crawl").then(CommandManager.argument("name", StringArgumentType.word())
 						.then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
 								.then(CommandManager.argument("side", StringArgumentType.word()).executes(c -> {

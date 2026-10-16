@@ -38,5 +38,11 @@
   "tooltip.cellbreak.work_tool": "Только для работы на поле",
   "tooltip.cellbreak.broken": "Почини в инвентаре: обломки + %s",
   "item.cellbreak.rag": "Тряпка",
-  "entity.cellbreak.cook": "Повар"
+  "entity.cellbreak.cook": "Повар",
+  "item.cellbreak.dummy": "Кукла",
+  "item.cellbreak.gate_key": "Ключ от ворот",
+  "item.cellbreak.rope_hook": "Верёвка с крюком",
+  "item.cellbreak.tablet": "Планшет охраны",
+  "item.cellbreak.parcel": "Посылка с воли",
+  "entity.cellbreak.guard_dog": "Служебная собака"
 }

@@ -38,5 +38,11 @@
   "tooltip.cellbreak.work_tool": "For the work field only",
   "tooltip.cellbreak.broken": "Repair in the inventory: remains + %s",
   "item.cellbreak.rag": "Rag",
-  "entity.cellbreak.cook": "Cook"
+  "entity.cellbreak.cook": "Cook",
+  "item.cellbreak.dummy": "Dummy",
+  "item.cellbreak.gate_key": "Gate key",
+  "item.cellbreak.rope_hook": "Rope with a hook",
+  "item.cellbreak.tablet": "Guard's tablet",
+  "item.cellbreak.parcel": "Parcel from home",
+  "entity.cellbreak.guard_dog": "Guard dog"
 }

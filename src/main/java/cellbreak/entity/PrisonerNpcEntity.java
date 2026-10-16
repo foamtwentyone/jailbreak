@@ -156,7 +156,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			{ 40, CbContent.FILE, 1 }, { 55, CbContent.MAKESHIFT_PICKAXE, 1 }, { 40, CbContent.MAKESHIFT_SHOVEL, 1 },
 			{ 30, CbContent.SHIV, 1 }, { 25, CbContent.FAKE_WALL, 1 }, { 25, CbContent.FAKE_VENT, 1 },
 			{ 12, CbContent.CHALK, 1 }, { 10, CbContent.RAG, 1 }, { 10, Items.STRING, 2 }, { 10, Items.FLINT, 1 },
-			{ 8, Items.PAPER, 2 }, { 10, Items.CLAY_BALL, 1 }, { 12, Items.IRON_NUGGET, 2 }, { 8, Items.COOKED_BEEF, 2 } };
+			{ 8, Items.PAPER, 2 }, { 10, Items.CLAY_BALL, 1 }, { 12, Items.IRON_NUGGET, 2 }, { 8, Items.COOKED_BEEF, 2 },
+			{ 50, CbContent.ROPE_HOOK, 1 }, { 30, CbContent.DUMMY, 1 }, { 95, CbContent.GATE_KEY, 1 } };
 
 	public int cell = -1;
 	/** While above 0 the inmate sits in solitary (found with contraband at a search). */
@@ -444,8 +445,12 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		List<Object[]> pool = new ArrayList<>(List.of(BLACK_MARKET));
 		Collections.shuffle(pool, new java.util.Random(getUuid().getLeastSignificantBits()));
 		for (Object[] o : pool.subList(0, 5)) {
-			offers.add(new TradeOffer(new TradedItem(CbContent.MONEY, (Integer) o[0]),
-					new ItemStack((Item) o[1], (Integer) o[2]), 3, 0, 0.0F));
+			int price = (Integer) o[0];
+			// A stack holds 64: dearer goods take a second pile of money.
+			offers.add(price > 64
+					? new TradeOffer(new TradedItem(CbContent.MONEY, 64), java.util.Optional.of(new TradedItem(CbContent.MONEY, price - 64)),
+							new ItemStack((Item) o[1], (Integer) o[2]), 1, 0, 0.0F)
+					: new TradeOffer(new TradedItem(CbContent.MONEY, price), new ItemStack((Item) o[1], (Integer) o[2]), 3, 0, 0.0F));
 		}
 		// Traders also buy scrap metal.
 		offers.add(new TradeOffer(new TradedItem(Items.IRON_INGOT, 1), new ItemStack(CbContent.MONEY, 2), 8, 0, 0.0F));

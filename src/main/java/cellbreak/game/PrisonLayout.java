@@ -48,6 +48,15 @@ public class PrisonLayout {
 	public BlockBox gymZone;
 	/** Where the guard of the main gate stands (optional). */
 	public BlockPos gatePost;
+	/** CCTV cameras (the block and which way it looks) and the guards' monitor. */
+	public final List<BlockPos> cameras = new ArrayList<>();
+	public final List<Integer> cameraFacing = new ArrayList<>();
+	public BlockPos monitor;
+	/** Work stations besides the field: the block and its kind (library, laundry, canteen). */
+	public final List<BlockPos> jobStations = new ArrayList<>();
+	public final List<String> jobKinds = new ArrayList<>();
+	/** The guards' locker with a spare uniform. */
+	public BlockPos locker;
 	public final List<BlockPos> gymMachines = new ArrayList<>();
 	public final List<BlockPos> punchBags = new ArrayList<>();
 	/** Chests refilled with raw materials (logs, raw iron, coal) when work starts. */
@@ -174,6 +183,16 @@ public class PrisonLayout {
 		if (gatePost != null) {
 			nbt.putLong("gatePost", gatePost.asLong());
 		}
+		nbt.putLongArray("cameras", longs(cameras));
+		nbt.putIntArray("cameraFacing", cameraFacing.stream().mapToInt(Integer::intValue).toArray());
+		if (monitor != null) {
+			nbt.putLong("monitor", monitor.asLong());
+		}
+		nbt.putLongArray("jobStations", longs(jobStations));
+		nbt.putString("jobKinds", String.join(",", jobKinds));
+		if (locker != null) {
+			nbt.putLong("locker", locker.asLong());
+		}
 		nbt.putLongArray("gymMachines", longs(gymMachines));
 		nbt.putLongArray("punchBags", longs(punchBags));
 		nbt.putLongArray("workSupplies", longs(workSupplies));
@@ -221,6 +240,20 @@ public class PrisonLayout {
 		l.showerZone = getBox(nbt, "shower");
 		l.gymZone = getBox(nbt, "gym");
 		l.gatePost = nbt.contains("gatePost") ? BlockPos.fromLong(nbt.getLong("gatePost")) : null;
+		for (long p : nbt.getLongArray("cameras")) {
+			l.cameras.add(BlockPos.fromLong(p));
+		}
+		for (int f : nbt.getIntArray("cameraFacing")) {
+			l.cameraFacing.add(f);
+		}
+		l.monitor = nbt.contains("monitor") ? BlockPos.fromLong(nbt.getLong("monitor")) : null;
+		for (long p : nbt.getLongArray("jobStations")) {
+			l.jobStations.add(BlockPos.fromLong(p));
+		}
+		if (!nbt.getString("jobKinds").isEmpty()) {
+			l.jobKinds.addAll(List.of(nbt.getString("jobKinds").split(",")));
+		}
+		l.locker = nbt.contains("locker") ? BlockPos.fromLong(nbt.getLong("locker")) : null;
 		for (long p : nbt.getLongArray("gymMachines")) {
 			l.gymMachines.add(BlockPos.fromLong(p));
 		}

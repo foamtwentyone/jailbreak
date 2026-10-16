@@ -145,6 +145,40 @@ public final class MapCommands {
 					layout(c).gymZone = b;
 					ok(c, "Качалка: " + str(b));
 				})))
+				.then(CommandManager.literal("camera").then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
+						.then(CommandManager.argument("facing", com.mojang.brigadier.arguments.StringArgumentType.word()).executes(c -> {
+							BlockPos p = BlockPosArgumentType.getBlockPos(c, "pos");
+							Direction f = Direction.byName(com.mojang.brigadier.arguments.StringArgumentType.getString(c, "facing"));
+							if (f == null) {
+								throw error("Направление: north, south, east, west, up или down.");
+							}
+							world(c).setBlockState(p, net.minecraft.block.Blocks.OBSERVER.getDefaultState()
+									.with(net.minecraft.block.ObserverBlock.FACING, f));
+							layout(c).cameras.add(p);
+							layout(c).cameraFacing.add(f.getId());
+							ok(c, "Камера №" + layout(c).cameras.size() + ": " + p.toShortString() + " смотрит " + f.asString());
+							return 1;
+						}))))
+				.then(CommandManager.literal("monitor").then(pos((c, p) -> {
+					layout(c).monitor = p;
+					ok(c, "Пульт видеонаблюдения: " + p.toShortString());
+				})))
+				.then(CommandManager.literal("locker").then(pos((c, p) -> {
+					layout(c).locker = p;
+					ok(c, "Шкафчик охраны (запасная форма): " + p.toShortString());
+				})))
+				.then(CommandManager.literal("job").then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
+						.then(CommandManager.argument("kind", com.mojang.brigadier.arguments.StringArgumentType.word()).executes(c -> {
+							BlockPos p = BlockPosArgumentType.getBlockPos(c, "pos");
+							String kind = com.mojang.brigadier.arguments.StringArgumentType.getString(c, "kind");
+							if (!List.of("library", "laundry", "canteen").contains(kind)) {
+								throw error("Работа: library, laundry или canteen.");
+							}
+							layout(c).jobStations.add(p);
+							layout(c).jobKinds.add(kind);
+							ok(c, "Рабочее место (" + kind + "): " + p.toShortString());
+							return 1;
+						}))))
 				.then(CommandManager.literal("gatepost").then(pos((c, p) -> {
 					layout(c).gatePost = p;
 					ok(c, "Пост у главных ворот: " + p.toShortString());
