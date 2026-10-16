@@ -298,7 +298,7 @@ Fabric API и `cellbreak-0.3.11.jar`. Чтобы друзья зашли чер�
 ## Для разработчиков
 
 - Сборка: `./gradlew build` → `build/libs/cellbreak-0.3.11.jar`.
-- Текстуры генерируются скриптом `tools/gen_textures.py`, превью рисует `tools/preview.py`.
+- Текстуры генерируются скриптами `tools/gen_textures.py` (основа, рабочие инструменты) и `tools/gen_textures_v6.py` (всё остальное, начиная с 0.3.11), превью рисует `tools/preview.py`.
 - `./gradlew runTestServer` запускает сервер с тестовыми ботами (`src/testmod`, команды
   `/cbtest ...`). `./gradlew runTestClient` запускает клиент, который сам подключается к
   нему и делает скриншоты по командам из `run_client/client_cmds.txt`. В готовый мод
