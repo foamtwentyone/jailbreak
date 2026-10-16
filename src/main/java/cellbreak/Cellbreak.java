@@ -257,16 +257,12 @@ public class Cellbreak implements ModInitializer {
 								.then(CommandManager.literal("prisoner").executes(c -> role(c, Role.PRISONER)))
 								.then(CommandManager.literal("guard").executes(c -> role(c, Role.GUARD)))))
 				.then(CommandManager.literal("start").requires(s -> s.hasPermissionLevel(2))
-						.executes(c -> start(c, 30, -1, -1))
-						.then(CommandManager.argument("minutes", IntegerArgumentType.integer(1, 240))
-								.executes(c -> start(c, IntegerArgumentType.getInteger(c, "minutes"), -1, -1))
-								.then(CommandManager.argument("npcGuards", IntegerArgumentType.integer(0, 20))
-										.executes(c -> start(c, IntegerArgumentType.getInteger(c, "minutes"),
-												IntegerArgumentType.getInteger(c, "npcGuards"), -1))
-										.then(CommandManager.argument("npcPrisoners", IntegerArgumentType.integer(0, 40))
-												.executes(c -> start(c, IntegerArgumentType.getInteger(c, "minutes"),
-														IntegerArgumentType.getInteger(c, "npcGuards"),
-														IntegerArgumentType.getInteger(c, "npcPrisoners")))))))
+						.executes(c -> start(c, -1, -1))
+						.then(CommandManager.argument("npcGuards", IntegerArgumentType.integer(0, 20))
+								.executes(c -> start(c, IntegerArgumentType.getInteger(c, "npcGuards"), -1))
+								.then(CommandManager.argument("npcPrisoners", IntegerArgumentType.integer(0, 40))
+										.executes(c -> start(c, IntegerArgumentType.getInteger(c, "npcGuards"),
+												IntegerArgumentType.getInteger(c, "npcPrisoners"))))))
 				.then(CommandManager.literal("stop").requires(s -> s.hasPermissionLevel(2)).executes(c -> {
 					CellbreakGame game = CellbreakGame.get(c.getSource().getServer());
 					if (!game.isRunning()) {
@@ -355,8 +351,8 @@ public class Cellbreak implements ModInitializer {
 		return targets.size();
 	}
 
-	private static int start(CommandContext<ServerCommandSource> c, int minutes, int npcGuards, int npcPrisoners) {
-		String error = CellbreakGame.get(c.getSource().getServer()).start(minutes, npcGuards, npcPrisoners);
+	private static int start(CommandContext<ServerCommandSource> c, int npcGuards, int npcPrisoners) {
+		String error = CellbreakGame.get(c.getSource().getServer()).start(npcGuards, npcPrisoners);
 		if (error != null) {
 			c.getSource().sendError(Text.literal(error));
 			return 0;

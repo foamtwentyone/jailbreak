@@ -153,10 +153,10 @@ public class PrisonerNpcEntity extends MerchantEntity {
 
 	/** What the black-market traders can have on offer: price in money, item, count. */
 	private static final Object[][] BLACK_MARKET = {
-			{ 9, CbContent.FILE, 1 }, { 12, CbContent.MAKESHIFT_PICKAXE, 1 }, { 9, CbContent.MAKESHIFT_SHOVEL, 1 },
-			{ 7, CbContent.SHIV, 1 }, { 6, CbContent.FAKE_WALL, 1 }, { 6, CbContent.FAKE_VENT, 1 },
-			{ 4, CbContent.CHALK, 1 }, { 3, CbContent.RAG, 1 }, { 3, Items.STRING, 2 }, { 3, Items.FLINT, 1 },
-			{ 2, Items.PAPER, 2 }, { 3, Items.CLAY_BALL, 1 }, { 4, Items.IRON_NUGGET, 2 }, { 3, Items.COOKED_BEEF, 2 } };
+			{ 15, CbContent.FILE, 1 }, { 20, CbContent.MAKESHIFT_PICKAXE, 1 }, { 15, CbContent.MAKESHIFT_SHOVEL, 1 },
+			{ 12, CbContent.SHIV, 1 }, { 10, CbContent.FAKE_WALL, 1 }, { 10, CbContent.FAKE_VENT, 1 },
+			{ 6, CbContent.CHALK, 1 }, { 5, CbContent.RAG, 1 }, { 5, Items.STRING, 2 }, { 5, Items.FLINT, 1 },
+			{ 4, Items.PAPER, 2 }, { 5, Items.CLAY_BALL, 1 }, { 6, Items.IRON_NUGGET, 2 }, { 5, Items.COOKED_BEEF, 2 } };
 
 	public int cell = -1;
 	/** While above 0 the inmate sits in solitary (found with contraband at a search). */
@@ -176,6 +176,10 @@ public class PrisonerNpcEntity extends MerchantEntity {
 	private int sulkUntil;
 	/** Kept a work tool hidden after work (the scanner will find it). */
 	public boolean smugglingTool;
+	/** Ticks to wait before setting off when the routine changes, so that not everybody squeezes through a door at once. */
+	public int departDelay;
+	/** Where along the walking path the inmate is (the walk goes from point to point). */
+	public int walkIndex = -1;
 	private int angryTicks;
 	/** The last hit already answered: a new hit makes the inmate angry again, an old one does not. */
 	private int answeredHit = -1;
@@ -184,6 +188,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 		super(type, world);
 		setPersistent();
 		setCanPickUpLoot(false);
+		// Tables are iron trapdoors on bars: nobody walks across them.
+		setPathfindingPenalty(net.minecraft.entity.ai.pathing.PathNodeType.TRAPDOOR, -1.0F);
 	}
 
 	@Override
@@ -326,6 +332,15 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				}
 			}
 		}
+	}
+
+	/** Inmates walk through each other: a crowd in a narrow door would otherwise jam. */
+	@Override
+	public void pushAwayFrom(net.minecraft.entity.Entity entity) {
+		if (entity instanceof PrisonerNpcEntity) {
+			return;
+		}
+		super.pushAwayFrom(entity);
 	}
 
 	@Override
@@ -553,6 +568,10 @@ public class PrisonerNpcEntity extends MerchantEntity {
 			if (wanted == null) {
 				return;
 			}
+			if (npc.departDelay > 0 && !wanted.equals(destination)) {
+				npc.departDelay--;
+				return;
+			}
 			if (!wanted.equals(destination) || via != null && npc.getBlockPos().getSquaredDistance(via) <= 4) {
 				destination = wanted;
 				travelTicks = 0;
@@ -591,7 +610,8 @@ public class PrisonerNpcEntity extends MerchantEntity {
 				game.onNpcArrived(npc, destination);
 				npc.getNavigation().stop();
 				// In the line-up they stand still and wait; elsewhere they idle a bit before moving on.
-				waitTicks = npc.lineupSlot != null ? 40 : 40 + npc.getRandom().nextInt(100);
+				// In the food queue they step up as soon as the one in front is served.
+				waitTicks = npc.lineupSlot != null ? 40 : game.isQueuing(npc) ? 4 : 40 + npc.getRandom().nextInt(100);
 				if (npc.lineupSlot == null) {
 					destination = null;
 				}

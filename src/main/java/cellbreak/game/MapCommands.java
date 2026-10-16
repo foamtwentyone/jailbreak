@@ -141,6 +141,10 @@ public final class MapCommands {
 					layout(c).foodChests.add(p);
 					ok(c, "Сундук с едой на кухне №" + layout(c).foodChests.size() + ": " + p.toShortString());
 				})))
+				.then(CommandManager.literal("walk").then(pos((c, p) -> {
+					layout(c).walkPoints.add(p);
+					ok(c, "Точка прогулочной тропинки №" + layout(c).walkPoints.size() + ": " + p.toShortString());
+				})))
 				.then(CommandManager.literal("rollcallpost").then(pos((c, p) -> {
 					layout(c).rollCallPosts.add(p);
 					ok(c, "Пост охраны на перекличке №" + layout(c).rollCallPosts.size() + ": " + p.toShortString());

@@ -107,6 +107,8 @@ public class GuardEntity extends PathAwareEntity {
 		super(type, world);
 		setPersistent();
 		setCanPickUpLoot(false);
+		// Tables are iron trapdoors on bars: nobody walks across them.
+		setPathfindingPenalty(net.minecraft.entity.ai.pathing.PathNodeType.TRAPDOOR, -1.0F);
 	}
 
 	public static DefaultAttributeContainer.Builder createGuardAttributes() {

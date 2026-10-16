@@ -444,10 +444,27 @@ public class CellbreakTest implements ModInitializer {
 					reply(c, sb.toString());
 					return 1;
 				}))
-				.then(CommandManager.literal("reach").then(CommandManager.argument("pos", BlockPosArgumentType.blockPos()).executes(c -> {
-					reply(c, reach(c.getSource().getWorld(), BlockPosArgumentType.getBlockPos(c, "pos")));
+				.then(CommandManager.literal("signs").executes(c -> {
+					ServerWorld w = c.getSource().getWorld();
+					StringBuilder sb = new StringBuilder();
+					for (BlockPos p : BlockPos.iterate(176, 55, 196, 312, 100, 324)) {
+						if (w.getBlockEntity(p) instanceof net.minecraft.block.entity.SignBlockEntity sign) {
+							sb.append("\nSIGN ").append(p.toShortString()).append(':');
+							for (Text t : sign.getFrontText().getMessages(false)) sb.append(" | ").append(t.getString());
+						} else if (w.getBlockEntity(p) instanceof net.minecraft.block.entity.LockableContainerBlockEntity be && be.getCustomName() != null) {
+							sb.append("\nNAMED ").append(p.toShortString()).append(' ').append(be.getCustomName().getString());
+						}
+					}
+					reply(c, sb.toString());
 					return 1;
-				})))
+				}))
+				.then(CommandManager.literal("reach").then(CommandManager.argument("pos", BlockPosArgumentType.blockPos()).executes(c -> {
+					reply(c, reach(c.getSource().getWorld(), BlockPosArgumentType.getBlockPos(c, "pos"), false));
+					return 1;
+				}).then(CommandManager.literal("all").executes(c -> {
+					reply(c, reach(c.getSource().getWorld(), BlockPosArgumentType.getBlockPos(c, "pos"), true));
+					return 1;
+				}))))
 				.then(CommandManager.literal("map").executes(CellbreakTest::map)));
 	}
 
@@ -631,7 +648,7 @@ public class CellbreakTest implements ModInitializer {
 		if (s.isOf(net.minecraft.block.Blocks.IRON_DOOR)) {
 			return s.get(net.minecraft.block.DoorBlock.OPEN);
 		}
-		if (s.getBlock() instanceof net.minecraft.block.DoorBlock || s.getBlock() instanceof net.minecraft.block.FenceGateBlock
+		if (s.getBlock() instanceof cellbreak.block.DetectorBlock || s.getBlock() instanceof net.minecraft.block.DoorBlock || s.getBlock() instanceof net.minecraft.block.FenceGateBlock
 				|| s.getBlock() instanceof net.minecraft.block.TrapdoorBlock && !s.isOf(net.minecraft.block.Blocks.IRON_TRAPDOOR)) {
 			return true;
 		}
@@ -639,24 +656,30 @@ public class CellbreakTest implements ModInitializer {
 	}
 
 	/** Flood fill over walkable spots from pos; reports the first places with open sky and the route there. */
-	private static String reach(ServerWorld w, BlockPos start) {
+	private static String reach(ServerWorld w, BlockPos start, boolean all) {
 		java.util.Map<BlockPos, BlockPos> parent = new java.util.HashMap<>();
 		java.util.ArrayDeque<BlockPos> q = new java.util.ArrayDeque<>();
+		java.util.List<String> exits = new java.util.ArrayList<>();
 		parent.put(start, start);
 		q.add(start);
 		while (!q.isEmpty() && parent.size() < 300000) {
 			BlockPos cur = q.poll();
 			if (w.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING, cur.getX(), cur.getZ()) <= cur.getY()) {
-				StringBuilder sb = new StringBuilder("SKY at " + cur.toShortString() + " visited=" + parent.size() + " route:");
-				java.util.List<BlockPos> route = new java.util.ArrayList<>();
-				for (BlockPos b = cur; !b.equals(start); b = parent.get(b)) route.add(b);
-				java.util.Collections.reverse(route);
-				for (int i = 0; i < route.size(); i++) {
-					BlockPos b = route.get(i);
-					boolean door = w.getBlockState(b).getBlock() instanceof net.minecraft.block.DoorBlock;
-					if (door || i % 6 == 0 || i == route.size() - 1) sb.append(door ? " DOOR " : " ").append(b.toShortString());
+				BlockPos prev = parent.get(cur);
+				boolean prevSky = w.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING, prev.getX(), prev.getZ()) <= prev.getY();
+				if (!prevSky && exits.size() < 40) {
+					BlockPos door = null;
+					for (BlockPos b = cur; !b.equals(start); b = parent.get(b)) {
+						if (w.getBlockState(b).getBlock() instanceof net.minecraft.block.DoorBlock) {
+							door = b;
+							break;
+						}
+					}
+					exits.add(cur.toShortString() + (door != null ? " via door " + door.toShortString() : ""));
 				}
-				return sb.toString();
+				if (!all) {
+					continue;
+				}
 			}
 			boolean ladder = w.getBlockState(cur).isIn(net.minecraft.registry.tag.BlockTags.CLIMBABLE);
 			for (net.minecraft.util.math.Direction d : net.minecraft.util.math.Direction.values()) {
@@ -690,6 +713,28 @@ public class CellbreakTest implements ModInitializer {
 				}
 			}
 		}
-		return "no sky reachable, visited=" + parent.size();
+		int[] bb = {Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE};
+		for (BlockPos b : parent.keySet()) {
+			bb[0] = Math.min(bb[0], b.getX()); bb[1] = Math.max(bb[1], b.getX()); bb[2] = Math.min(bb[2], b.getZ()); bb[3] = Math.max(bb[3], b.getZ());
+		}
+		if (all) {
+			StringBuilder sb = new StringBuilder("visited=" + parent.size() + " x" + bb[0] + ".." + bb[1] + " z" + bb[2] + ".." + bb[3]);
+			int[][] probes = { { 213, 282, 0 }, { 198, 260, 1 }, { 230, 215, 2 }, { 290, 280, 3 }, { 258, 250, 4 }, { 200, 305, 5 } };
+			String[] names = { "yard", "weststrip", "north", "eaststrip", "field", "south" };
+			for (int[] pr : probes) {
+				boolean hit = parent.keySet().stream().anyMatch(b -> Math.abs(b.getX() - pr[0]) <= 2 && Math.abs(b.getZ() - pr[1]) <= 2);
+				sb.append(' ').append(names[pr[2]]).append('=').append(hit);
+				if (hit && pr[2] == 2) {
+					BlockPos end = parent.keySet().stream().filter(b -> Math.abs(b.getX() - pr[0]) <= 2 && Math.abs(b.getZ() - pr[1]) <= 2).findFirst().get();
+					java.util.List<BlockPos> route = new java.util.ArrayList<>();
+					for (BlockPos b = end; !b.equals(start); b = parent.get(b)) route.add(b);
+					java.util.Collections.reverse(route);
+					sb.append(" route:");
+					for (int i = 0; i < route.size(); i += 3) sb.append(' ').append(route.get(i).toShortString().replace(", ", ","));
+				}
+			}
+			return sb.toString();
+		}
+		return "visited=" + parent.size() + " x" + bb[0] + ".." + bb[1] + " z" + bb[2] + ".." + bb[3] + " exits to sky: " + String.join("; ", exits);
 	}
 }

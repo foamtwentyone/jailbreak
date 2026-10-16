@@ -95,7 +95,7 @@ public class CellbreakGame {
 		SHOWER("Душ", "Все в душевую!", 9000, Zone.SHOWER),
 		DINNER("Ужин", "Все в столовую!", 11000, Zone.CANTEEN),
 		EVENING_FREE("Свободное время", "Можно ходить где угодно.", 12000, Zone.ANYWHERE),
-		EVENING_ROLL_CALL("Вечерняя перекличка", "Все в зону переклички! Охрана будет обыскивать.", 12800, Zone.ROLL_CALL),
+		EVENING_ROLL_CALL("Вечерняя перекличка", "Все в зону переклички! Двери на улицу закроют через 15 секунд.", 12800, Zone.ROLL_CALL),
 		LIGHTS_OUT("Отбой", "Все по камерам! Через 25 секунд двери запрут. На улице стреляют снайперы.", 18000, Zone.CELLS);
 
 		public final String title;
@@ -172,6 +172,8 @@ public class CellbreakGame {
 		GuardEntity foreignCellGuard;
 		long suspiciousTick = -10000;
 		long lastFightTick = -10000;
+		/** The last punch thrown at another inmate, seen or not. */
+		long lastHitTick = -10000;
 		long lastTalkTick = -10000;
 		BlockPos lineupSlot;
 
@@ -188,7 +190,8 @@ public class CellbreakGame {
 	private final Map<BlockPos, BlockState> damage = new HashMap<>();
 	private boolean running;
 	private long ticks;
-	private long endTick;
+	/** The day of the stay, counted from the start of the round. */
+	private int day;
 	private int scheduleIndex;
 	private int phaseTicksLeft;
 	private boolean searchDone;
@@ -208,6 +211,9 @@ public class CellbreakGame {
 	private final Map<UUID, Searchlight> searchlights = new HashMap<>();
 	private boolean countStarted;
 	private boolean doorsLocked;
+	/** The doors to the outside are shut for the evening (they stay open a little after the evening free time). */
+	private boolean outdoorsClosed;
+	private static final int OUTDOOR_GRACE_SECONDS = 15;
 	private boolean cleanedLeftovers;
 	private List<BlockPos> lineup = List.of();
 	private BlockPos lineupLook;
@@ -388,7 +394,7 @@ public class CellbreakGame {
 
 	// ------------------------------------------------------------------ round lifecycle
 
-	public String start(int minutes, int npcGuards, int npcPrisoners) {
+	public String start(int npcGuards, int npcPrisoners) {
 		PrisonLayout layout = layout();
 		if (layout == null) {
 			return "Тюрьма не отмечена на карте. Откройте карту MPE Cellbreak или разметьте свою (/cellbreak map ...).";
@@ -408,7 +414,7 @@ public class CellbreakGame {
 
 		running = true;
 		ticks = 0;
-		endTick = minutes * 60L * 20L;
+		day = 1;
 		regrowth.clear();
 		graffiti.clear();
 		searchlights.clear();
@@ -478,8 +484,8 @@ public class CellbreakGame {
 		beginPhase();
 		broadcast(Text.literal("Раунд начался (Cellbreak " + net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("cellbreak")
 				.map(m -> m.getMetadata().getVersion().getFriendlyString()).orElse("?") + ")! Заключённых: " + prisoners.size() + " (+" + npcCount + " NPC), охранников: "
-				+ guards.size() + " (+" + npcGuardCount + " NPC, " + layout.sniperPosts.size() + " снайперов). Длительность: "
-				+ minutes + " мин.").formatted(Formatting.GOLD));
+				+ guards.size() + " (+" + npcGuardCount + " NPC, " + layout.sniperPosts.size()
+				+ " снайперов). Игра идёт, пока все не сбегут.").formatted(Formatting.GOLD));
 		return null;
 	}
 
@@ -506,25 +512,6 @@ public class CellbreakGame {
 		}
 	}
 
-	private void finishByTime() {
-		List<String> escaped = new ArrayList<>();
-		int prisoners = 0;
-		for (Map.Entry<UUID, PlayerData> e : players.entrySet()) {
-			if (e.getValue().role == Role.PRISONER) {
-				prisoners++;
-				if (e.getValue().escaped) {
-					escaped.add(name(e.getKey()));
-				}
-			}
-		}
-		if (escaped.isEmpty()) {
-			stop("время вышло, никто не сбежал. Победила охрана!");
-		} else {
-			stop("время вышло. Сбежали " + escaped.size() + " из " + prisoners + ": " + String.join(", ", escaped)
-					+ (escaped.size() * 2 >= prisoners ? ". Победили заключённые!" : ". Победила охрана!"));
-		}
-	}
-
 	// ------------------------------------------------------------------ tick
 
 	public void tick() {
@@ -539,10 +526,6 @@ public class CellbreakGame {
 			return;
 		}
 		ticks++;
-		if (ticks >= endTick) {
-			finishByTime();
-			return;
-		}
 		if (--phaseTicksLeft <= 0) {
 			endPhase();
 			nextPhase();
@@ -580,6 +563,14 @@ public class CellbreakGame {
 			nextPhase();
 			beginPhase();
 		}
+		if (phase() == Phase.EVENING_ROLL_CALL && !outdoorsClosed && phaseElapsed() >= OUTDOOR_GRACE_SECONDS * 20) {
+			// Everybody had a moment to come in from outside.
+			outdoorsClosed = true;
+			setDoors(true, false);
+			for (ServerPlayerEntity p : allOnline()) {
+				p.sendMessage(Text.literal("Двери на улицу закрыты.").formatted(Formatting.GRAY), true);
+			}
+		}
 		if (phase() == Phase.LIGHTS_OUT && !doorsLocked && phaseElapsed() >= GRACE_SECONDS * 20) {
 			doorsLocked = true;
 			lockUpForTheNight();
@@ -598,6 +589,7 @@ public class CellbreakGame {
 		}
 		if (ticks % 10 == 0) {
 			runEscorts();
+			runFightChecks();
 		}
 		if (ticks % 10 == 0) {
 			updatePlayers();
@@ -605,11 +597,14 @@ public class CellbreakGame {
 		if (phase() == Phase.SHOWER && ticks % 20 == 0) {
 			washAnimations();
 		}
-		if (phase().zone == Zone.CANTEEN && ticks % 20 == 0) {
+		if (phase().zone == Zone.CANTEEN && ticks % 10 == 0) {
 			serveQueue();
+		}
+		if (phase().zone == Zone.CANTEEN && ticks % 20 == 0) {
 			eatAnimations();
 		}
 		if (ticks % 20 == 0) {
+			world().setTimeOfDay(absoluteTime(routineTime()));
 			updateHud();
 			guardsInspectDamage();
 			regrow(false);
@@ -678,13 +673,19 @@ public class CellbreakGame {
 		startShower(phase);
 		for (PrisonerNpcEntity npc : npcPrisoners()) {
 			npc.skipsMeal = phase.zone == Zone.CANTEEN && world().random.nextInt(5) == 0;
+			// Not all at once: the crowd spreads out over a few seconds.
+			npc.departDelay = world().random.nextInt(100);
 		}
-		world().setTimeOfDay(phase.timeOfDay);
+		if (phase == Phase.WAKE_UP && ticks > 1) {
+			day++;
+		}
+		world().setTimeOfDay(absoluteTime(phase.timeOfDay));
 		// At lights out the doors stay open a little longer: everybody walks to their cell first.
 		// At wake-up everything is still locked; doors to the outside open from the walk until the
 		// evening roll call.
 		boolean outdoors = phase == Phase.EXERCISE || phase == Phase.SHOWER || phase == Phase.DINNER
-				|| phase == Phase.EVENING_FREE;
+				|| phase == Phase.EVENING_FREE || phase == Phase.EVENING_ROLL_CALL;
+		outdoorsClosed = !outdoors;
 		setDoors(phase != Phase.WAKE_UP, outdoors);
 		doorsLocked = false;
 		lockServiceDoors();
@@ -971,9 +972,12 @@ public class CellbreakGame {
 	}
 
 	/** Now and then two inmates get into a fight (a rough one starts it). */
+	private long lastBrawlTick = -100000;
+
 	private void npcBrawls() {
 		Phase phase = phase();
-		if (phase.zone != Zone.ANYWHERE && phase.zone != Zone.YARD && phase.zone != Zone.CANTEEN || world().random.nextInt(6) != 0) {
+		if (phase.zone != Zone.ANYWHERE && phase.zone != Zone.YARD && phase.zone != Zone.CANTEEN || world().random.nextInt(9) != 0
+				|| ticks - lastBrawlTick < 120 * 20) {
 			return;
 		}
 		List<PrisonerNpcEntity> npcs = npcPrisoners();
@@ -985,6 +989,7 @@ public class CellbreakGame {
 			for (PrisonerNpcEntity b : npcs) {
 				if (b != a && b.squaredDistanceTo(a) < 5 * 5 && !b.hasVehicle() && b.solitaryUntil == 0 && b.infirmaryUntil == 0) {
 					a.pickFightWith(b);
+					lastBrawlTick = ticks;
 					Text msg = Text.literal(a.getName().getString() + ": ").formatted(Formatting.GOLD).append(Text.literal(
 							BRAWL_LINES[world().random.nextInt(BRAWL_LINES.length)].formatted(b.getName().getString()))
 							.formatted(Formatting.RED));
@@ -1071,11 +1076,35 @@ public class CellbreakGame {
 		}
 	}
 
+	/** The in-game time of day the routine is at now, moving smoothly from one part of the day to the next. */
+	private long routineTime() {
+		long from = phase().timeOfDay;
+		long to = ((Phase) SCHEDULE[(scheduleIndex + 1) % SCHEDULE.length][0]).timeOfDay;
+		if (to <= from) {
+			to += 24000;
+		}
+		int total = (Integer) SCHEDULE[scheduleIndex][1] * 20;
+		double done = MathHelper.clamp((double) phaseElapsed() / total, 0, 1);
+		return (from + Math.round((to - from) * done)) % 24000;
+	}
+
+	/** World time for a time of day today; the wake-up before dawn still belongs to the night before. */
+	private long absoluteTime(long timeOfDay) {
+		long base = day * 24000L;
+		return (phase() == Phase.WAKE_UP && timeOfDay >= 12000 ? base - 24000 : base) + timeOfDay;
+	}
+
+	/** The prison clock, e.g. "07:30" (time 0 is six in the morning). */
+	private String gameClock() {
+		long t = routineTime();
+		long minutes = (t * 60 / 1000 + 6 * 60) % (24 * 60);
+		return String.format("%02d:%02d", minutes / 60, minutes % 60);
+	}
+
 	private void updateHud() {
 		int secs = phaseTicksLeft / 20;
-		long roundLeft = (endTick - ticks) / 20;
 		String clock = String.format("%d:%02d", secs / 60, secs % 60);
-		String round = String.format("%d:%02d", roundLeft / 60, roundLeft % 60);
+		String round = "День " + day + ", " + gameClock();
 		List<String> wanted = new ArrayList<>();
 		for (ServerPlayerEntity p : online(Role.PRISONER)) {
 			if (isWanted(p)) {
@@ -1090,7 +1119,7 @@ public class CellbreakGame {
 			Text hud;
 			if (d.role == Role.PRISONER) {
 				if (d.escaped) {
-					hud = Text.literal("Ты на свободе! До конца раунда " + round).formatted(Formatting.GREEN);
+					hud = Text.literal("Ты на свободе! " + round).formatted(Formatting.GREEN);
 				} else if (d.solitaryUntil != 0) {
 					hud = Text.literal("Карцер: ещё " + (d.solitaryUntil - ticks) / 20 + " с").formatted(Formatting.RED);
 				} else if (d.infirmaryUntil != 0) {
@@ -1104,7 +1133,7 @@ public class CellbreakGame {
 				}
 			} else {
 				hud = Text.literal(phase().title + " " + clock).formatted(Formatting.YELLOW)
-						.append(Text.literal("  |  Раунд " + round).formatted(Formatting.GRAY))
+						.append(Text.literal("  |  " + round).formatted(Formatting.GRAY))
 						.append(wanted.isEmpty() ? Text.empty()
 								: Text.literal("  |  Розыск: " + String.join(", ", wanted)).formatted(Formatting.RED));
 			}
@@ -1693,6 +1722,9 @@ public class CellbreakGame {
 	 */
 	private List<BlockPos> watchSpots(Phase phase, BlockBox zone) {
 		List<BlockPos> spots = new ArrayList<>();
+		if (phase.zone == Zone.YARD) {
+			spots.addAll(layout().walkPoints);
+		}
 		if (phase.zone == Zone.CANTEEN) {
 			spots.addAll(layout().queueSpots);
 			if (seats.isEmpty()) {
@@ -1959,11 +1991,82 @@ public class CellbreakGame {
 
 	/** A noise at pos: the snipers look, the nearest free guard comes to check the spot. */
 	private void makeNoise(BlockPos pos, BlockPos checkAt) {
+		makeNoise(pos, checkAt, false);
+	}
+
+	/** Guards on their way to a fight they heard: who goes, where, since when. */
+	private final Map<UUID, BlockPos> fightChecks = new HashMap<>();
+	private final Map<UUID, Long> fightCheckSince = new HashMap<>();
+
+	/**
+	 * A fight is heard further than other noises, and the guard who comes deals with whoever is still
+	 * fighting there (or just was).
+	 */
+	private void makeNoise(BlockPos pos, BlockPos checkAt, boolean fight) {
 		alertSnipers(pos);
-		npcGuards().stream().filter(g -> g.getTarget() == null && g.getBlockPos().getSquaredDistance(pos) < 24 * 24
-						&& (!g.hasDuty() || g.getBlockPos().getSquaredDistance(pos) < 12 * 12))
+		int range = fight ? 32 : 24;
+		int dutyRange = fight ? 20 : 12;
+		if (fight && fightChecks.values().stream().anyMatch(b -> b.getSquaredDistance(pos) < 8 * 8)) {
+			return;
+		}
+		npcGuards().stream().filter(g -> g.getTarget() == null && !g.isSniper() && !fightChecks.containsKey(g.getUuid())
+						&& g.getBlockPos().getSquaredDistance(pos) < range * range
+						&& (!g.hasDuty() || g.getBlockPos().getSquaredDistance(pos) < dutyRange * dutyRange))
 				.min(java.util.Comparator.comparingDouble(g -> g.getBlockPos().getSquaredDistance(pos)))
-				.ifPresent(g -> g.checkNoise(checkAt));
+				.ifPresent(g -> {
+					g.checkNoise(checkAt);
+					if (fight) {
+						fightChecks.put(g.getUuid(), checkAt.toImmutable());
+						fightCheckSince.put(g.getUuid(), ticks);
+						guardSays(g, FIGHT_HEARD[world().random.nextInt(FIGHT_HEARD.length)]);
+					}
+				});
+	}
+
+	private static final String[] FIGHT_HEARD = { "Что там за шум?!", "Опять драка? Иду!", "А ну тихо там!",
+			"Кто там дерётся? Сейчас разберёмся.", "Стоять всем! Я иду!" };
+
+	/** Guards who came to a fight they heard: whoever still fights (or just did) answers for it. */
+	private void runFightChecks() {
+		for (Iterator<Map.Entry<UUID, BlockPos>> it = fightChecks.entrySet().iterator(); it.hasNext();) {
+			Map.Entry<UUID, BlockPos> e = it.next();
+			Entity ge = world().getEntity(e.getKey());
+			long since = fightCheckSince.getOrDefault(e.getKey(), ticks);
+			if (!(ge instanceof GuardEntity g) || !g.isAlive() || ticks - since > 25 * 20) {
+				it.remove();
+				continue;
+			}
+			BlockPos spot = e.getValue();
+			if (g.getBlockPos().getSquaredDistance(spot) > 5 * 5) {
+				continue;
+			}
+			it.remove();
+			boolean found = false;
+			for (PrisonerNpcEntity npc : world().getEntitiesByClass(PrisonerNpcEntity.class, new Box(spot).expand(8),
+					n -> n.isAlive() && n.getTarget() != null && g.canSee(n))) {
+				if (!escorts.containsKey(npc.getUuid())) {
+					fightsSeen++;
+					found = true;
+					guardSays(g, npc.getName().getString() + ", прекратить драку! Руки за спину!");
+					npc.calmDown();
+					escorts.put(npc.getUuid(), g.getUuid());
+					escortSince.put(npc.getUuid(), ticks);
+				}
+			}
+			for (ServerPlayerEntity p : online(Role.PRISONER)) {
+				PlayerData d = data(p);
+				if (ticks - d.lastHitTick < 20 * 20 && p.getBlockPos().getSquaredDistance(spot) < 10 * 10 && g.canSee(p)) {
+					found = true;
+					fightsSeen++;
+					addHeat(p, 20);
+					guardSays(g, "Это ты тут дрался, " + p.getName().getString() + "? Я тебя запомнил.");
+					p.sendMessage(Text.literal("Охрана застала тебя после драки. Подозрение +20").formatted(Formatting.RED), true);
+				}
+			}
+			if (!found) {
+				guardSays(g, "Хм. Тихо. Показалось...");
+			}
+		}
 	}
 
 	/** Called when a prisoner hits any guard. */
@@ -2060,7 +2163,7 @@ public class CellbreakGame {
 
 	/** An NPC inmate hit a player: a guard who sees it stops the fight and takes the NPC away. */
 	public void onNpcAttack(PrisonerNpcEntity npc, LivingEntity victim) {
-		makeNoise(npc.getBlockPos(), npc.getBlockPos());
+		makeNoise(npc.getBlockPos(), npc.getBlockPos(), true);
 		if (escorts.containsKey(npc.getUuid())) {
 			return;
 		}
@@ -2144,8 +2247,11 @@ public class CellbreakGame {
 
 	public void onPrisonerFight(ServerPlayerEntity attacker, Entity victim) {
 		// A fight is loud: guards nearby come to see what is going on.
-		makeNoise(attacker.getBlockPos(), attacker.getBlockPos());
+		makeNoise(attacker.getBlockPos(), attacker.getBlockPos(), true);
 		PlayerData d = data(attacker);
+		if (isPrisoner(attacker)) {
+			d.lastHitTick = ticks;
+		}
 		if (!isPrisoner(attacker) || ticks - d.lastFightTick < 40) {
 			return;
 		}
@@ -2637,8 +2743,6 @@ public class CellbreakGame {
 	private List<BlockPos> seats = List.of();
 	private int nextCook;
 	/** Since when the inmate at the front of the queue has been waiting to get there. */
-	private long queueFrontSince;
-	private UUID queueFront;
 
 	private void spawnCooks() {
 		List<BlockPos> posts = layout().cookPosts;
@@ -2729,43 +2833,46 @@ public class CellbreakGame {
 		return spot;
 	}
 
-	/** Every second at meals: the inmate at the front of the queue gets food. */
+	public boolean isQueuing(PrisonerNpcEntity npc) {
+		return foodQueue.contains(npc.getUuid());
+	}
+
+	/** Twice a second at meals: the inmate at the front of the queue gets food. */
 	private void serveQueue() {
 		PrisonLayout l = layout();
 		if (foodQueue.isEmpty() || l.queueSpots.isEmpty()) {
 			return;
 		}
-		Entity e = world().getEntity(foodQueue.get(0));
-		if (!(e instanceof PrisonerNpcEntity npc) || !npc.isAlive()) {
-			foodQueue.remove(0);
-			return;
-		}
-		if (!npc.getUuid().equals(queueFront)) {
-			queueFront = npc.getUuid();
-			queueFrontSince = ticks;
-		}
-		// Served at the hatch; one stuck on the way does not hold up the whole queue.
-		if (npc.getBlockPos().getSquaredDistance(l.queueSpots.get(0)) > 3 && ticks - queueFrontSince < 12 * 20) {
-			return;
-		}
+		foodQueue.removeIf(id -> !(world().getEntity(id) instanceof PrisonerNpcEntity n) || !n.isAlive());
+		// First come, first served: the line is ordered by who is closest to the hatch, not by who set off first.
+		BlockPos hatch = l.queueSpots.get(0);
+		foodQueue.sort(java.util.Comparator.comparingDouble(id -> world().getEntity(id).getBlockPos().getSquaredDistance(hatch)));
 		List<CookEntity> cooks = cooks();
-		if (!cooks.isEmpty()) {
-			CookEntity cook = cooks.get(nextCook++ % cooks.size());
-			cook.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-			cook.getLookControl().lookAt(npc);
-			if (world().random.nextInt(3) == 0) {
-				Text line = cook.line();
-				for (ServerPlayerEntity p : world().getPlayers()) {
-					if (p.squaredDistanceTo(cook) < 12 * 12) {
-						p.sendMessage(line, false);
+		int servers = Math.max(1, Math.min(2, cooks.size()));
+		for (int k = 0; k < servers && !foodQueue.isEmpty(); k++) {
+			PrisonerNpcEntity npc = (PrisonerNpcEntity) world().getEntity(foodQueue.get(0));
+			if (npc.getBlockPos().getSquaredDistance(hatch) > 6) {
+				return;
+			}
+			if (!cooks.isEmpty()) {
+				CookEntity cook = cooks.get(nextCook++ % cooks.size());
+				cook.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+				cook.getLookControl().lookAt(npc);
+				if (world().random.nextInt(3) == 0) {
+					Text line = cook.line();
+					for (ServerPlayerEntity p : world().getPlayers()) {
+						if (p.squaredDistanceTo(cook) < 12 * 12) {
+							p.sendMessage(line, false);
+						}
 					}
 				}
 			}
+			npc.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.BREAD));
+			fedThisMeal.add(npc.getUuid());
+			foodQueue.remove(0);
 		}
-		npc.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.BREAD));
-		fedThisMeal.add(npc.getUuid());
-		foodQueue.remove(0);
 	}
+
 
 	/** An NPC inmate reached its seat: it sits down (on an invisible stand) and eats. */
 	public void onNpcArrived(PrisonerNpcEntity npc, BlockPos at) {
@@ -3052,6 +3159,9 @@ public class CellbreakGame {
 				return meal;
 			}
 		}
+		if (phase.zone == Zone.YARD && !layout.walkPoints.isEmpty()) {
+			return walkDestination(npc, current);
+		}
 		if (zone != null && !(npc.skipsMeal && phase.zone == Zone.CANTEEN)) {
 			return current != null && zone.contains(current) ? current : randomSpotIn(zone);
 		}
@@ -3063,10 +3173,26 @@ public class CellbreakGame {
 		if (roll < 2 && !layout.patrolPoints.isEmpty()) {
 			return layout.patrolPoints.get(r.nextInt(layout.patrolPoints.size()));
 		}
-		if (roll == 2 && layout.yardZone != null) {
-			return randomSpotIn(layout.yardZone);
+		if (roll == 2 && !layout.walkPoints.isEmpty()) {
+			return walkDestination(npc, null);
 		}
 		return cellSpawn;
+	}
+
+	/** On the walk: along the path, a few points at a time, sometimes turning back. */
+	private BlockPos walkDestination(PrisonerNpcEntity npc, BlockPos current) {
+		List<BlockPos> points = layout().walkPoints;
+		if (current != null && points.contains(current)) {
+			return current;
+		}
+		Random r = world().random;
+		if (npc.walkIndex < 0 || npc.walkIndex >= points.size()) {
+			npc.walkIndex = r.nextInt(points.size());
+		} else {
+			int step = 1 + r.nextInt(3);
+			npc.walkIndex = Math.floorMod(npc.walkIndex + (r.nextInt(5) == 0 ? -step : step), points.size());
+		}
+		return points.get(npc.walkIndex);
 	}
 
 	/**
@@ -3305,8 +3431,13 @@ public class CellbreakGame {
 				return false;
 			}
 			Direction f = st.get(DoorBlock.FACING);
-			return world().isSkyVisible(d.offset(f).up()) || world().isSkyVisible(d.offset(f.getOpposite()).up());
+			return openSky(d.offset(f)) || openSky(d.offset(f.getOpposite()));
 		});
+	}
+
+	/** Nothing but sky (or tree tops) above a spot. */
+	private boolean openSky(BlockPos p) {
+		return world().getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, p.getX(), p.getZ()) <= p.getY();
 	}
 
 	/**

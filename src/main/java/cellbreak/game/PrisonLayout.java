@@ -72,6 +72,8 @@ public class PrisonLayout {
 	/** Canteen: where the cooks stand, the food queue (front first) and the kitchen chests. */
 	public final List<BlockPos> cookPosts = new ArrayList<>();
 	public final List<BlockPos> queueSpots = new ArrayList<>();
+	/** Points along the walking paths outdoors; inmates stroll between them on the walk. */
+	public final List<BlockPos> walkPoints = new ArrayList<>();
 	public final List<BlockPos> foodChests = new ArrayList<>();
 
 	public boolean isEscaped(BlockPos pos) {
@@ -181,6 +183,7 @@ public class PrisonLayout {
 		nbt.putLongArray("materialDetectors", longs(materialDetectors));
 		nbt.putLongArray("cookPosts", longs(cookPosts));
 		nbt.putLongArray("queueSpots", longs(queueSpots));
+		nbt.putLongArray("walkPoints", longs(walkPoints));
 		nbt.putLongArray("foodChests", longs(foodChests));
 		return nbt;
 	}
@@ -242,6 +245,9 @@ public class PrisonLayout {
 		}
 		for (long p : nbt.getLongArray("queueSpots")) {
 			l.queueSpots.add(BlockPos.fromLong(p));
+		}
+		for (long p : nbt.getLongArray("walkPoints")) {
+			l.walkPoints.add(BlockPos.fromLong(p));
 		}
 		for (long p : nbt.getLongArray("foodChests")) {
 			l.foodChests.add(BlockPos.fromLong(p));
