@@ -15,6 +15,9 @@ public class CellbreakClient implements ClientModInitializer {
 		EntityRendererRegistry.register(CbContent.GUARD, GuardRenderer::new);
 		EntityRendererRegistry.register(CbContent.PRISONER, PrisonerRenderer::new);
 		EntityRendererRegistry.register(CbContent.COOK, CookRenderer::new);
+		net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(
+				cellbreak.net.SearchlightPayload.ID, (payload, context) -> SearchlightRenderer.receive(payload));
+		net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_TRANSLUCENT.register(SearchlightRenderer::render);
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.CELL_BARS, RenderLayer.getCutoutMipped());
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.DETECTOR, RenderLayer.getCutout());
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.GRAFFITI, RenderLayer.getCutout());

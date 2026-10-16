@@ -462,6 +462,34 @@ public class CellbreakTest implements ModInitializer {
 					reply(c, sb.toString());
 					return 1;
 				}))
+				.then(CommandManager.literal("beam").then(CommandManager.argument("from", net.minecraft.command.argument.Vec3ArgumentType.vec3(false))
+						.then(CommandManager.argument("to", net.minecraft.command.argument.Vec3ArgumentType.vec3(false)).executes(c -> {
+							var f = net.minecraft.command.argument.Vec3ArgumentType.getVec3(c, "from");
+							var t = net.minecraft.command.argument.Vec3ArgumentType.getVec3(c, "to");
+							var payload = new cellbreak.net.SearchlightPayload(java.util.List.of(new cellbreak.net.SearchlightPayload.Beam(
+									(float) f.x, (float) f.y, (float) f.z, (float) t.x, (float) t.y, (float) t.z, 6.5F)));
+							for (var pl : c.getSource().getServer().getPlayerManager().getPlayerList()) {
+								if (net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.canSend(pl, cellbreak.net.SearchlightPayload.ID)) {
+									net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(pl, payload);
+								}
+							}
+							return 1;
+						}))))
+				.then(CommandManager.literal("beams").then(CommandManager.argument("list", StringArgumentType.greedyString()).executes(c -> {
+					String[] v = StringArgumentType.getString(c, "list").trim().split("\\s+");
+					var beams = new java.util.ArrayList<cellbreak.net.SearchlightPayload.Beam>();
+					for (int i = 0; i + 5 < v.length; i += 6) {
+						beams.add(new cellbreak.net.SearchlightPayload.Beam(Float.parseFloat(v[i]), Float.parseFloat(v[i + 1]),
+								Float.parseFloat(v[i + 2]), Float.parseFloat(v[i + 3]), Float.parseFloat(v[i + 4]), Float.parseFloat(v[i + 5]), 6.5F));
+					}
+					var payload = new cellbreak.net.SearchlightPayload(beams);
+					for (var pl : c.getSource().getServer().getPlayerManager().getPlayerList()) {
+						if (net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.canSend(pl, cellbreak.net.SearchlightPayload.ID)) {
+							net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(pl, payload);
+						}
+					}
+					return 1;
+				})))
 				.then(CommandManager.literal("reach").then(CommandManager.argument("pos", BlockPosArgumentType.blockPos()).executes(c -> {
 					reply(c, reach(c.getSource().getWorld(), BlockPosArgumentType.getBlockPos(c, "pos"), false));
 					return 1;

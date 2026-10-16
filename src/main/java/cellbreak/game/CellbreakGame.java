@@ -233,8 +233,6 @@ public class CellbreakGame {
 
 	private static class Searchlight {
 		final List<BlockPos> lights = new ArrayList<>();
-		/** The beam from the tower to the spot and the pool of light (glowing block displays). */
-		final List<UUID> beam = new ArrayList<>();
 		Vec3d spot;
 		Vec3d goal;
 		UUID lockedOn;
@@ -564,6 +562,7 @@ public class CellbreakGame {
 		}
 		if (phase() == Phase.LIGHTS_OUT && ticks % 4 == 0) {
 			moveSearchlights();
+			sendSearchlights();
 		}
 		if (phase() == Phase.LIGHTS_OUT && ticks % 10 == 0 && everyoneAsleep()) {
 			// Every prisoner is asleep: the night passes.
@@ -1360,10 +1359,8 @@ public class CellbreakGame {
 				}
 				Vec3d dir = light.goal.subtract(light.spot);
 				double len = dir.horizontalLength();
-				Vec3d next = len <= step ? light.goal : light.spot.add(dir.multiply(step / len));
-				int y = world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, MathHelper.floor(next.x),
-						MathHelper.floor(next.z));
-				target = new Vec3d(next.x, y, next.z);
+				// Glide at ground level from one spot to the next (over a roof the pool stays down below).
+				target = len <= step ? light.goal : light.spot.add(dir.multiply(step / len));
 			}
 			light.spot = target;
 			sniper.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, target);
@@ -1378,7 +1375,7 @@ public class CellbreakGame {
 				for (int[] o : around) {
 					BlockPos lp = center.add(o[0], 0, o[1]);
 					if (o[0] != 0 || o[1] != 0) {
-						int y = world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, lp.getX(), lp.getZ());
+						int y = groundY(lp.getX(), lp.getZ());
 						lp = new BlockPos(lp.getX(), y, lp.getZ());
 					}
 					if (world.getBlockState(lp).isAir()) {
@@ -1390,91 +1387,33 @@ public class CellbreakGame {
 					}
 				}
 			}
-			updateBeam(sniper, light, target);
 		}
 	}
 
-	/**
-	 * The searchlight beam: a cone of glowing glass (three ever wider segments) from the lamp on the
-	 * tower down to the lit spot, and a pale pool of light on the ground.
-	 */
-	private void updateBeam(GuardEntity sniper, Searchlight light, Vec3d target) {
-		Vec3d from = sniper.getEyePos().add(0, 0.3, 0);
-		Vec3d to = target.add(0, 0.05, 0);
-		Vec3d d = to.subtract(from);
-		float len = (float) d.length();
-		if (len < 3) {
-			return;
-		}
-		float[] widths = { 0.5F, 1.3F, 2.4F };
-		for (int k = 0; k < widths.length; k++) {
-			Vec3d start = from.add(d.multiply(k / 3.0));
-			org.joml.Vector3f dir = new org.joml.Vector3f((float) d.x, (float) d.y, (float) d.z).normalize();
-			org.joml.Quaternionf q = new org.joml.Quaternionf().rotationTo(new org.joml.Vector3f(0, 0, 1), dir);
-			float w = widths[k];
-			org.joml.Vector3f offset = q.transform(new org.joml.Vector3f(-w / 2, -w / 2, 0));
-			displayPart(light, k, start, q, offset, new org.joml.Vector3f(w, w, len / 3), "minecraft:white_stained_glass");
-		}
-		float r = (float) SEARCHLIGHT_RADIUS;
-		displayPart(light, 3, to, new org.joml.Quaternionf(), new org.joml.Vector3f(-r, 0, -r), new org.joml.Vector3f(2 * r, 0.03F, 2 * r),
-				"minecraft:white_stained_glass");
-	}
-
-	/** One glowing block display of a searchlight, created on first use and then moved smoothly. */
-	private void displayPart(Searchlight light, int index, Vec3d at, org.joml.Quaternionf rot, org.joml.Vector3f translation,
-			org.joml.Vector3f scale, String block) {
-		ServerWorld world = world();
-		while (light.beam.size() <= index) {
-			light.beam.add(null);
-		}
-		UUID id = light.beam.get(index);
-		net.minecraft.entity.decoration.DisplayEntity.BlockDisplayEntity e = null;
-		if (id != null && world.getEntity(id) instanceof net.minecraft.entity.decoration.DisplayEntity.BlockDisplayEntity b) {
-			e = b;
-		}
-		boolean fresh = e == null;
-		if (fresh) {
-			e = net.minecraft.entity.EntityType.BLOCK_DISPLAY.create(world);
-			if (e == null) {
-				return;
+	/** Tells every client where the searchlights shine (the client mod draws the cones of light). */
+	private void sendSearchlights() {
+		List<cellbreak.net.SearchlightPayload.Beam> list = new ArrayList<>();
+		// Always the same order: the client glides each beam from its last position.
+		List<GuardEntity> towers = new ArrayList<>(snipers());
+		towers.sort(java.util.Comparator.comparing(Entity::getUuid));
+		for (GuardEntity sniper : towers) {
+			Searchlight light = searchlights.get(sniper.getUuid());
+			if (light == null || light.spot == null) {
+				continue;
 			}
-			e.addCommandTag(BEAM_TAG);
+			Vec3d from = sniper.getEyePos().add(0, 0.4, 0);
+			list.add(new cellbreak.net.SearchlightPayload.Beam((float) from.x, (float) from.y, (float) from.z, (float) light.spot.x,
+					(float) light.spot.y, (float) light.spot.z, (float) SEARCHLIGHT_RADIUS));
 		}
-		NbtCompound nbt = e.writeNbt(new NbtCompound());
-		NbtCompound state = new NbtCompound();
-		state.putString("Name", block);
-		nbt.put("block_state", state);
-		NbtCompound tr = new NbtCompound();
-		tr.put("left_rotation", floats(rot.x, rot.y, rot.z, rot.w));
-		tr.put("right_rotation", floats(0, 0, 0, 1));
-		tr.put("translation", floats(translation.x, translation.y, translation.z));
-		tr.put("scale", floats(scale.x, scale.y, scale.z));
-		nbt.put("transformation", tr);
-		NbtCompound bright = new NbtCompound();
-		bright.putInt("block", 15);
-		bright.putInt("sky", 15);
-		nbt.put("brightness", bright);
-		nbt.putFloat("view_range", 4.0F);
-		nbt.putInt("teleport_duration", fresh ? 0 : 4);
-		nbt.putInt("interpolation_duration", fresh ? 0 : 4);
-		nbt.putInt("start_interpolation", 0);
-		e.readNbt(nbt);
-		e.refreshPositionAndAngles(at.x, at.y, at.z, 0, 0);
-		if (fresh) {
-			world.spawnEntity(e);
-			light.beam.set(index, e.getUuid());
+		cellbreak.net.SearchlightPayload payload = new cellbreak.net.SearchlightPayload(list);
+		for (ServerPlayerEntity p : world().getPlayers()) {
+			if (net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.canSend(p, cellbreak.net.SearchlightPayload.ID)) {
+				net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(p, payload);
+			}
 		}
 	}
 
 	private static final String BEAM_TAG = "cellbreak_beam";
-
-	private static net.minecraft.nbt.NbtList floats(float... values) {
-		net.minecraft.nbt.NbtList list = new net.minecraft.nbt.NbtList();
-		for (float v : values) {
-			list.add(net.minecraft.nbt.NbtFloat.of(v));
-		}
-		return list;
-	}
 
 	/** Beams left over from a round that was not finished properly. */
 	private void removeBeams() {
@@ -1484,6 +1423,21 @@ public class CellbreakGame {
 		for (Entity e : world().getEntitiesByType(net.minecraft.entity.EntityType.BLOCK_DISPLAY, npcArea(), e -> e.getCommandTags().contains(BEAM_TAG))) {
 			e.discard();
 		}
+	}
+
+	/** The ground (or roof) under the open sky at a column: tree trunks and crowns do not count. */
+	private int groundY(int x, int z) {
+		ServerWorld world = world();
+		int y = world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
+		BlockPos.Mutable p = new BlockPos.Mutable(x, y - 1, z);
+		while (p.getY() > world.getBottomY()) {
+			BlockState st = world.getBlockState(p);
+			if (!st.isAir() && !st.isIn(BlockTags.LOGS) && !st.isIn(BlockTags.LEAVES) && !st.isReplaceable()) {
+				break;
+			}
+			p.move(0, -1, 0);
+		}
+		return p.getY() + 1;
 	}
 
 	/** A random outdoor spot inside the prison that this sniper can see from the tower. */
@@ -1496,13 +1450,13 @@ public class CellbreakGame {
 			BlockBox a = areas.get(r.nextInt(areas.size()));
 			int x = a.getMinX() + 3 + r.nextInt(Math.max(1, a.getBlockCountX() - 6));
 			int z = a.getMinZ() + 3 + r.nextInt(Math.max(1, a.getBlockCountZ() - 6));
-			int y = world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
+			int y = groundY(x, z);
 			Vec3d p = new Vec3d(x + 0.5, y, z + 0.5);
-			if (fallback == null) {
+			if (fallback == null && y <= sniper.getBlockY() - 8) {
 				fallback = p;
 			}
-			if (p.distanceTo(sniper.getEyePos()) > SNIPER_RANGE * 0.8) {
-				continue;
+			if (p.distanceTo(sniper.getEyePos()) > SNIPER_RANGE * 0.8 || y > sniper.getBlockY() - 8) {
+				continue; // too far, or a roof up at the tower's height: the light sweeps the ground
 			}
 			BlockHitResult hit = world.raycast(new RaycastContext(sniper.getEyePos(), p.add(0, 1.0, 0),
 					RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, sniper));
@@ -1551,6 +1505,9 @@ public class CellbreakGame {
 		}
 		searchlights.clear();
 		removeBeams();
+		if (layout() != null) {
+			sendSearchlights();
+		}
 	}
 
 	/**
