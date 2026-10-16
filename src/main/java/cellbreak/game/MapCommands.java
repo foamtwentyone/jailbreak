@@ -145,6 +145,10 @@ public final class MapCommands {
 					layout(c).gymZone = b;
 					ok(c, "Качалка: " + str(b));
 				})))
+				.then(CommandManager.literal("gatepost").then(pos((c, p) -> {
+					layout(c).gatePost = p;
+					ok(c, "Пост у главных ворот: " + p.toShortString());
+				})))
 				.then(CommandManager.literal("gymmachine").then(pos((c, p) -> {
 					layout(c).gymMachines.add(p);
 					ok(c, "Тренажёр (блок) №" + layout(c).gymMachines.size() + ": " + p.toShortString());

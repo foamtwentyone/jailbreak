@@ -214,6 +214,9 @@ public class GuardEntity extends PathAwareEntity {
 		return result;
 	}
 
+	/** Stands at the main gate and lets nobody near it. */
+	public boolean gatekeeper;
+
 	public boolean isSniper() {
 		return sniper;
 	}
@@ -232,6 +235,7 @@ public class GuardEntity extends PathAwareEntity {
 	public void writeCustomDataToNbt(NbtCompound nbt) {
 		super.writeCustomDataToNbt(nbt);
 		nbt.putBoolean("Sniper", sniper);
+		nbt.putBoolean("Gatekeeper", gatekeeper);
 		nbt.putInt("Variant", getVariant());
 		nbt.putString("Manner", manner.name());
 	}
@@ -240,6 +244,7 @@ public class GuardEntity extends PathAwareEntity {
 	public void readCustomDataFromNbt(NbtCompound nbt) {
 		super.readCustomDataFromNbt(nbt);
 		sniper = nbt.getBoolean("Sniper");
+		gatekeeper = nbt.getBoolean("Gatekeeper");
 		dataTracker.set(VARIANT, nbt.getInt("Variant"));
 		try {
 			manner = Manner.valueOf(nbt.getString("Manner"));

@@ -141,7 +141,7 @@ public class CellbreakGame {
 	private static final int INFIRMARY_SECONDS = 30;
 	/** How long a suspicious act outdoors (breaking, placing a fake, graffiti) keeps a day sniper's eye on you. */
 	private static final int SUSPICIOUS_TICKS = 60;
-	private static final double SEARCHLIGHT_RADIUS = 3.5;
+	private static final double SEARCHLIGHT_RADIUS = 6.5;
 	private static final int ORE_REGEN_SECONDS = 60;
 	private static final int LOG_REGEN_SECONDS = 90;
 	private static final int MAX_TRADERS = 3;
@@ -179,6 +179,8 @@ public class CellbreakGame {
 		long lastRepTick = -10000;
 		int reps;
 		String exercise;
+		final List<Long> recentSets = new ArrayList<>();
+		long lastShowerTick = -10000;
 		long lastTalkTick = -10000;
 		BlockPos lineupSlot;
 
@@ -230,7 +232,9 @@ public class CellbreakGame {
 	}
 
 	private static class Searchlight {
-		BlockPos light;
+		final List<BlockPos> lights = new ArrayList<>();
+		/** The beam from the tower to the spot and the pool of light (glowing block displays). */
+		final List<UUID> beam = new ArrayList<>();
 		Vec3d spot;
 		Vec3d goal;
 		UUID lockedOn;
@@ -425,7 +429,7 @@ public class CellbreakGame {
 		day = 1;
 		regrowth.clear();
 		graffiti.clear();
-		searchlights.clear();
+		clearSearchlights();
 		cleanLeftovers();
 		npcGuardCount = npcGuards >= 0 ? npcGuards : Math.max(guards.isEmpty() ? 2 : 1, (prisoners.size() + 2) / 3 - guards.size() + 1);
 		damage.clear();
@@ -473,6 +477,7 @@ public class CellbreakGame {
 		for (BlockPos post : layout.sniperPosts) {
 			spawnSniper(post);
 		}
+		spawnGatekeeper();
 		nicknames = new ArrayList<>(List.of(PrisonerNpcEntity.NICKNAMES));
 		Collections.shuffle(nicknames);
 		int npcCount = 0;
@@ -502,6 +507,7 @@ public class CellbreakGame {
 			return;
 		}
 		running = false;
+		clearSearchlights();
 		removeNpcs();
 		repairAll();
 		for (Map.Entry<UUID, PlayerData> e : players.entrySet()) {
@@ -598,6 +604,7 @@ public class CellbreakGame {
 		if (ticks % 10 == 0) {
 			runEscorts();
 			runFightChecks();
+			runGatekeeper();
 		}
 		if (ticks % 10 == 0) {
 			updatePlayers();
@@ -1078,10 +1085,7 @@ public class CellbreakGame {
 
 	private void rewardAttendance(ServerPlayerEntity p, Phase phase) {
 		switch (phase) {
-			case SHOWER -> {
-				p.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 200, 1));
-				p.sendMessage(Text.literal("Ты помылся. Здоровье восстанавливается.").formatted(Formatting.AQUA), true);
-			}
+			case SHOWER -> p.sendMessage(Text.literal("Встань под душ и открой кран (рычаг).").formatted(Formatting.AQUA), true);
 			case EXERCISE -> {
 				p.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 20 * 120, 0));
 				p.sendMessage(Text.literal("Свежий воздух: ты быстрее на 2 минуты.").formatted(Formatting.AQUA), true);
@@ -1326,7 +1330,7 @@ public class CellbreakGame {
 
 	/**
 	 * Night: every sniper's searchlight sweeps back and forth over the prison grounds in front of
-	 * them. The lit spot is a real light on the ground plus a beam of particles.
+	 * them. The lit spot is a pool of real light on the ground with a glowing beam from the tower.
 	 */
 	private void moveSearchlights() {
 		ServerWorld world = world();
@@ -1365,17 +1369,120 @@ public class CellbreakGame {
 			sniper.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, target);
 			sniper.setHeadYaw(sniper.getYaw());
 			sniper.setBodyYaw(sniper.getYaw());
-			BlockPos lightPos = BlockPos.ofFloored(target.x, target.y + 0.5, target.z);
-			if (!lightPos.equals(light.light)) {
-				removeLight(light.light);
-				if (world.getBlockState(lightPos).isAir()) {
-					world.setBlockState(lightPos, Blocks.LIGHT.getDefaultState().with(net.minecraft.block.LightBlock.LEVEL_15, 15));
-					light.light = lightPos;
-					addLeftover(lightPos);
-				} else {
-					light.light = null;
+			BlockPos center = BlockPos.ofFloored(target.x, target.y + 0.5, target.z);
+			if (light.lights.isEmpty() || !light.lights.get(0).equals(center)) {
+				// A wide pool of light: the spot itself and four lamps around it.
+				light.lights.forEach(this::removeLight);
+				light.lights.clear();
+				int[][] around = { { 0, 0 }, { 3, 0 }, { -3, 0 }, { 0, 3 }, { 0, -3 } };
+				for (int[] o : around) {
+					BlockPos lp = center.add(o[0], 0, o[1]);
+					if (o[0] != 0 || o[1] != 0) {
+						int y = world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, lp.getX(), lp.getZ());
+						lp = new BlockPos(lp.getX(), y, lp.getZ());
+					}
+					if (world.getBlockState(lp).isAir()) {
+						world.setBlockState(lp, Blocks.LIGHT.getDefaultState().with(net.minecraft.block.LightBlock.LEVEL_15, 15));
+						light.lights.add(lp);
+						addLeftover(lp);
+					} else if (o[0] == 0 && o[1] == 0) {
+						light.lights.add(center);
+					}
 				}
 			}
+			updateBeam(sniper, light, target);
+		}
+	}
+
+	/**
+	 * The searchlight beam: a cone of glowing glass (three ever wider segments) from the lamp on the
+	 * tower down to the lit spot, and a pale pool of light on the ground.
+	 */
+	private void updateBeam(GuardEntity sniper, Searchlight light, Vec3d target) {
+		Vec3d from = sniper.getEyePos().add(0, 0.3, 0);
+		Vec3d to = target.add(0, 0.05, 0);
+		Vec3d d = to.subtract(from);
+		float len = (float) d.length();
+		if (len < 3) {
+			return;
+		}
+		float[] widths = { 0.5F, 1.3F, 2.4F };
+		for (int k = 0; k < widths.length; k++) {
+			Vec3d start = from.add(d.multiply(k / 3.0));
+			org.joml.Vector3f dir = new org.joml.Vector3f((float) d.x, (float) d.y, (float) d.z).normalize();
+			org.joml.Quaternionf q = new org.joml.Quaternionf().rotationTo(new org.joml.Vector3f(0, 0, 1), dir);
+			float w = widths[k];
+			org.joml.Vector3f offset = q.transform(new org.joml.Vector3f(-w / 2, -w / 2, 0));
+			displayPart(light, k, start, q, offset, new org.joml.Vector3f(w, w, len / 3), "minecraft:white_stained_glass");
+		}
+		float r = (float) SEARCHLIGHT_RADIUS;
+		displayPart(light, 3, to, new org.joml.Quaternionf(), new org.joml.Vector3f(-r, 0, -r), new org.joml.Vector3f(2 * r, 0.03F, 2 * r),
+				"minecraft:white_stained_glass");
+	}
+
+	/** One glowing block display of a searchlight, created on first use and then moved smoothly. */
+	private void displayPart(Searchlight light, int index, Vec3d at, org.joml.Quaternionf rot, org.joml.Vector3f translation,
+			org.joml.Vector3f scale, String block) {
+		ServerWorld world = world();
+		while (light.beam.size() <= index) {
+			light.beam.add(null);
+		}
+		UUID id = light.beam.get(index);
+		net.minecraft.entity.decoration.DisplayEntity.BlockDisplayEntity e = null;
+		if (id != null && world.getEntity(id) instanceof net.minecraft.entity.decoration.DisplayEntity.BlockDisplayEntity b) {
+			e = b;
+		}
+		boolean fresh = e == null;
+		if (fresh) {
+			e = net.minecraft.entity.EntityType.BLOCK_DISPLAY.create(world);
+			if (e == null) {
+				return;
+			}
+			e.addCommandTag(BEAM_TAG);
+		}
+		NbtCompound nbt = e.writeNbt(new NbtCompound());
+		NbtCompound state = new NbtCompound();
+		state.putString("Name", block);
+		nbt.put("block_state", state);
+		NbtCompound tr = new NbtCompound();
+		tr.put("left_rotation", floats(rot.x, rot.y, rot.z, rot.w));
+		tr.put("right_rotation", floats(0, 0, 0, 1));
+		tr.put("translation", floats(translation.x, translation.y, translation.z));
+		tr.put("scale", floats(scale.x, scale.y, scale.z));
+		nbt.put("transformation", tr);
+		NbtCompound bright = new NbtCompound();
+		bright.putInt("block", 15);
+		bright.putInt("sky", 15);
+		nbt.put("brightness", bright);
+		nbt.putFloat("view_range", 4.0F);
+		nbt.putInt("teleport_duration", fresh ? 0 : 4);
+		nbt.putInt("interpolation_duration", fresh ? 0 : 4);
+		nbt.putInt("start_interpolation", 0);
+		e.readNbt(nbt);
+		e.refreshPositionAndAngles(at.x, at.y, at.z, 0, 0);
+		if (fresh) {
+			world.spawnEntity(e);
+			light.beam.set(index, e.getUuid());
+		}
+	}
+
+	private static final String BEAM_TAG = "cellbreak_beam";
+
+	private static net.minecraft.nbt.NbtList floats(float... values) {
+		net.minecraft.nbt.NbtList list = new net.minecraft.nbt.NbtList();
+		for (float v : values) {
+			list.add(net.minecraft.nbt.NbtFloat.of(v));
+		}
+		return list;
+	}
+
+	/** Beams left over from a round that was not finished properly. */
+	private void removeBeams() {
+		if (layout() == null) {
+			return;
+		}
+		for (Entity e : world().getEntitiesByType(net.minecraft.entity.EntityType.BLOCK_DISPLAY, npcArea(), e -> e.getCommandTags().contains(BEAM_TAG))) {
+			e.discard();
 		}
 	}
 
@@ -1440,9 +1547,10 @@ public class CellbreakGame {
 
 	private void clearSearchlights() {
 		for (Searchlight l : searchlights.values()) {
-			removeLight(l.light);
+			l.lights.forEach(this::removeLight);
 		}
 		searchlights.clear();
+		removeBeams();
 	}
 
 	/**
@@ -1958,9 +2066,41 @@ public class CellbreakGame {
 		damage.putIfAbsent(pos.toImmutable(), original);
 		suspiciousOutdoors(p, pos);
 		makeNoise(p, pos);
-		if (seenWorking(p)) {
-			addHeat(p, 40);
-			p.sendMessage(Text.literal("Охрана заметила, как ты ломаешь тюрьму! Подозрение +40").formatted(Formatting.RED));
+		PlayerData d = data(p);
+		if (d.wanted) {
+			return;
+		}
+		GuardEntity witness = null;
+		for (GuardEntity g : npcGuards()) {
+			if (sees(g, p, 12, false)) {
+				witness = g;
+				break;
+			}
+		}
+		if (witness != null || isSeen(p, npcGuards(), online(Role.GUARD))) {
+			// Breaking the prison in front of a guard: no warnings, the alarm goes up at once.
+			if (witness != null) {
+				witness.getLookControl().lookAt(p);
+				guardSays(witness, "Тревога! " + p.getName().getString() + " ломает стену! Взять его!");
+			}
+			addHeat(p, MAX_HEAT);
+			p.sendMessage(Text.literal("Охрана видела, как ты ломаешь тюрьму! Тревога!").formatted(Formatting.RED));
+			return;
+		}
+		// Outdoors, close to a tower: the sniper hears the pick even without seeing who is at it.
+		if (openSky(p.getBlockPos()) || openSky(pos.up())) {
+			for (GuardEntity sniper : snipers()) {
+				if (sniper.squaredDistanceTo(p) < 28 * 28) {
+					sniper.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, p.getEyePos());
+					addHeat(p, MAX_HEAT);
+					d.lastSeenTick = ticks;
+					d.lastSeenPos = p.getBlockPos();
+					world().playSound(null, sniper.getBlockPos(), SoundEvents.BLOCK_BELL_USE, SoundCategory.HOSTILE, 3.0F, 0.8F);
+					title(p, Text.literal("Снайпер услышал!").formatted(Formatting.DARK_RED),
+							Text.literal("Стук под вышкой — тревога. Беги!"));
+					return;
+				}
+			}
 		}
 	}
 
@@ -2939,11 +3079,22 @@ public class CellbreakGame {
 		if (d.reps >= need) {
 			d.reps = 0;
 			d.exercise = null;
-			p.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 20 * 240, 0));
+			// Sets in the last three minutes: more than three and the body says enough.
+			d.recentSets.removeIf(t -> ticks - t > 3 * 60 * 20);
+			d.recentSets.add(ticks);
+			p.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 20 * 90, 0));
 			if (!bag) {
-				p.addStatusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 20 * 240, 0));
+				p.addStatusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 20 * 90, 0));
 			}
-			p.sendMessage(Text.literal(name + ": подход сделан! Сила на 4 минуты" + (bag ? "." : " и запас здоровья."))
+			if (d.recentSets.size() > 3) {
+				p.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 20 * 30, 0));
+				p.addStatusEffect(new StatusEffectInstance(StatusEffects.MINING_FATIGUE, 20 * 30, 0));
+				p.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 20 * 15, 0));
+				p.sendMessage(Text.literal(name + ": перестарался — мышцы забились, полминуты передышки.")
+						.formatted(Formatting.GOLD), true);
+				return true;
+			}
+			p.sendMessage(Text.literal(name + ": подход сделан! Сила на полторы минуты" + (bag ? "." : " и запас здоровья."))
 					.formatted(Formatting.AQUA), true);
 		} else {
 			p.sendMessage(Text.literal(name + ": " + d.reps + "/" + need).formatted(Formatting.YELLOW), true);
@@ -2958,7 +3109,7 @@ public class CellbreakGame {
 	/** Somebody opened the kitchen chest: the cooks raise a fuss and a guard comes over. */
 	public void onFoodChestOpened(ServerPlayerEntity p, BlockPos pos) {
 		PlayerData d = data(p);
-		if (d == null || d.role != Role.PRISONER || ticks - d.lastChestFuss < 15 * 20) {
+		if (d == null || d.role != Role.PRISONER || ticks - d.lastChestFuss < 10) {
 			return;
 		}
 		d.lastChestFuss = ticks;
@@ -3184,6 +3335,19 @@ public class CellbreakGame {
 					|| world.getClosestPlayer(head.getX(), head.getY(), head.getZ(), 48, false) == null) {
 				continue;
 			}
+			if (running && server.getTicks() % 15 == 0) {
+				// Under the running water: washed and healing.
+				Box stream = new Box(head.getX(), head.getY() - 4, head.getZ(), head.getX() + 1, head.getY() + 1, head.getZ() + 1);
+				for (ServerPlayerEntity p : world.getEntitiesByClass(ServerPlayerEntity.class, stream, pl -> isPrisoner(pl))) {
+					PlayerData d = data(p);
+					p.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 60, 1));
+					p.extinguish();
+					if (ticks - d.lastShowerTick > 20 * 20) {
+						p.sendMessage(Text.literal("Ты моешься под душем. Здоровье восстанавливается.").formatted(Formatting.AQUA), true);
+					}
+					d.lastShowerTick = ticks;
+				}
+			}
 			double x = head.getX() + 0.5;
 			double z = head.getZ() + 0.5;
 			world.spawnParticles(net.minecraft.particle.ParticleTypes.FALLING_WATER, x, head.getY() + 0.9, z, 4, 0.18, 0.02, 0.18, 0);
@@ -3213,7 +3377,7 @@ public class CellbreakGame {
 
 	/** Walking NPC guards (not snipers). */
 	public List<GuardEntity> npcGuards() {
-		return world().getEntitiesByClass(GuardEntity.class, npcArea(), g -> g.isAlive() && !g.isSniper());
+		return world().getEntitiesByClass(GuardEntity.class, npcArea(), g -> g.isAlive() && !g.isSniper() && !g.gatekeeper);
 	}
 
 	private List<GuardEntity> snipers() {
@@ -3237,6 +3401,62 @@ public class CellbreakGame {
 		guard.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
 		guard.initialize(world(), world().getLocalDifficulty(pos), SpawnReason.EVENT, null);
 		world().spawnEntity(guard);
+	}
+
+	private void spawnGatekeeper() {
+		BlockPos post = layout().gatePost;
+		GuardEntity g = post == null ? null : CbContent.GUARD.create(world());
+		if (g == null) {
+			return;
+		}
+		g.refreshPositionAndAngles(post.getX() + 0.5, post.getY(), post.getZ() + 0.5, 90, 0);
+		g.initialize(world(), world().getLocalDifficulty(post), SpawnReason.EVENT, null);
+		g.gatekeeper = true;
+		g.setCustomName(Text.literal("Майор Злобин").formatted(Formatting.DARK_RED));
+		g.setDuty(List.of(post), post.west(4));
+		world().spawnEntity(g);
+	}
+
+	private static final String[] GATE_LINES = { "Куда прёшь?! Стоять! Лицом к стене!", "А ну назад, урод! Тревога!",
+			"Ещё шаг — и ты труп! Охрана, сюда!", "К воротам?! Я тебе покажу ворота!", "Стоять, сволочь! На землю!" };
+
+	/** The gate guard: whoever comes close is an escapee, whatever the time of day. */
+	private void runGatekeeper() {
+		BlockPos post = layout().gatePost;
+		if (post == null) {
+			return;
+		}
+		List<GuardEntity> keepers = world().getEntitiesByClass(GuardEntity.class, npcArea(), g -> g.isAlive() && g.gatekeeper);
+		if (keepers.isEmpty()) {
+			if (ticks % (30 * 20) == 0) {
+				spawnGatekeeper();
+			}
+			return;
+		}
+		GuardEntity g = keepers.get(0);
+		if (!g.hasDuty()) {
+			g.setDuty(List.of(post), post.west(4));
+		}
+		if (g.getBlockPos().getSquaredDistance(post) > 12 * 12) {
+			// Never lured away from the gate for long.
+			g.setTarget(null);
+			g.getNavigation().stop();
+			g.setDuty(List.of(post), post.west(4));
+		}
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			PlayerData d = data(p);
+			if (d.escaped || d.solitaryUntil != 0 || d.infirmaryUntil != 0 || p.squaredDistanceTo(g) > 9 * 9 || !g.canSee(p)) {
+				continue;
+			}
+			if (!d.wanted) {
+				guardSays(g, GATE_LINES[world().random.nextInt(GATE_LINES.length)]);
+				g.playSound(SoundEvents.ENTITY_VINDICATOR_CELEBRATE, 1.5F, 0.7F);
+			}
+			addHeat(p, MAX_HEAT);
+			d.lastSeenTick = ticks;
+			d.lastSeenPos = p.getBlockPos();
+			g.setTarget(p);
+		}
 	}
 
 	private void spawnSniper(BlockPos post) {
@@ -3397,6 +3617,7 @@ public class CellbreakGame {
 		for (PrisonerNpcEntity npc : npcPrisoners()) {
 			npc.discard();
 		}
+		removeBeams();
 		for (CookEntity cook : world().getEntitiesByClass(CookEntity.class, npcArea(), e -> true)) {
 			cook.discard();
 		}
