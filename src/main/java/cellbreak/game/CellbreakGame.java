@@ -132,6 +132,8 @@ public class CellbreakGame {
 	private static final int GUARD_SIGHT = 16;
 	private static final int PLAYER_GUARD_SIGHT = 24;
 	private static final int SNIPER_RANGE = 96;
+	/** Within this distance of a tower the sniper hears and shoots through walls and earth. */
+	private static final int SNIPER_CLOSE = 20;
 	private static final int SNIPER_AIM_TICKS = 40;
 	private static final int SEARCHED_AT_ROLL_CALL = 4;
 	/** Roll call: the counting guards start walking the line-up, then announce the count and the search. */
@@ -176,6 +178,8 @@ public class CellbreakGame {
 		/** The last punch thrown at another inmate, seen or not. */
 		long lastHitTick = -10000;
 		long lastChestFuss = -10000;
+		/** The night round already found this prisoner's cell empty tonight. */
+		boolean reportedMissing;
 		long lastRepTick = -10000;
 		int reps;
 		String exercise;
@@ -603,6 +607,7 @@ public class CellbreakGame {
 		if (ticks % 10 == 0) {
 			runEscorts();
 			runFightChecks();
+			nightCellChecks();
 			runGatekeeper();
 		}
 		if (ticks % 10 == 0) {
@@ -705,6 +710,9 @@ public class CellbreakGame {
 		lockServiceDoors();
 		for (PlayerData d : players.values()) {
 			d.attended = false;
+			if (phase == Phase.LIGHTS_OUT) {
+				d.reportedMissing = false;
+			}
 		}
 		if (phase == Phase.BREAKFAST || phase == Phase.DINNER) {
 			refillScrap();
@@ -1251,10 +1259,12 @@ public class CellbreakGame {
 		GuardEntity spotter = null;
 		BlockPos pos = p.getBlockPos();
 		boolean outdoors = world().isSkyVisible(pos.up());
-		if (!snipers.isEmpty() && outdoors) {
+		boolean nearTower = snipers.stream().anyMatch(s -> s.squaredDistanceTo(p) < SNIPER_CLOSE * SNIPER_CLOSE);
+		if (!snipers.isEmpty() && (outdoors || nearTower)) {
 			for (GuardEntity s : snipers) {
 				// Right next to the post the sniper notices you even past the parapet.
-				if (s.squaredDistanceTo(p) >= SNIPER_RANGE * SNIPER_RANGE || !s.canSee(p) && s.squaredDistanceTo(p) > 6 * 6) {
+				if (s.squaredDistanceTo(p) >= SNIPER_RANGE * SNIPER_RANGE
+						|| !s.canSee(p) && s.squaredDistanceTo(p) > SNIPER_CLOSE * SNIPER_CLOSE) {
 					continue;
 				}
 				boolean caught;
@@ -1363,6 +1373,12 @@ public class CellbreakGame {
 				target = len <= step ? light.goal : light.spot.add(dir.multiply(step / len));
 			}
 			light.spot = target;
+			if (locked == null && !lampSees(sniper, target)) {
+				// Behind a building: swing over to somewhere the lamp can reach.
+				light.goal = pickSweepPoint(sniper);
+				light.goalSince = ticks;
+				light.rush = 6;
+			}
 			sniper.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, target);
 			sniper.setHeadYaw(sniper.getYaw());
 			sniper.setBodyYaw(sniper.getYaw());
@@ -1402,8 +1418,17 @@ public class CellbreakGame {
 				continue;
 			}
 			Vec3d from = sniper.getEyePos().add(0, 0.4, 0);
-			list.add(new cellbreak.net.SearchlightPayload.Beam((float) from.x, (float) from.y, (float) from.z, (float) light.spot.x,
-					(float) light.spot.y, (float) light.spot.z, (float) SEARCHLIGHT_RADIUS));
+			Vec3d to = light.spot;
+			float radius = (float) SEARCHLIGHT_RADIUS;
+			// Light does not go through walls: the beam stops where it hits something.
+			BlockHitResult hit = world().raycast(new RaycastContext(from, to.add(0, 0.2, 0), RaycastContext.ShapeType.COLLIDER,
+					RaycastContext.FluidHandling.NONE, sniper));
+			if (hit.getType() != HitResult.Type.MISS) {
+				to = hit.getPos();
+				radius = 1.2F;
+			}
+			list.add(new cellbreak.net.SearchlightPayload.Beam((float) from.x, (float) from.y, (float) from.z, (float) to.x,
+					(float) to.y, (float) to.z, radius));
 		}
 		cellbreak.net.SearchlightPayload payload = new cellbreak.net.SearchlightPayload(list);
 		for (ServerPlayerEntity p : world().getPlayers()) {
@@ -1423,6 +1448,12 @@ public class CellbreakGame {
 		for (Entity e : world().getEntitiesByType(net.minecraft.entity.EntityType.BLOCK_DISPLAY, npcArea(), e -> e.getCommandTags().contains(BEAM_TAG))) {
 			e.discard();
 		}
+	}
+
+	private boolean lampSees(GuardEntity sniper, Vec3d spot) {
+		BlockHitResult hit = world().raycast(new RaycastContext(sniper.getEyePos().add(0, 0.4, 0), spot.add(0, 0.2, 0),
+				RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, sniper));
+		return hit.getType() == HitResult.Type.MISS;
 	}
 
 	/** The ground (or roof) under the open sky at a column: tree trunks and crowns do not count. */
@@ -1754,6 +1785,16 @@ public class CellbreakGame {
 		countingGuard = null;
 		PrisonLayout layout = layout();
 		BlockBox z = layout.rollCallZone;
+		if (phase == Phase.LIGHTS_OUT && !nightRoutes().isEmpty()) {
+			// Night rounds: up and down the galleries past every cell door, tier by tier.
+			List<List<BlockPos>> routes = nightRoutes();
+			for (int i = 0; i < guards.size(); i++) {
+				List<BlockPos> route = routes.get(i % routes.size());
+				BlockPos mid = route.get(route.size() / 2);
+				guards.get(i).setDuty(route, mid, true);
+			}
+			return;
+		}
 		if (!phase.isRollCall()) {
 			guards.forEach(g -> g.setDuty(null, null));
 			// Where everybody has to be, some guards watch: two on the work field, one elsewhere.
@@ -1792,6 +1833,97 @@ public class CellbreakGame {
 				}
 			} else {
 				g.setDuty(List.of(posts.get(post++ % posts.size())), center);
+			}
+		}
+	}
+
+	private List<List<BlockPos>> nightRoutes;
+
+	/**
+	 * The night rounds: for every tier of cells a loop along the galleries, stopping in front of
+	 * each cell door.
+	 */
+	private List<List<BlockPos>> nightRoutes() {
+		if (nightRoutes != null) {
+			return nightRoutes;
+		}
+		Map<Integer, List<BlockPos>> byTier = new java.util.TreeMap<>();
+		for (PrisonLayout.Cell c : layout().cells) {
+			BlockPos front = cellFront(c);
+			if (front != null) {
+				byTier.computeIfAbsent(c.door.getY(), k -> new ArrayList<>()).add(front);
+			}
+		}
+		nightRoutes = new ArrayList<>();
+		for (List<BlockPos> tier : byTier.values()) {
+			// Snake: one row of doors one way, the facing row back.
+			Map<Integer, List<BlockPos>> rows = new java.util.TreeMap<>();
+			for (BlockPos p : tier) {
+				rows.computeIfAbsent(p.getZ(), k -> new ArrayList<>()).add(p);
+			}
+			List<BlockPos> route = new ArrayList<>();
+			boolean forward = true;
+			for (List<BlockPos> row : rows.values()) {
+				row.sort(java.util.Comparator.comparingInt(BlockPos::getX));
+				if (!forward) {
+					Collections.reverse(row);
+				}
+				route.addAll(row);
+				forward = !forward;
+			}
+			if (!route.isEmpty()) {
+				nightRoutes.add(route);
+			}
+		}
+		return nightRoutes;
+	}
+
+	/** The walkable spot just outside a cell door, on the gallery side. */
+	private BlockPos cellFront(PrisonLayout.Cell c) {
+		BlockPos d = c.door;
+		for (Direction dir : Direction.Type.HORIZONTAL) {
+			if (c.interior.contains(d.offset(dir))) {
+				Direction out = dir.getOpposite();
+				for (int k = 1; k <= 3; k++) {
+					BlockPos p = d.offset(out, k);
+					if (empty(world(), p) && empty(world(), p.up()) && !empty(world(), p.down())) {
+						return p.toImmutable();
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * After lock-up, a guard passing a player's cell looks in: an empty cell means an escape in
+	 * progress, and the alarm goes up.
+	 */
+	private void nightCellChecks() {
+		if (phase() != Phase.LIGHTS_OUT || !doorsLocked) {
+			return;
+		}
+		PrisonLayout l = layout();
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			PlayerData d = data(p);
+			if (d.escaped || d.wanted || d.solitaryUntil != 0 || d.infirmaryUntil != 0 || d.cell < 0 || d.cell >= l.cells.size()
+					|| d.reportedMissing) {
+				continue;
+			}
+			PrisonLayout.Cell c = l.cells.get(d.cell);
+			if (c.interior.expand(1).contains(p.getBlockPos())) {
+				continue;
+			}
+			for (GuardEntity g : npcGuards()) {
+				if (g.getBlockPos().getSquaredDistance(c.door) < 4 * 4) {
+					d.reportedMissing = true;
+					g.getLookControl().lookAt(c.spawn.getX() + 0.5, c.spawn.getY() + 1, c.spawn.getZ() + 0.5);
+					guardSays(g, "Камера " + p.getName().getString() + " пуста! Побег! Тревога!");
+					world().playSound(null, g.getBlockPos(), SoundEvents.BLOCK_BELL_USE, SoundCategory.HOSTILE, 3.0F, 0.8F);
+					addHeat(p, MAX_HEAT);
+					broadcast(Text.literal("Ночной обход: " + p.getName().getString() + " нет в камере!").formatted(Formatting.RED));
+					break;
+				}
 			}
 		}
 	}
@@ -2024,6 +2156,11 @@ public class CellbreakGame {
 		suspiciousOutdoors(p, pos);
 		makeNoise(p, pos);
 		PlayerData d = data(p);
+		boolean underTower = snipers().stream().anyMatch(s -> s.squaredDistanceTo(p) < SNIPER_CLOSE * SNIPER_CLOSE);
+		if (underTower) {
+			// Digging right under a tower: the sniper hears it and will fire, through the wall if need be.
+			d.suspiciousTick = ticks;
+		}
 		if (d.wanted) {
 			return;
 		}
@@ -2045,7 +2182,7 @@ public class CellbreakGame {
 			return;
 		}
 		// Outdoors, close to a tower: the sniper hears the pick even without seeing who is at it.
-		if (openSky(p.getBlockPos()) || openSky(pos.up())) {
+		if (underTower || openSky(p.getBlockPos()) || openSky(pos.up())) {
 			for (GuardEntity sniper : snipers()) {
 				if (sniper.squaredDistanceTo(p) < 28 * 28) {
 					sniper.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, p.getEyePos());
@@ -2483,6 +2620,24 @@ public class CellbreakGame {
 				continue;
 			}
 			if (now.getBlock() instanceof FakeBlock) {
+				continue;
+			}
+			// Somebody in the hole: the guard deals with them first, nobody gets walled in.
+			Box hole = new Box(pos).expand(2);
+			List<ServerPlayerEntity> inside = world.getEntitiesByClass(ServerPlayerEntity.class, hole,
+					pl -> isPrisoner(pl) && !pl.isSpectator());
+			if (!inside.isEmpty()) {
+				for (GuardEntity g : guards) {
+					if (g.getBlockPos().getSquaredDistance(pos) < 100 && (canSeeBlock(g, pos) || g.squaredDistanceTo(inside.get(0)) < 25)) {
+						ServerPlayerEntity caught = inside.get(0);
+						guardSays(g, "Ага, крот! " + caught.getName().getString() + ", вылезай из норы — в карцер!");
+						arrest(caught, "пойман в подкопе");
+						break;
+					}
+				}
+				continue;
+			}
+			if (!world.getEntitiesByClass(LivingEntity.class, new Box(pos), le -> le.isAlive()).isEmpty()) {
 				continue;
 			}
 			for (GuardEntity g : guards) {

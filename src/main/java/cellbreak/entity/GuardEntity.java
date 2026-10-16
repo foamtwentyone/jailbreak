@@ -231,6 +231,45 @@ public class GuardEntity extends PathAwareEntity {
 		setEquipmentDropChance(EquipmentSlot.MAINHAND, 0.0F);
 	}
 
+	/** Stuck inside a block (a wall was mended round them, a shortcut went wrong): step out instead of choking. */
+	@Override
+	public boolean damage(net.minecraft.entity.damage.DamageSource source, float amount) {
+		if (source.isOf(net.minecraft.entity.damage.DamageTypes.IN_WALL)) {
+			net.minecraft.util.math.BlockPos free = freeSpotAround(getBlockPos());
+			if (free != null) {
+				refreshPositionAndAngles(free.getX() + 0.5, free.getY(), free.getZ() + 0.5, getYaw(), getPitch());
+				getNavigation().stop();
+			}
+			return false;
+		}
+		return super.damage(source, amount);
+	}
+
+	private net.minecraft.util.math.BlockPos freeSpotAround(net.minecraft.util.math.BlockPos center) {
+		net.minecraft.world.World w = getWorld();
+		for (int r = 1; r <= 5; r++) {
+			for (int dy = 0; dy <= 2; dy = dy <= 0 ? 1 - dy : -dy) {
+				if (dy < -2) {
+					break;
+				}
+				for (int dx = -r; dx <= r; dx++) {
+					for (int dz = -r; dz <= r; dz++) {
+						if (Math.max(Math.abs(dx), Math.abs(dz)) != r) {
+							continue;
+						}
+						net.minecraft.util.math.BlockPos p = center.add(dx, dy, dz);
+						if (w.getBlockState(p).getCollisionShape(w, p).isEmpty()
+								&& w.getBlockState(p.up()).getCollisionShape(w, p.up()).isEmpty()
+								&& !w.getBlockState(p.down()).getCollisionShape(w, p.down()).isEmpty()) {
+							return p;
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+
 	@Override
 	public void writeCustomDataToNbt(NbtCompound nbt) {
 		super.writeCustomDataToNbt(nbt);
