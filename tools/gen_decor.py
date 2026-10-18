@@ -636,7 +636,8 @@ def main_052(root, write, bs_dir, bm_dir, im_dir):
     write(bs_dir, "hazard_steel", {"variants": {"": {"model": b + "hazard_steel"}}})
     write(im_dir, "hazard_steel", {"parent": b + "hazard_steel"})
     # Laundry.
-    for name, fn in (("washing_machine", washing_machine), ("laundry_cart", laundry_cart), ("shower_head", shower_head)):
+    for name, fn in (("washing_machine", washing_machine), ("laundry_cart", laundry_cart), ("shower_head", shower_head),
+                     ("hoop_pole", hoop_pole)):
         write(bm_dir, name, fn())
         write(bs_dir, name, facing_variants(name))
         write(im_dir, name, {"parent": b + name})
@@ -745,22 +746,32 @@ def main_053(root, write, bs_dir, bm_dir, im_dir):
 
 
 def basketball_hoop():
-    """Three blocks tall (y 0..48), facing north: the court is in front (-z)."""
+    """The top of the hoop (y 0..48 over two blocks), standing on a hoop_pole block. Facing north:
+    the court is in front (-z); the rim hangs about 0.6 block out over it."""
     m = Model()
-    m.box((4, 0, 4), (12, 1, 12), "frame")
-    m.box((5, 1, 5), (11, 2.5, 11), "frame")
-    m.box((7, 2.5, 7), (9, 44, 9), "frame")
-    m.box((6.5, 2.5, 6.5), (9.5, 14, 9.5), "pad_blue")
-    m.box((7, 38, 1), (9, 40, 7), "frame")
-    m.box((7, 33, 3), (9, 34.5, 7), "frame")
-    m.box((-4, 30, 0), (20, 44, 1), {"*": "frame", "north": "board", "south": "board"}, full=("north", "south"))
-    m.box((7, 30.5, -1), (9, 31.5, 0), "rim")
-    for f, t in (((4, 30.5, -8), (12, 31.2, -7.3)), ((4, 30.5, -1), (12, 31.2, -0.3)), ((4, 30.5, -8), (4.7, 31.2, -0.3)),
-                 ((11.3, 30.5, -8), (12, 31.2, -0.3))):
+    m.box((6.5, 0, 6.5), (9.5, 41, 9.5), "frame")
+    m.box((6.5, 38.5, -2), (9.5, 41, 6.5), "frame")
+    m.box((7, 32, 1), (9, 34, 6.5), "frame")
+    m.box((7, 34, -1), (9, 38.5, 1), "frame")
+    m.box((-6, 27, -3), (22, 46, -2), {"*": "frame", "north": "board", "south": "board"}, full=("north", "south"))
+    m.box((7, 29, -4), (9, 30.5, -3), "rim")
+    rim = (2.5, 29.2, -15.5, 13.5, 30.2, -4)
+    x0, y0, z0, x1, y1, z1 = rim
+    for f, t in (((x0, y0, z0), (x1, y1, z0 + 0.8)), ((x0, y0, z1 - 0.8), (x1, y1, z1)), ((x0, y0, z0), (x0 + 0.8, y1, z1)),
+                 ((x1 - 0.8, y0, z0), (x1, y1, z1))):
         m.box(f, t, "rim")
-    m.box((4.7, 25, -7.3), (11.3, 30.5, -1), "net", full=("north", "south", "east", "west"), faces=("north", "south", "east", "west"))
-    m.box((5.5, 22, -6.5), (10.5, 25, -1.8), "net", full=("north", "south", "east", "west"), faces=("north", "south", "east", "west"))
+    sides = ("north", "south", "east", "west")
+    m.box((3.3, 24, -14.7), (12.7, 29.2, -4.8), "net", full=sides, faces=sides)
+    m.box((4.3, 20, -13.7), (11.7, 24, -5.8), "net", full=sides, faces=sides)
     return split(m, "y", "frame")
+
+
+def hoop_pole():
+    m = Model()
+    m.box((2, 0, 2), (14, 1.5, 14), "frame")
+    m.box((4, 1.5, 4), (12, 2.5, 12), "frame")
+    m.box((5.5, 2.5, 5.5), (10.5, 16, 10.5), "pad_blue")
+    return m.json("frame")
 
 
 def main(root):
