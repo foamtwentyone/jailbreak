@@ -266,6 +266,7 @@ public final class CbContent {
 			tabItems.add(b.asItem());
 		}
 		CbDecor.BLOCKS.forEach(b -> tabItems.add(b.asItem()));
+		tabItems.add(CbDecor.STEEL_SIGN_ITEM);
 		Registry.register(Registries.ITEM_GROUP, id("main"), FabricItemGroup.builder()
 				.icon(() -> new ItemStack(MAKESHIFT_PICKAXE))
 				.displayName(Text.translatable("itemGroup.cellbreak"))

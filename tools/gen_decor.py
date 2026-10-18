@@ -21,6 +21,10 @@ MAT = {
     "pillow": "mat_pillow", "blanket_gray": "mat_blanket_gray", "blanket_blue": "mat_blanket_blue",
     "blanket_white": "mat_blanket_white", "washer_front": "washer_front", "washer_side": "washer_side",
     "canvas": "mat_canvas", "clothes": "mat_clothes", "switch": "mat_switch",
+    "cab_front": "cell_cabinet_front", "cab_side": "cell_cabinet_side", "cab_top": "cell_cabinet_top",
+    "fridge_front": "fridge_front", "fridge_side": "fridge_side", "tool_front": "tool_cabinet_front",
+    "tool_side": "tool_cabinet_side", "tool_top": "tool_cabinet_top", "locker_front": "guard_locker_front",
+    "locker_side": "guard_locker_side", "towels": "mat_towels", "table": "steel_table",
 }
 
 FACES = ("north", "south", "east", "west", "up", "down")
@@ -637,6 +641,108 @@ def main_052(root, write, bs_dir, bm_dir, im_dir):
         write(im_dir, name, {"parent": b + name})
 
 
+# ---------------------------------------------------------------- 0.5.3: furniture details
+
+def cell_cabinet():
+    m = Model()
+    m.box((2.5, 0, 3.5), (13.5, 1, 14.5), "frame")
+    m.box((2, 1, 3), (14, 12, 15), {"*": "cab_side", "north": "cab_front"}, full=("north",))
+    m.box((1.5, 12, 2.5), (14.5, 13, 15.5), {"*": "cab_side", "up": "cab_top"}, full=("up",))
+    for y in (3.5, 8.5):
+        m.box((6, y, 2.4), (10, y + 1, 3), "chrome")
+    return m.json("cab_side")
+
+
+def kitchen_fridge():
+    m = Model()
+    m.box((1.5, 0, 2.5), (14.5, 0.6, 15.5), "frame")
+    m.box((1, 0.6, 2), (15, 16, 16), {"*": "fridge_side", "north": "fridge_front"}, full=("north",))
+    m.box((12, 3.5, 0.8), (13, 13, 1.6), "chrome")
+    for y in (3.5, 12):
+        m.box((12, y, 1.6), (13, y + 1, 2), "chrome")
+    m.box((2, 15, 15.5), (14, 16, 16.5), "frame")
+    return m.json("fridge_side")
+
+
+def tool_cabinet():
+    m = Model()
+    for x in (2, 12):
+        for z in (3.5, 12):
+            m.box((x, 0, z), (x + 2, 1.5, z + 2), "rubber")
+    m.box((1.5, 1.5, 3), (14.5, 13, 14.5), {"*": "tool_side", "north": "tool_front"}, full=("north",))
+    m.box((1.5, 13, 3), (14.5, 13.6, 14.5), {"*": "frame", "up": "tool_top"}, full=("up",))
+    for y in (3.5, 6.5, 9.5):
+        m.box((4.5, y, 2.4), (11.5, y + 0.8, 3), "chrome")
+    m.box((14.5, 9, 6), (15.5, 10, 12), "chrome")
+    return m.json("tool_side")
+
+
+def guard_locker():
+    m = Model()
+    m.box((1, 0, 3), (15, 16, 16), {"*": "locker_side", "north": "locker_front"}, full=("north",))
+    m.box((11.5, 6, 2.4), (12.5, 9.5, 3), "chrome")
+    m.box((2, 0, 2.6), (14, 0.8, 3), "frame")
+    return m.json("locker_side")
+
+
+def washing_machine():
+    m = Model()
+    m.box((1, 0, 2), (15, 16, 15), {"*": "washer_side", "north": "washer_front"}, full=("north",))
+    for f, t in (((4, 10.5, 1.4), (11, 11.5, 2)), ((4, 2, 1.4), (11, 3, 2)), ((3, 3, 1.4), (4, 10.5, 2)),
+                 ((11, 3, 1.4), (12, 10.5, 2))):
+        m.box(f, t, "chrome")
+    m.box((11, 13.5, 1.4), (12.5, 15, 2), "chrome")
+    m.box((0.5, 0, 2.5), (15.5, 0.5, 14.5), "frame")
+    return m.json("washer_side")
+
+
+def laundry_cart():
+    m = Model()
+    for x in (2.2, 12.3):
+        for z in (3.2, 11.3):
+            m.box((x, 0, z), (x + 1.5, 1.5, z + 1.5), "rubber")
+    m.box((2, 1.5, 3), (14, 2.5, 13), "frame")
+    for x in (2, 13.2):
+        for z in (3, 12.2):
+            m.box((x, 1.5, z), (x + 0.8, 12.5, z + 0.8), "chrome")
+    for z in (3, 12.2):
+        m.box((2, 11.7, z), (14, 12.5, z + 0.8), "chrome")
+    for x in (2, 13.2):
+        m.box((x, 11.7, 3), (x + 0.8, 12.5, 13), "chrome")
+    m.box((2.6, 3, 3.6), (13.4, 12, 12.4), "canvas")
+    m.box((3, 12, 4), (9, 13.5, 9), "clothes", full=("up",))
+    m.box((8, 12, 6), (13, 14, 12), "towels", full=("up",))
+    m.box((4, 12, 9), (10, 13, 12), "clothes", full=("up",))
+    m.box((5, 13.5, 5), (8, 14.5, 8), "towels", full=("up",))
+    m.box((1.2, 9, 7), (2, 10, 9), "chrome")
+    return m.json("canvas")
+
+
+def table(part):
+    m = Model()
+    if part == "top":
+        m.box((0, 13.5, 0), (16, 16, 16), "table", full=("up", "down"))
+        m.box((0.5, 12.5, 0.5), (15.5, 13.5, 15.5), "frame")
+    elif part == "bottom":
+        m.box((0, 0, 0), (16, 2.5, 16), "table", full=("up", "down"))
+    else:
+        m.box((0, 0, 13.5), (16, 16, 16), "table", full=("north", "south"))
+    return m.json("table")
+
+
+def main_053(root, write, bs_dir, bm_dir, im_dir):
+    b = "cellbreak:block/"
+    for name, fn in (("cell_cabinet", cell_cabinet), ("kitchen_fridge", kitchen_fridge), ("tool_cabinet", tool_cabinet),
+                     ("guard_locker", guard_locker), ("washing_machine", washing_machine), ("laundry_cart", laundry_cart)):
+        write(bm_dir, name, fn())
+    for part in ("bottom", "top", "open"):
+        write(bm_dir, "steel_table_" + part, table(part))
+    for name in ("steel_sign", "steel_wall_sign"):
+        write(bm_dir, name, {"textures": {"particle": b + "steel_panel"}})
+        write(bs_dir, name, {"variants": {"": {"model": b + name}}})
+    write(im_dir, "steel_sign", {"parent": "minecraft:item/generated", "textures": {"layer0": "cellbreak:item/steel_sign"}})
+
+
 def main(root):
     bs_dir = os.path.join(root, "blockstates")
     bm_dir = os.path.join(root, "models", "block")
@@ -754,6 +860,7 @@ def main(root):
         write(bs_dir, name, facing_variants(name, extra=True))
         write(im_dir, name, {"parent": "cellbreak:block/" + name + "_base"})
     main_052(root, write, bs_dir, bm_dir, im_dir)
+    main_053(root, write, bs_dir, bm_dir, im_dir)
 
 
 if __name__ == "__main__":

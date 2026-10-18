@@ -154,6 +154,16 @@ public final class CbDecor {
 			s -> new TwoPartBlock(s, true, new double[][] { { 3, 0, 3, 13, 16, 13 } }, new double[][] { { 3, 0, 3, 13, 14, 13 } }),
 			furniture().sounds(BlockSoundGroup.WOOL));
 
+	/** Steel name plates instead of wooden signs (the text stays). */
+	public static final net.minecraft.block.WoodType STEEL_PLATE = new net.fabricmc.fabric.api.object.builder.v1.block.type.WoodTypeBuilder()
+			.soundGroup(BlockSoundGroup.METAL).register(CbContent.id("steel_plate"), BlockSetType.IRON);
+	public static final Block STEEL_SIGN = Registry.register(Registries.BLOCK, CbContent.id("steel_sign"),
+			new net.minecraft.block.SignBlock(STEEL_PLATE, steel().noCollision().strength(1.0F)));
+	public static final Block STEEL_WALL_SIGN = Registry.register(Registries.BLOCK, CbContent.id("steel_wall_sign"),
+			new net.minecraft.block.WallSignBlock(STEEL_PLATE, steel().noCollision().strength(1.0F).dropsLike(STEEL_SIGN)));
+	public static final Item STEEL_SIGN_ITEM = Registry.register(Registries.ITEM, CbContent.id("steel_sign"),
+			new net.minecraft.item.SignItem(new Item.Settings().maxCount(16), STEEL_SIGN, STEEL_WALL_SIGN));
+
 	/** Blocks drawn with cutout (holes) or translucency; registered on the client. */
 	public static final List<Block> CUTOUT = List.of(CAGED_LAMP, RAZOR_WIRE, STEEL_TABLE, CCTV_CAMERA, SECURITY_MONITOR,
 			STEEL_TOILET, STEEL_SINK, BENCH_PRESS, EXERCISE_BIKE, DUMBBELL_RACK, PLATE_TREE, GYM_MIRROR, TREADMILL,
@@ -165,6 +175,8 @@ public final class CbDecor {
 		for (Block b : List.of(CELL_CABINET, SCRAP_BIN, KITCHEN_FRIDGE, TOOL_CABINET, GUARD_LOCKER)) {
 			net.minecraft.block.entity.BlockEntityType.BARREL.addSupportedBlock(b);
 		}
+		net.minecraft.block.entity.BlockEntityType.SIGN.addSupportedBlock(STEEL_SIGN);
+		net.minecraft.block.entity.BlockEntityType.SIGN.addSupportedBlock(STEEL_WALL_SIGN);
 	}
 
 	/** The gym exercise a machine block stands for, or null if the block is not gym gear. */

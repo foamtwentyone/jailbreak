@@ -681,6 +681,66 @@ def switch_box():
     return t
 
 
+# ---------------------------------------------------------------- 0.5.3: name plates
+
+def sign_plate():
+    """64x32 sign sheet (vanilla layout): an aluminium plate with a dark rim and corner rivets."""
+    img = Image.new("RGBA", (64, 32), (0, 0, 0, 0))
+    px = img.load()
+    rnd = random.Random(90)
+    base = (196, 200, 204)
+
+    def plate(x0, y0, w, h, face):
+        for y in range(h):
+            for x in range(w):
+                k = rnd.choice((0.96, 0.99, 1.0, 1.02))
+                c = tone(base, k * (1.0 - y * 0.01))
+                if face and (x in (0, w - 1) or y in (0, h - 1)):
+                    c = (70, 78, 86)
+                elif face and (x in (1, w - 2) or y in (1, h - 2)):
+                    c = tone(base, 1.1 if (x == 1 or y == 1) else 0.8)
+                px[x0 + x, y0 + y] = c + (255,)
+        if face:
+            for x, y in ((3, 3), (w - 4, 3), (3, h - 4), (w - 4, h - 4)):
+                px[x0 + x, y0 + y] = (110, 116, 122, 255)
+
+    plate(2, 2, 24, 12, True)    # front
+    plate(28, 2, 24, 12, True)   # back
+    plate(2, 0, 24, 2, False)    # top
+    plate(26, 0, 24, 2, False)   # bottom
+    plate(0, 2, 2, 12, False)    # side
+    plate(26, 2, 2, 12, False)   # side
+    for y in range(16, 30):      # post of the standing sign
+        for x in range(0, 8):
+            px[x, y] = tone((90, 96, 102), rnd.choice((0.9, 1.0, 1.1))) + (255,)
+    return img
+
+
+def sign_item():
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    px = img.load()
+    for y in range(3, 11):
+        for x in range(1, 15):
+            edge = x in (1, 14) or y in (3, 10)
+            px[x, y] = ((70, 78, 86) if edge else (200, 204, 208)) + (255,)
+    for x in range(4, 12):
+        px[x, 6] = (40, 40, 44, 255)
+    for x in range(5, 10):
+        px[x, 8] = (40, 40, 44, 255)
+    for y in range(11, 15):
+        px[7, y] = (96, 100, 106, 255)
+        px[8, y] = (70, 74, 80, 255)
+    return img
+
+
+def towels():
+    t = flat((236, 236, 230), 91, (0.9, 0.96, 1.0, 1.0))
+    for x in range(S):
+        t.shade(x, 5, 0.85)
+        t.shade(x, 11, 0.85)
+    return t
+
+
 def main(root):
     block_dir = os.path.join(root, "textures", "block")
     item_dir = os.path.join(root, "textures", "item")
@@ -720,6 +780,11 @@ def main(root):
     for name, t in textures.items():
         t.img.save(os.path.join(block_dir, name + ".png"))
     cell_door_item().save(os.path.join(item_dir, "cell_door.png"))
+    sign_dir = os.path.join(root, "textures", "entity", "signs")
+    os.makedirs(sign_dir, exist_ok=True)
+    sign_plate().save(os.path.join(sign_dir, "steel_plate.png"))
+    sign_item().save(os.path.join(item_dir, "steel_sign.png"))
+    towels().img.save(os.path.join(block_dir, "mat_towels.png"))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,76 @@
 {
- "parent": "minecraft:block/template_orientable_trapdoor_bottom",
  "textures": {
-  "texture": "cellbreak:block/steel_table"
- }
+  "table": "cellbreak:block/steel_table",
+  "particle": "cellbreak:block/steel_table"
+ },
+ "elements": [
+  {
+   "from": [
+    0,
+    0,
+    0
+   ],
+   "to": [
+    16,
+    2.5,
+    16
+   ],
+   "faces": {
+    "north": {
+     "uv": [
+      0,
+      13.5,
+      16,
+      16.0
+     ],
+     "texture": "#table"
+    },
+    "south": {
+     "uv": [
+      0,
+      13.5,
+      16,
+      16.0
+     ],
+     "texture": "#table"
+    },
+    "east": {
+     "uv": [
+      0,
+      13.5,
+      16,
+      16.0
+     ],
+     "texture": "#table"
+    },
+    "west": {
+     "uv": [
+      0,
+      13.5,
+      16,
+      16.0
+     ],
+     "texture": "#table"
+    },
+    "up": {
+     "uv": [
+      0,
+      0,
+      16,
+      16
+     ],
+     "texture": "#table"
+    },
+    "down": {
+     "uv": [
+      0,
+      0,
+      16,
+      16
+     ],
+     "texture": "#table"
+    }
+   }
+  }
+ ]
 }

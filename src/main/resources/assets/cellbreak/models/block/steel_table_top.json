@@ -1,6 +1,145 @@
 {
- "parent": "minecraft:block/template_orientable_trapdoor_top",
  "textures": {
-  "texture": "cellbreak:block/steel_table"
- }
+  "frame": "cellbreak:block/mat_powder_black",
+  "table": "cellbreak:block/steel_table",
+  "particle": "cellbreak:block/steel_table"
+ },
+ "elements": [
+  {
+   "from": [
+    0,
+    13.5,
+    0
+   ],
+   "to": [
+    16,
+    16,
+    16
+   ],
+   "faces": {
+    "north": {
+     "uv": [
+      0,
+      0,
+      16,
+      2.5
+     ],
+     "texture": "#table"
+    },
+    "south": {
+     "uv": [
+      0,
+      0,
+      16,
+      2.5
+     ],
+     "texture": "#table"
+    },
+    "east": {
+     "uv": [
+      0,
+      0,
+      16,
+      2.5
+     ],
+     "texture": "#table"
+    },
+    "west": {
+     "uv": [
+      0,
+      0,
+      16,
+      2.5
+     ],
+     "texture": "#table"
+    },
+    "up": {
+     "uv": [
+      0,
+      0,
+      16,
+      16
+     ],
+     "texture": "#table"
+    },
+    "down": {
+     "uv": [
+      0,
+      0,
+      16,
+      16
+     ],
+     "texture": "#table"
+    }
+   }
+  },
+  {
+   "from": [
+    0.5,
+    12.5,
+    0.5
+   ],
+   "to": [
+    15.5,
+    13.5,
+    15.5
+   ],
+   "faces": {
+    "north": {
+     "uv": [
+      0.5,
+      2.5,
+      15.5,
+      3.5
+     ],
+     "texture": "#frame"
+    },
+    "south": {
+     "uv": [
+      0.5,
+      2.5,
+      15.5,
+      3.5
+     ],
+     "texture": "#frame"
+    },
+    "east": {
+     "uv": [
+      0.5,
+      2.5,
+      15.5,
+      3.5
+     ],
+     "texture": "#frame"
+    },
+    "west": {
+     "uv": [
+      0.5,
+      2.5,
+      15.5,
+      3.5
+     ],
+     "texture": "#frame"
+    },
+    "up": {
+     "uv": [
+      0.5,
+      0.5,
+      15.5,
+      15.5
+     ],
+     "texture": "#frame"
+    },
+    "down": {
+     "uv": [
+      0.5,
+      0.5,
+      15.5,
+      15.5
+     ],
+     "texture": "#frame"
+    }
+   }
+  }
+ ]
 }

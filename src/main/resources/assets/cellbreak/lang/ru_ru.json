@@ -98,5 +98,8 @@
   "block.cellbreak.hazard_steel": "Сигнальные полосы",
   "block.cellbreak.washing_machine": "Стиральная машина",
   "block.cellbreak.laundry_cart": "Тележка с бельём",
-  "block.cellbreak.shower_head": "Лейка душа"
+  "block.cellbreak.shower_head": "Лейка душа",
+  "block.cellbreak.steel_sign": "Стальная табличка",
+  "block.cellbreak.steel_wall_sign": "Стальная табличка",
+  "item.cellbreak.steel_sign": "Стальная табличка"
 }

@@ -1,6 +1,7 @@
 package cellbreak.game;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import cellbreak.CbContent;
@@ -60,7 +61,18 @@ final class Restyle {
 							}
 							w.removeBlockEntity(p);
 						}
+						net.minecraft.nbt.NbtCompound signText = null;
+						if (n.getBlock() instanceof net.minecraft.block.AbstractSignBlock
+								&& w.getBlockEntity(p) instanceof net.minecraft.block.entity.SignBlockEntity old) {
+							signText = old.createNbt(w.getRegistryManager());
+							w.removeBlockEntity(p);
+						}
 						w.setBlockState(p, n, Block.NOTIFY_LISTENERS | Block.FORCE_STATE | Block.SKIP_DROPS);
+						if (signText != null && w.getBlockEntity(p) instanceof net.minecraft.block.entity.SignBlockEntity sign) {
+							sign.read(signText, w.getRegistryManager());
+							sign.markDirty();
+							w.updateListeners(p, n, n, Block.NOTIFY_LISTENERS);
+						}
 						if (n.getBlock() instanceof cellbreak.block.StorageBlock) {
 							name(w, p.toImmutable(), n.getBlock());
 						}
@@ -140,14 +152,14 @@ final class Restyle {
 
 	private static BlockState restyled(ServerWorld w, PrisonLayout l, BlockPos p, BlockState s) {
 		Block b = s.getBlock();
-		if (b == Blocks.CHEST || b == Blocks.TRAPPED_CHEST || b == Blocks.BARREL) {
-			return storage(w, l, p, s);
-		}
 		int job = l.jobStations.indexOf(p);
 		if (job >= 0 && "laundry".equals(l.jobKinds.get(job))) {
 			Direction f = front(w, p);
 			Block to = b == Blocks.WATER_CAULDRON || b == Blocks.CAULDRON ? CbDecor.WASHING_MACHINE : CbDecor.LAUNDRY_CART;
 			return to.getDefaultState().with(DecorBlock.FACING, f == null ? Direction.SOUTH : f);
+		}
+		if (b == Blocks.CHEST || b == Blocks.TRAPPED_CHEST || b == Blocks.BARREL) {
+			return storage(w, l, p, s);
 		}
 		if (b == Blocks.WHITE_BED && in(l.infirmaryZone, p, 0)) {
 			return copy(s, CbDecor.INFIRMARY_BED);
@@ -294,6 +306,12 @@ final class Restyle {
 		SIMPLE.put(Blocks.POLISHED_DIORITE_STAIRS, CbDecor.STEEL_SEAT);
 		SIMPLE.put(Blocks.COBWEB, Blocks.AIR);
 		SIMPLE.put(Blocks.WHITE_BED, CbDecor.PRISON_BED);
+		for (Block sign : List.of(Blocks.OAK_WALL_SIGN, Blocks.BIRCH_WALL_SIGN, Blocks.SPRUCE_WALL_SIGN, Blocks.DARK_OAK_WALL_SIGN)) {
+			SIMPLE.put(sign, CbDecor.STEEL_WALL_SIGN);
+		}
+		for (Block sign : List.of(Blocks.OAK_SIGN, Blocks.BIRCH_SIGN, Blocks.SPRUCE_SIGN, Blocks.DARK_OAK_SIGN)) {
+			SIMPLE.put(sign, CbDecor.STEEL_SIGN);
+		}
 		SIMPLE.put(Blocks.BLUE_BED, CbDecor.GUARD_BED);
 		SIMPLE.put(Blocks.LADDER, CbDecor.STEEL_LADDER);
 		SIMPLE.put(Blocks.GOLD_BLOCK, CbDecor.HAZARD_STEEL);
