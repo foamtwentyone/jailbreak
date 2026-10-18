@@ -89,11 +89,11 @@ public final class CbDecor {
 			s -> new cellbreak.block.CanteenSeatBlock(STEEL_PANEL.getDefaultState(), s), steel().nonOpaque());
 
 	// ---- storage: barrels inside (27 slots), prison furniture outside
-	public static final Block CELL_CABINET = block("cell_cabinet", cellbreak.block.StorageBlock::new, steel().strength(2.5F));
+	public static final Block CELL_CABINET = block("cell_cabinet", cellbreak.block.StorageBlock::new, steel().strength(2.5F).nonOpaque());
 	public static final Block SCRAP_BIN = block("scrap_bin", cellbreak.block.StorageBlock::new, steel().strength(2.5F).nonOpaque());
-	public static final Block KITCHEN_FRIDGE = block("kitchen_fridge", cellbreak.block.StorageBlock::new, steel().strength(2.5F));
-	public static final Block TOOL_CABINET = block("tool_cabinet", cellbreak.block.StorageBlock::new, steel().strength(2.5F));
-	public static final Block GUARD_LOCKER = block("guard_locker", cellbreak.block.StorageBlock::new, steel().strength(2.5F));
+	public static final Block KITCHEN_FRIDGE = block("kitchen_fridge", cellbreak.block.StorageBlock::new, steel().strength(2.5F).nonOpaque());
+	public static final Block TOOL_CABINET = block("tool_cabinet", cellbreak.block.StorageBlock::new, steel().strength(2.5F).nonOpaque());
+	public static final Block GUARD_LOCKER = block("guard_locker", cellbreak.block.StorageBlock::new, steel().strength(2.5F).nonOpaque());
 	/** Steel bunks: real beds drawn with a model (grey blanket; blue for the guards, white in the infirmary). */
 	public static final Block PRISON_BED = block("prison_bed",
 			s -> new cellbreak.block.PrisonBedBlock(net.minecraft.util.DyeColor.GRAY, s),
@@ -106,9 +106,9 @@ public final class CbDecor {
 			steel().strength(0.2F).nonOpaque().sounds(BlockSoundGroup.WOOL));
 	/** Shower taps and wall switches: levers inside (the showers run on lever state). */
 	public static final Block SHOWER_VALVE = block("shower_valve", net.minecraft.block.LeverBlock::new,
-			steel().noCollision().strength(0.5F));
+			steel().noCollision().nonOpaque().strength(0.5F));
 	public static final Block WALL_SWITCH = block("wall_switch", net.minecraft.block.LeverBlock::new,
-			steel().noCollision().strength(0.5F));
+			steel().noCollision().nonOpaque().strength(0.5F));
 	public static final Block STEEL_LADDER = block("steel_ladder", net.minecraft.block.LadderBlock::new,
 			steel().strength(0.4F).nonOpaque().sounds(BlockSoundGroup.LADDER));
 	public static final Block HAZARD_STEEL = block("hazard_steel", Block::new, steel().mapColor(MapColor.YELLOW));
