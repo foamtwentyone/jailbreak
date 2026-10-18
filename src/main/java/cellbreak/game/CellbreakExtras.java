@@ -502,7 +502,7 @@ public class CellbreakExtras {
 			double best = 40 * 40;
 			for (ServerPlayerEntity p : game.online(Role.PRISONER)) {
 				PlayerData d = game.data(p);
-				if (d.wanted && d.solitaryUntil == 0 && !d.escaped && p.squaredDistanceTo(dog) < best) {
+				if (d.wanted && d.solitaryUntil == 0 && d.infirmaryUntil == 0 && !d.escaped && p.squaredDistanceTo(dog) < best) {
 					prey = p;
 					best = p.squaredDistanceTo(dog);
 				}
@@ -518,7 +518,10 @@ public class CellbreakExtras {
 				}
 				continue;
 			}
+			// Nobody to chase (caught, in the infirmary, gone): forget the chase, the bites and the grudge.
 			dog.setTarget(null);
+			dog.setAttacker(null);
+			dog.stopAnger();
 			if (phase.isRollCall() && game.phaseElapsed() > 15 * 20) {
 				sniffLineup(dog, i);
 				continue;

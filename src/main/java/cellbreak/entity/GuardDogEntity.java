@@ -29,6 +29,15 @@ public class GuardDogEntity extends WolfEntity {
 		goalSelector.add(8, new LookAroundGoal(this));
 	}
 
+	/** The game picks the dog's prey; a hit from a prisoner does not start a private feud. */
+	@Override
+	public void setTarget(net.minecraft.entity.LivingEntity target) {
+		if (target instanceof net.minecraft.server.network.ServerPlayerEntity p && game() != null && game().isOutOfPlay(p)) {
+			target = null;
+		}
+		super.setTarget(target);
+	}
+
 	@Override
 	public ActionResult interactMob(PlayerEntity player, Hand hand) {
 		return ActionResult.PASS;

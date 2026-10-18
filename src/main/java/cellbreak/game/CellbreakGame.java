@@ -2406,7 +2406,8 @@ public class CellbreakGame {
 			if (d.infirmaryUntil != 0 || d.solitaryUntil != 0) {
 				return true;
 			}
-			if (byGuard || layout().infirmarySpawn == null) {
+			// A wanted prisoner who drops is picked up by the guards, whoever knocked them out.
+			if (byGuard || d.wanted || layout().infirmarySpawn == null) {
 				arrest(p, "потерял сознание");
 			} else {
 				sendToInfirmary(p, d, attacker instanceof LivingEntity l ? l.getName().getString() : null);
@@ -2420,6 +2421,7 @@ public class CellbreakGame {
 
 	private void sendToInfirmary(ServerPlayerEntity p, PlayerData d, String by) {
 		d.infirmaryUntil = ticks + INFIRMARY_SECONDS * 20L;
+		d.wanted = false;
 		extras.stats(p.getUuid()).infirmary++;
 		d.sniperSpotTick = 0;
 		p.extinguish();
