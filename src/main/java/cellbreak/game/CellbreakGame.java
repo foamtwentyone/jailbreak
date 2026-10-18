@@ -550,6 +550,7 @@ public class CellbreakGame {
 		}
 		ticks++;
 		extras.tick();
+		benchTick();
 		if (--phaseTicksLeft <= 0) {
 			endPhase();
 			nextPhase();
@@ -3361,6 +3362,9 @@ public class CellbreakGame {
 			putToBed(npc);
 			return;
 		}
+		if (sitOnBench(npc, at)) {
+			return;
+		}
 		BlockPos seat = seatOf.get(npc.getUuid());
 		if (seat == null || !seat.equals(at) || npc.hasVehicle() || phase().zone != Zone.CANTEEN) {
 			return;
@@ -3381,10 +3385,128 @@ public class CellbreakGame {
 		world().spawnEntity(stand);
 		npc.getNavigation().stop();
 		npc.startRiding(stand, true);
+		Seats.settle(stand, npc, seat.getY() + Seats.seatTop(st));
 		npc.setYaw(yaw);
 		npc.setBodyYaw(yaw);
 		npc.setHeadYaw(yaw);
 		seatStands.put(npc.getUuid(), stand);
+	}
+
+	// ------------------------------------------------------------------ benches on the walk
+
+	private List<BlockPos> benchSeats;
+	private final Map<UUID, BlockPos> benchOf = new HashMap<>();
+	private final Map<UUID, Long> benchUntil = new HashMap<>();
+
+	/** Every half of every bench in the yard. */
+	private List<BlockPos> benchSeats() {
+		if (benchSeats == null) {
+			benchSeats = new ArrayList<>();
+			BlockBox z = layout().yardZone;
+			if (z != null) {
+				for (BlockPos p : BlockPos.iterate(z.getMinX(), z.getMinY(), z.getMinZ(), z.getMaxX(), z.getMaxY(), z.getMaxZ())) {
+					if (world().getBlockState(p).isOf(cellbreak.CbDecor.YARD_BENCH)) {
+						benchSeats.add(p.toImmutable());
+					}
+				}
+			}
+		}
+		return benchSeats;
+	}
+
+	/** Where to stand to sit down on a bench: right in front of it. */
+	private BlockPos benchFront(BlockPos seat) {
+		BlockState st = world().getBlockState(seat);
+		return st.contains(cellbreak.block.DecorBlock.FACING) ? seat.offset(st.get(cellbreak.block.DecorBlock.FACING)) : seat;
+	}
+
+	private boolean benchFree(BlockPos seat) {
+		return !benchOf.containsValue(seat) && world().getEntitiesByClass(net.minecraft.entity.decoration.ArmorStandEntity.class,
+				new net.minecraft.util.math.Box(seat).expand(0.2), Entity::hasPassengers).isEmpty();
+	}
+
+	/** On the walk, now and then an inmate heads for a free bench nearby. */
+	private BlockPos benchDestination(PrisonerNpcEntity npc) {
+		BlockPos mine = benchOf.get(npc.getUuid());
+		if (mine != null) {
+			return benchFront(mine);
+		}
+		if (world().random.nextInt(4) != 0) {
+			return null;
+		}
+		List<BlockPos> free = new ArrayList<>();
+		for (BlockPos seat : benchSeats()) {
+			if (seat.getSquaredDistance(npc.getBlockPos()) < 30 * 30 && benchFree(seat)) {
+				free.add(seat);
+			}
+		}
+		if (free.isEmpty()) {
+			return null;
+		}
+		BlockPos seat = free.get(world().random.nextInt(free.size()));
+		benchOf.put(npc.getUuid(), seat);
+		return benchFront(seat);
+	}
+
+	/** Reached the bench: sit down for half a minute or so. */
+	private boolean sitOnBench(PrisonerNpcEntity npc, BlockPos at) {
+		BlockPos seat = benchOf.get(npc.getUuid());
+		if (seat == null || !at.equals(benchFront(seat)) || npc.hasVehicle() || phase().zone != Zone.YARD) {
+			return false;
+		}
+		BlockState st = world().getBlockState(seat);
+		if (!st.isOf(cellbreak.CbDecor.YARD_BENCH)) {
+			benchOf.remove(npc.getUuid());
+			return false;
+		}
+		float yaw = st.get(cellbreak.block.DecorBlock.FACING).asRotation();
+		net.minecraft.entity.decoration.ArmorStandEntity stand = new net.minecraft.entity.decoration.ArmorStandEntity(
+				world(), seat.getX() + 0.5, seat.getY(), seat.getZ() + 0.5);
+		NbtCompound nbt = new NbtCompound();
+		stand.writeCustomDataToNbt(nbt);
+		nbt.putBoolean("Marker", true);
+		nbt.putBoolean("Invisible", true);
+		nbt.putBoolean("NoGravity", true);
+		nbt.putBoolean("Invulnerable", true);
+		stand.readCustomDataFromNbt(nbt);
+		stand.refreshPositionAndAngles(seat.getX() + 0.5, seat.getY(), seat.getZ() + 0.5, yaw, 0);
+		world().spawnEntity(stand);
+		npc.getNavigation().stop();
+		npc.startRiding(stand, true);
+		Seats.settle(stand, npc, seat.getY() + Seats.seatTop(st));
+		npc.setYaw(yaw);
+		npc.setBodyYaw(yaw);
+		npc.setHeadYaw(yaw);
+		seatStands.put(npc.getUuid(), stand);
+		benchUntil.put(npc.getUuid(), ticks + 20L * (20 + world().random.nextInt(26)));
+		return true;
+	}
+
+	/** Rested enough: up from the bench and on along the path. */
+	private void benchTick() {
+		if (benchUntil.isEmpty() || ticks % 20 != 0) {
+			return;
+		}
+		for (var it = benchUntil.entrySet().iterator(); it.hasNext();) {
+			var e = it.next();
+			if (ticks < e.getValue()) {
+				continue;
+			}
+			it.remove();
+			UUID id = e.getKey();
+			BlockPos seat = benchOf.remove(id);
+			Entity stand = seatStands.remove(id);
+			if (stand != null) {
+				for (Entity rider : new ArrayList<>(stand.getPassengerList())) {
+					rider.stopRiding();
+					if (seat != null) {
+						BlockPos f = benchFront(seat);
+						rider.refreshPositionAndAngles(f.getX() + 0.5, f.getY(), f.getZ() + 0.5, rider.getYaw(), 0);
+					}
+				}
+				stand.discard();
+			}
+		}
 	}
 
 	/** How high above the stairs block the invisible seat stands. */
@@ -3404,6 +3526,8 @@ public class CellbreakGame {
 			stand.discard();
 		}
 		seatStands.clear();
+		benchOf.clear();
+		benchUntil.clear();
 		if (running) {
 			for (PrisonerNpcEntity npc : npcPrisoners()) {
 				if (npc.getMainHandStack().isOf(Items.BREAD)) {
@@ -3709,6 +3833,12 @@ public class CellbreakGame {
 			}
 		}
 		if (phase.zone == Zone.YARD && !layout.walkPoints.isEmpty()) {
+			if (current == null || !layout.walkPoints.contains(current)) {
+				BlockPos bench = benchDestination(npc);
+				if (bench != null) {
+					return bench;
+				}
+			}
 			return walkDestination(npc, current);
 		}
 		if (phase.zone == Zone.GYM && !gymSpots().isEmpty()) {
