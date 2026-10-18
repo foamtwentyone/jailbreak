@@ -1,0 +1,8 @@
+{
+ "parent": "minecraft:block/orientable",
+ "textures": {
+  "front": "cellbreak:block/fridge_front",
+  "side": "cellbreak:block/fridge_side",
+  "top": "cellbreak:block/fridge_side"
+ }
+}

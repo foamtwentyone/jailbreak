@@ -53,10 +53,27 @@ final class Restyle {
 					}
 					BlockState n = restyled(w, l, p.toImmutable(), s);
 					if (n != null && n != s) {
+						if (n.getBlock() instanceof cellbreak.block.StorageBlock) {
+							// Drop the old container first, or the chest's contents would spill.
+							if (w.getBlockEntity(p) instanceof net.minecraft.inventory.Inventory inv) {
+								inv.clear();
+							}
+							w.removeBlockEntity(p);
+						}
 						w.setBlockState(p, n, Block.NOTIFY_LISTENERS | Block.FORCE_STATE | Block.SKIP_DROPS);
+						if (n.getBlock() instanceof cellbreak.block.StorageBlock) {
+							name(w, p.toImmutable(), n.getBlock());
+						}
 						count.merge(n.getBlock().getTranslationKey(), 1, Integer::sum);
 					}
 				}
+			}
+		}
+		// The map's own seats were invisible saddled pigs: the saddles float over the new stools.
+		for (BlockBox a : l.areas) {
+			for (var e : w.getEntitiesByClass(net.minecraft.entity.passive.PigEntity.class, net.minecraft.util.math.Box.from(a),
+					e -> e.getCommandTags().contains("seat"))) {
+				e.discard();
 			}
 		}
 		int wire = razorWire(w, l, all);
@@ -123,6 +140,24 @@ final class Restyle {
 
 	private static BlockState restyled(ServerWorld w, PrisonLayout l, BlockPos p, BlockState s) {
 		Block b = s.getBlock();
+		if (b == Blocks.CHEST || b == Blocks.TRAPPED_CHEST || b == Blocks.BARREL) {
+			return storage(w, l, p, s);
+		}
+		int job = l.jobStations.indexOf(p);
+		if (job >= 0 && "laundry".equals(l.jobKinds.get(job))) {
+			Direction f = front(w, p);
+			Block to = b == Blocks.WATER_CAULDRON || b == Blocks.CAULDRON ? CbDecor.WASHING_MACHINE : CbDecor.LAUNDRY_CART;
+			return to.getDefaultState().with(DecorBlock.FACING, f == null ? Direction.SOUTH : f);
+		}
+		if (b == Blocks.WHITE_BED && in(l.infirmaryZone, p, 0)) {
+			return copy(s, CbDecor.INFIRMARY_BED);
+		}
+		if (b == Blocks.TRIPWIRE_HOOK && in(l.showerZone, p, 0)) {
+			return CbDecor.SHOWER_HEAD.getDefaultState().with(DecorBlock.FACING, s.get(net.minecraft.block.TripwireHookBlock.FACING));
+		}
+		if (b == Blocks.LEVER) {
+			return copy(s, in(l.showerZone, p, 0) ? CbDecor.SHOWER_VALVE : CbDecor.WALL_SWITCH);
+		}
 		if (b == Blocks.STONE_BRICKS || b == Blocks.MOSSY_STONE_BRICKS || b == Blocks.CRACKED_STONE_BRICKS) {
 			if (exterior(w, p)) {
 				return CbContent.CONCRETE_WALL.getDefaultState();
@@ -191,6 +226,41 @@ final class Restyle {
 		return to == null ? null : copy(s, to);
 	}
 
+	/** Which piece of furniture a container becomes: decided by what the game keeps in it. */
+	private static BlockState storage(ServerWorld w, PrisonLayout l, BlockPos p, BlockState s) {
+		Block to = CbDecor.CELL_CABINET;
+		if (l.scrapChests.contains(p)) {
+			to = CbDecor.SCRAP_BIN;
+		} else if (l.foodChests.contains(p) || in(l.canteenZone, p, 0)) {
+			to = CbDecor.KITCHEN_FRIDGE;
+		} else if (l.workSupplies.contains(p)) {
+			to = CbDecor.TOOL_CABINET;
+		} else if (p.equals(l.locker)) {
+			to = CbDecor.GUARD_LOCKER;
+		}
+		Direction f = s.contains(net.minecraft.block.ChestBlock.FACING) ? s.get(net.minecraft.block.ChestBlock.FACING) : front(w, p);
+		if (f == null) {
+			f = Direction.NORTH;
+		}
+		if (to == CbDecor.SCRAP_BIN && !w.getBlockState(p.up()).isAir()) {
+			f = Direction.UP;
+		}
+		return to.getDefaultState().with(net.minecraft.block.BarrelBlock.FACING, to == CbDecor.SCRAP_BIN ? Direction.UP : f);
+	}
+
+	private static void name(ServerWorld w, BlockPos p, Block b) {
+		String name = b == CbDecor.SCRAP_BIN ? "Ящик с хламом" : b == CbDecor.KITCHEN_FRIDGE ? "Холодильник"
+				: b == CbDecor.TOOL_CABINET ? "Ящик с инструментами" : b == CbDecor.GUARD_LOCKER ? "Шкафчик охраны" : "Тумбочка";
+		var be = w.getBlockEntity(p);
+		if (be != null) {
+			var nbt = be.createNbt(w.getRegistryManager());
+			nbt.putString("CustomName", net.minecraft.text.Text.Serialization.toJsonString(net.minecraft.text.Text.literal(name),
+					w.getRegistryManager()));
+			be.read(nbt, w.getRegistryManager());
+			be.markDirty();
+		}
+	}
+
 	/** The open side of a fixture standing against a wall. */
 	private static Direction front(ServerWorld w, BlockPos p) {
 		for (Direction d : Direction.Type.HORIZONTAL) {
@@ -223,6 +293,19 @@ final class Restyle {
 		SIMPLE.put(Blocks.IRON_TRAPDOOR, CbDecor.STEEL_TABLE);
 		SIMPLE.put(Blocks.POLISHED_DIORITE_STAIRS, CbDecor.STEEL_SEAT);
 		SIMPLE.put(Blocks.COBWEB, Blocks.AIR);
+		SIMPLE.put(Blocks.WHITE_BED, CbDecor.PRISON_BED);
+		SIMPLE.put(Blocks.BLUE_BED, CbDecor.GUARD_BED);
+		SIMPLE.put(Blocks.LADDER, CbDecor.STEEL_LADDER);
+		SIMPLE.put(Blocks.GOLD_BLOCK, CbDecor.HAZARD_STEEL);
+		SIMPLE.put(Blocks.DISPENSER, CbDecor.STEEL_PANEL);
+		SIMPLE.put(Blocks.DROPPER, CbDecor.STEEL_PANEL);
+		SIMPLE.put(Blocks.HOPPER, CbDecor.STEEL_PANEL);
+		// Leftovers of the map's old redstone machinery.
+		SIMPLE.put(Blocks.REDSTONE_WIRE, Blocks.AIR);
+		SIMPLE.put(Blocks.REPEATER, Blocks.AIR);
+		SIMPLE.put(Blocks.COMPARATOR, Blocks.AIR);
+		SIMPLE.put(Blocks.REDSTONE_TORCH, Blocks.AIR);
+		SIMPLE.put(Blocks.REDSTONE_WALL_TORCH, Blocks.AIR);
 	}
 
 	/** The new block with every property the old one shares with it (facing, half, hinge, sides...). */

@@ -1,0 +1,8 @@
+{
+ "parent": "minecraft:block/orientable",
+ "textures": {
+  "front": "cellbreak:block/guard_locker_front",
+  "side": "cellbreak:block/guard_locker_side",
+  "top": "cellbreak:block/guard_locker_side"
+ }
+}

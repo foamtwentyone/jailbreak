@@ -1,0 +1,77 @@
+{
+ "textures": {
+  "washer_front": "cellbreak:block/washer_front",
+  "washer_side": "cellbreak:block/washer_side",
+  "particle": "cellbreak:block/washer_side"
+ },
+ "elements": [
+  {
+   "from": [
+    1,
+    0,
+    1
+   ],
+   "to": [
+    15,
+    16,
+    15
+   ],
+   "faces": {
+    "north": {
+     "uv": [
+      0,
+      0,
+      16,
+      16
+     ],
+     "texture": "#washer_front"
+    },
+    "south": {
+     "uv": [
+      1,
+      0,
+      15,
+      16
+     ],
+     "texture": "#washer_side"
+    },
+    "east": {
+     "uv": [
+      1,
+      0,
+      15,
+      16
+     ],
+     "texture": "#washer_side"
+    },
+    "west": {
+     "uv": [
+      1,
+      0,
+      15,
+      16
+     ],
+     "texture": "#washer_side"
+    },
+    "up": {
+     "uv": [
+      1,
+      1,
+      15,
+      15
+     ],
+     "texture": "#washer_side"
+    },
+    "down": {
+     "uv": [
+      1,
+      1,
+      15,
+      15
+     ],
+     "texture": "#washer_side"
+    }
+   }
+  }
+ ]
+}

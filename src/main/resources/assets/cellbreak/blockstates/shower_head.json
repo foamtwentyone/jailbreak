@@ -1,0 +1,19 @@
+{
+ "variants": {
+  "facing=north": {
+   "model": "cellbreak:block/shower_head"
+  },
+  "facing=east": {
+   "model": "cellbreak:block/shower_head",
+   "y": 90
+  },
+  "facing=south": {
+   "model": "cellbreak:block/shower_head",
+   "y": 180
+  },
+  "facing=west": {
+   "model": "cellbreak:block/shower_head",
+   "y": 270
+  }
+ }
+}

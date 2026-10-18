@@ -1,0 +1,46 @@
+{
+ "variants": {
+  "facing=north,open=false": {
+   "model": "cellbreak:block/guard_locker"
+  },
+  "facing=north,open=true": {
+   "model": "cellbreak:block/guard_locker"
+  },
+  "facing=east,open=false": {
+   "model": "cellbreak:block/guard_locker",
+   "y": 90
+  },
+  "facing=east,open=true": {
+   "model": "cellbreak:block/guard_locker",
+   "y": 90
+  },
+  "facing=south,open=false": {
+   "model": "cellbreak:block/guard_locker",
+   "y": 180
+  },
+  "facing=south,open=true": {
+   "model": "cellbreak:block/guard_locker",
+   "y": 180
+  },
+  "facing=west,open=false": {
+   "model": "cellbreak:block/guard_locker",
+   "y": 270
+  },
+  "facing=west,open=true": {
+   "model": "cellbreak:block/guard_locker",
+   "y": 270
+  },
+  "facing=up,open=false": {
+   "model": "cellbreak:block/guard_locker"
+  },
+  "facing=up,open=true": {
+   "model": "cellbreak:block/guard_locker"
+  },
+  "facing=down,open=false": {
+   "model": "cellbreak:block/guard_locker"
+  },
+  "facing=down,open=true": {
+   "model": "cellbreak:block/guard_locker"
+  }
+ }
+}

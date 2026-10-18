@@ -101,7 +101,7 @@ public final class MapCommands {
 					ok(c, "Мастерская (со столом сдачи работы): " + str(b));
 				})))
 				.then(CommandManager.literal("showerhead").then(pos((c, p) -> {
-					if (!world(c).getBlockState(p).isOf(Blocks.LEVER)) {
+					if (!(world(c).getBlockState(p).getBlock() instanceof net.minecraft.block.LeverBlock)) {
 						throw error("Здесь нет рычага: кран душа — это рычаг.");
 					}
 					layout(c).showerHeads.add(p);

@@ -1,0 +1,46 @@
+{
+ "variants": {
+  "facing=north,open=false": {
+   "model": "cellbreak:block/tool_cabinet"
+  },
+  "facing=north,open=true": {
+   "model": "cellbreak:block/tool_cabinet"
+  },
+  "facing=east,open=false": {
+   "model": "cellbreak:block/tool_cabinet",
+   "y": 90
+  },
+  "facing=east,open=true": {
+   "model": "cellbreak:block/tool_cabinet",
+   "y": 90
+  },
+  "facing=south,open=false": {
+   "model": "cellbreak:block/tool_cabinet",
+   "y": 180
+  },
+  "facing=south,open=true": {
+   "model": "cellbreak:block/tool_cabinet",
+   "y": 180
+  },
+  "facing=west,open=false": {
+   "model": "cellbreak:block/tool_cabinet",
+   "y": 270
+  },
+  "facing=west,open=true": {
+   "model": "cellbreak:block/tool_cabinet",
+   "y": 270
+  },
+  "facing=up,open=false": {
+   "model": "cellbreak:block/tool_cabinet"
+  },
+  "facing=up,open=true": {
+   "model": "cellbreak:block/tool_cabinet"
+  },
+  "facing=down,open=false": {
+   "model": "cellbreak:block/tool_cabinet"
+  },
+  "facing=down,open=true": {
+   "model": "cellbreak:block/tool_cabinet"
+  }
+ }
+}

@@ -3347,7 +3347,7 @@ public class CellbreakGame {
 			// Under the shower head: turn the water on.
 			BlockPos lever = at.up();
 			BlockState st = world().getBlockState(lever);
-			if (st.isOf(Blocks.LEVER) && !st.get(net.minecraft.block.LeverBlock.POWERED)) {
+			if (st.getBlock() instanceof net.minecraft.block.LeverBlock && !st.get(net.minecraft.block.LeverBlock.POWERED)) {
 				world().setBlockState(lever, st.with(net.minecraft.block.LeverBlock.POWERED, true));
 				world().playSound(null, lever, SoundEvents.BLOCK_LEVER_CLICK, SoundCategory.BLOCKS, 0.4F, 0.6F);
 				leversOn.add(lever);
@@ -3454,7 +3454,7 @@ public class CellbreakGame {
 	private void startShower(Phase phase) {
 		for (BlockPos lever : leversOn) {
 			BlockState st = world().getBlockState(lever);
-			if (st.isOf(Blocks.LEVER)) {
+			if (st.getBlock() instanceof net.minecraft.block.LeverBlock) {
 				world().setBlockState(lever, st.with(net.minecraft.block.LeverBlock.POWERED, false));
 			}
 		}
@@ -3495,7 +3495,7 @@ public class CellbreakGame {
 		ServerWorld world = world();
 		for (BlockPos head : layout().showerHeads) {
 			BlockState state = world.getBlockState(head);
-			if (!state.isOf(Blocks.LEVER) || !state.get(net.minecraft.block.LeverBlock.POWERED)
+			if (!(state.getBlock() instanceof net.minecraft.block.LeverBlock) || !state.get(net.minecraft.block.LeverBlock.POWERED)
 					|| world.getClosestPlayer(head.getX(), head.getY(), head.getZ(), 48, false) == null) {
 				continue;
 			}

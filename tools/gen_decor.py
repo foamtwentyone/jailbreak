@@ -17,7 +17,10 @@ MAT = {
     "cam": "mat_camera_body", "lens": "mat_lens", "led": "mat_led", "feed0": "mat_feed_0", "feed1": "mat_feed_1",
     "feed2": "mat_feed_2", "steel": "mat_stainless", "mirror": "mat_mirror", "hex": "mat_hex", "grip": "mat_grip",
     "toilet": "mat_toilet", "water": "mat_water", "sframe": "mat_screen_frame", "keys": "mat_keyboard",
-    "light": "light_panel",
+    "light": "light_panel", "scrap": "mat_scrap", "scrap_lid": "mat_scrap_lid", "mattress": "mat_mattress",
+    "pillow": "mat_pillow", "blanket_gray": "mat_blanket_gray", "blanket_blue": "mat_blanket_blue",
+    "blanket_white": "mat_blanket_white", "washer_front": "washer_front", "washer_side": "washer_side",
+    "canvas": "mat_canvas", "clothes": "mat_clothes", "switch": "mat_switch",
 }
 
 FACES = ("north", "south", "east", "west", "up", "down")
@@ -450,6 +453,190 @@ def trapdoor_states(name):
     return {"variants": v}
 
 
+# ---------------------------------------------------------------- 0.5.2
+
+def scrap_bin():
+    m = Model()
+    m.box((3, 0, 5), (13, 13, 11), "scrap")
+    m.box((5, 0, 3), (11, 13, 13), "scrap")
+    m.box((4.5, 0, 4.5), (11.5, 13, 11.5), "scrap", rot=rot("y", 45, (8, 8, 8)))
+    m.box((2.5, 13, 4.5), (13.5, 14.5, 11.5), {"*": "scrap_lid", "up": "scrap_lid"}, full=("up",))
+    m.box((4.5, 13, 2.5), (11.5, 14.5, 13.5), {"*": "scrap_lid", "up": "scrap_lid"}, full=("up",))
+    m.box((6, 14.5, 7.5), (10, 15.5, 8.5), "chrome")
+    return m.json("scrap")
+
+
+def bed(part, blanket):
+    m = Model()
+    if part == "head":
+        for x in (0, 14.5):
+            m.box((x, 0, 0), (x + 1.5, 13, 1.5), "frame")
+            m.box((x, 5, 1.5), (x + 1.5, 7, 16), "frame")
+        for y in (4, 11.5):
+            m.box((1.5, y, 0.25), (14.5, y + 1, 1.25), "frame")
+        for x in (4.5, 8, 11.5):
+            m.box((x - 0.5, 5, 0.25), (x + 0.5, 11.5, 1.25), "frame")
+        m.box((1, 7, 1.5), (15, 10, 16), "mattress", full=("up",))
+        m.box((3, 10, 2), (13, 12, 6.5), "pillow")
+        m.box((0.8, 9.8, 9), (15.2, 10.6, 16), blanket)
+    else:
+        for x in (0, 14.5):
+            m.box((x, 0, 14.5), (x + 1.5, 9, 16), "frame")
+            m.box((x, 5, 0), (x + 1.5, 7, 14.5), "frame")
+        m.box((1.5, 6, 14.75), (14.5, 9, 15.75), "frame")
+        m.box((1, 7, 0), (15, 10, 14.5), "mattress", full=("up",))
+        m.box((0.8, 9.8, 0), (15.2, 10.6, 14.5), blanket)
+        m.box((0.5, 6.5, 0), (0.8, 10.6, 14.5), blanket)
+        m.box((15.2, 6.5, 0), (15.5, 10.6, 14.5), blanket)
+    return m.json(blanket)
+
+
+def canteen_seat():
+    m = Model()
+    m.box((7, 0, 7), (9, 7, 9), "frame")
+    m.box((7, 1.5, 8), (9, 3, 16), "frame")
+    m.box((4, 7, 5), (12, 8.5, 11), "steel")
+    m.box((5, 7, 4), (11, 8.5, 12), "steel")
+    m.box((6, 0, 6), (10, 0.5, 10), "frame")
+    return m.json("steel")
+
+
+def valve(on):
+    m = Model()
+    m.box((5, 0, 5), (11, 1, 11), "chrome")
+    m.box((6.5, 1, 6.5), (9.5, 3, 9.5), "chrome")
+    r = rot("y", 45, (8, 3.5, 8)) if on else None
+    m.box((4, 3, 7.5), (12, 4, 8.5), "chrome", rot=r)
+    m.box((7.5, 3, 4), (8.5, 4, 12), "chrome", rot=r)
+    m.box((7, 3, 7), (9, 4.5, 9), {"*": "led" if on else "frame"})
+    # The spout: down the wall (towards -z of the floor model).
+    m.box((7.25, 0.5, 2), (8.75, 2, 5), "chrome")
+    return m.json("chrome")
+
+
+def wall_switch(on):
+    m = Model()
+    m.box((4, 0, 3), (12, 2.5, 13), {"*": "switch", "up": "switch"}, full=("up",))
+    m.box((7, 2.5, 6 if on else 8), (9, 4.5, 8 if on else 10), "frame")
+    return m.json("switch")
+
+
+def shower_head():
+    m = Model()
+    m.box((6, 10, 15), (10, 14, 16), "chrome")
+    m.box((7.5, 11.5, 9), (8.5, 12.5, 15), "chrome")
+    r = rot("x", -22.5, (8, 10, 8))
+    m.box((5, 9, 5), (11, 10.5, 11), "chrome", rot=r)
+    m.box((5.5, 8.6, 5.5), (10.5, 9, 10.5), "frame", rot=r)
+    return m.json("chrome")
+
+
+def washing_machine():
+    m = Model()
+    m.box((1, 0, 1), (15, 16, 15), {"*": "washer_side", "north": "washer_front"}, full=("north",))
+    return m.json("washer_side")
+
+
+def laundry_cart():
+    m = Model()
+    for x in (2.5, 12.5):
+        for z in (3.5, 11.5):
+            m.box((x, 0, z), (x + 1, 2, z + 1), "frame")
+    m.box((2, 2, 3), (14, 3, 13), "frame")
+    m.box((2, 3, 3), (14, 12, 13), "canvas")
+    m.box((3, 12, 4), (13, 13.5, 12), "clothes", full=("up",))
+    m.box((1.5, 11, 2.5), (14.5, 12, 3.5), "chrome")
+    return m.json("canvas")
+
+
+def lever_states(name):
+    m = "cellbreak:block/" + name
+    rules = {("ceiling", "east"): (180, 270), ("ceiling", "north"): (180, 180), ("ceiling", "south"): (180, 0),
+             ("ceiling", "west"): (180, 90), ("floor", "east"): (0, 90), ("floor", "north"): (0, 0),
+             ("floor", "south"): (0, 180), ("floor", "west"): (0, 270), ("wall", "east"): (90, 90),
+             ("wall", "north"): (90, 0), ("wall", "south"): (90, 180), ("wall", "west"): (90, 270)}
+    v = {}
+    for (face, facing), (x, y) in rules.items():
+        for powered in ("false", "true"):
+            d = {"model": m + ("_on" if powered == "true" else "")}
+            if x:
+                d["x"] = x
+            if y:
+                d["y"] = y
+            v["face=%s,facing=%s,powered=%s" % (face, facing, powered)] = d
+    return {"variants": v}
+
+
+def main_052(root, write, bs_dir, bm_dir, im_dir):
+    b = "cellbreak:block/"
+    rot_y = {"north": 0, "east": 90, "south": 180, "west": 270}
+    # Containers (barrels inside: facing in six directions, open or shut).
+    for name, front, side, top in (("cell_cabinet", "cell_cabinet_front", "cell_cabinet_side", "cell_cabinet_top"),
+                                   ("kitchen_fridge", "fridge_front", "fridge_side", "fridge_side"),
+                                   ("tool_cabinet", "tool_cabinet_front", "tool_cabinet_side", "tool_cabinet_top"),
+                                   ("guard_locker", "guard_locker_front", "guard_locker_side", "guard_locker_side")):
+        write(bm_dir, name, {"parent": "minecraft:block/orientable",
+                             "textures": {"front": b + front, "side": b + side, "top": b + top}})
+    write(bm_dir, "scrap_bin", scrap_bin())
+    for name in ("cell_cabinet", "kitchen_fridge", "tool_cabinet", "guard_locker", "scrap_bin"):
+        v = {}
+        for facing in ("north", "east", "south", "west", "up", "down"):
+            for op in ("false", "true"):
+                d = {"model": b + name}
+                if name != "scrap_bin" and rot_y.get(facing):
+                    d["y"] = rot_y[facing]
+                v["facing=%s,open=%s" % (facing, op)] = d
+        write(bs_dir, name, {"variants": v})
+        write(im_dir, name, {"parent": b + name})
+    # Beds.
+    for name, blanket in (("prison_bed", "blanket_gray"), ("guard_bed", "blanket_blue"), ("infirmary_bed", "blanket_white")):
+        for part in ("head", "foot"):
+            write(bm_dir, "%s_%s" % (name, part), bed(part, blanket))
+        v = {}
+        for facing, y in rot_y.items():
+            for part in ("head", "foot"):
+                for occ in ("false", "true"):
+                    d = {"model": "%s%s_%s" % (b, name, part)}
+                    if y:
+                        d["y"] = y
+                    v["facing=%s,occupied=%s,part=%s" % (facing, occ, part)] = d
+        write(bs_dir, name, {"variants": v})
+        write(im_dir, name, {"parent": "%s%s_head" % (b, name)})
+    # Canteen stool (a stairs block: every shape is the stool).
+    write(bm_dir, "steel_seat", canteen_seat())
+    v = {}
+    for facing, y in rot_y.items():
+        for half in ("bottom", "top"):
+            for shape in ("straight", "inner_left", "inner_right", "outer_left", "outer_right"):
+                d = {"model": b + "steel_seat"}
+                if y:
+                    d["y"] = y
+                v["facing=%s,half=%s,shape=%s" % (facing, half, shape)] = d
+    write(bs_dir, "steel_seat", {"variants": v})
+    write(im_dir, "steel_seat", {"parent": b + "steel_seat"})
+    # Levers.
+    for name, fn in (("shower_valve", valve), ("wall_switch", wall_switch)):
+        write(bm_dir, name, fn(False))
+        write(bm_dir, name + "_on", fn(True))
+        write(bs_dir, name, lever_states(name))
+        write(im_dir, name, {"parent": b + name})
+    # Ladder, hazard stripes.
+    write(bm_dir, "steel_ladder", {"parent": "minecraft:block/ladder", "textures": {"texture": b + "steel_ladder",
+                                                                                     "particle": b + "steel_ladder"}})
+    write(bs_dir, "steel_ladder", {"variants": {"facing=%s" % f: ({"model": b + "steel_ladder", "y": y} if y else
+                                                                  {"model": b + "steel_ladder"}) for f, y in
+                                                (("north", 0), ("east", 90), ("south", 180), ("west", 270))}})
+    write(im_dir, "steel_ladder", {"parent": "minecraft:item/generated", "textures": {"layer0": b + "steel_ladder"}})
+    write(bm_dir, "hazard_steel", cube(b + "hazard_steel"))
+    write(bs_dir, "hazard_steel", {"variants": {"": {"model": b + "hazard_steel"}}})
+    write(im_dir, "hazard_steel", {"parent": b + "hazard_steel"})
+    # Laundry.
+    for name, fn in (("washing_machine", washing_machine), ("laundry_cart", laundry_cart), ("shower_head", shower_head)):
+        write(bm_dir, name, fn())
+        write(bs_dir, name, facing_variants(name))
+        write(im_dir, name, {"parent": b + name})
+
+
 def main(root):
     bs_dir = os.path.join(root, "blockstates")
     bm_dir = os.path.join(root, "models", "block")
@@ -566,6 +753,7 @@ def main(root):
         write(bm_dir, name + "_extra", extra)
         write(bs_dir, name, facing_variants(name, extra=True))
         write(im_dir, name, {"parent": "cellbreak:block/" + name + "_base"})
+    main_052(root, write, bs_dir, bm_dir, im_dir)
 
 
 if __name__ == "__main__":

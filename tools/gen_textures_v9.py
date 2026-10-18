@@ -535,6 +535,152 @@ def led():
     return t
 
 
+# ---------------------------------------------------------------- 0.5.2: furniture and fittings
+
+def panel(base, seed, bevel=True):
+    t = flat(base, seed, (0.95, 0.98, 1.0, 1.0, 1.03))
+    if bevel:
+        for i in range(S):
+            t.shade(i, 0, 1.12)
+            t.shade(0, i, 1.08)
+            t.shade(i, S - 1, 0.72)
+            t.shade(S - 1, i, 0.75)
+    return t
+
+
+def handle(t, x0, x1, y, c=(214, 216, 220)):
+    for x in range(x0, x1 + 1):
+        t.set(x, y, c)
+    t.set(x0, y + 1, tone(c, 0.6))
+    t.set(x1, y + 1, tone(c, 0.6))
+
+
+def cabinet_front():
+    t = panel((150, 156, 162), 60)
+    for y0 in (2, 9):
+        for x in range(2, 14):
+            t.set(x, y0, (110, 116, 122))
+            t.set(x, y0 + 5, (186, 190, 196))
+        for y in range(y0, y0 + 6):
+            t.set(2, y, (110, 116, 122))
+            t.set(13, y, (186, 190, 196))
+        handle(t, 6, 9, y0 + 2)
+    return t
+
+
+def fridge_front():
+    t = panel((196, 200, 204), 61)
+    for y in range(2, 14):
+        t.set(12, y, (230, 232, 236))
+        t.set(13, y, (120, 124, 130))
+    for x in range(3, 8):
+        t.set(x, 3, (40, 60, 70))
+        t.set(x, 4, (40, 60, 70))
+    t.set(4, 3, (120, 230, 200))
+    t.set(5, 3, (120, 230, 200))
+    for x in range(1, 15):
+        t.set(x, 7, (140, 144, 150))
+    return t
+
+
+def tool_front():
+    t = panel((176, 40, 36), 62)
+    for y0 in (2, 6, 10):
+        for x in range(1, 15):
+            t.set(x, y0 + 3, (110, 22, 20))
+        handle(t, 5, 10, y0 + 1, (200, 204, 210))
+    return t
+
+
+def locker_front():
+    t = panel((92, 108, 128), 63)
+    for y in (2, 4, 6):
+        for x in range(4, 12):
+            t.set(x, y, (40, 46, 54))
+    for y in range(9, 13):
+        t.set(12, y, (200, 204, 210))
+    t.set(11, 10, (60, 64, 70))
+    for x in range(4, 9):
+        t.set(x, 13, (222, 218, 200))
+    return t
+
+
+def hazard():
+    t = Tex(seed=64)
+    for y in range(S):
+        for x in range(S):
+            band = ((x + y) // 4) % 2 == 0
+            c = (222, 186, 40) if band else (34, 32, 30)
+            t.set(x, y, tone(c, t.rnd.choice((0.94, 1.0, 1.04))))
+    for i in range(S):
+        t.shade(i, 0, 1.1)
+        t.shade(i, S - 1, 0.75)
+    return t
+
+
+def steel_ladder():
+    t = Tex()
+    for y in range(S):
+        for x in range(S):
+            t.set(x, y, (0, 0, 0), 0)
+    for y in range(S):
+        for x in (2, 13):
+            t.set(x, y, (196, 200, 206))
+            t.set(x + 1, y, (120, 124, 130))
+    for y in (1, 5, 9, 13):
+        for x in range(4, 13):
+            t.set(x, y, (176, 180, 186))
+            t.set(x, y + 1, (96, 100, 106))
+    return t
+
+
+def stripes(base, seed, stripe):
+    t = flat(base, seed, (0.94, 1.0, 1.0, 1.04))
+    for y in range(S):
+        if y % 4 == 1:
+            for x in range(S):
+                t.set(x, y, tone(stripe, t.rnd.choice((0.95, 1.0))))
+    return t
+
+
+def blanket(base, seed):
+    t = flat(base, seed, (0.86, 0.94, 1.0, 1.0, 1.06))
+    for x in range(S):
+        t.shade(x, 2, 0.8)
+        t.shade(x, 13, 0.8)
+    return t
+
+
+def washer_front():
+    t = panel((226, 228, 230), 65)
+    for x in range(1, 15):
+        t.set(x, 3, (170, 174, 180))
+    for x, c in ((2, (60, 60, 64)), (3, (60, 60, 64)), (11, (220, 60, 50)), (12, (80, 200, 90))):
+        t.set(x, 1, c)
+    for y in range(S):
+        for x in range(S):
+            r = math.hypot(x - 7.5, y - 9.5)
+            if 4.2 < r <= 5.4:
+                t.set(x, y, (150, 156, 162))
+            elif r <= 4.2:
+                t.set(x, y, (70, 96, 120) if r > 2 or (x + y) % 3 else (180, 210, 230))
+    return t
+
+
+def clothes():
+    t = flat((214, 104, 36), 66, (0.8, 0.9, 1.0, 1.1))
+    for _ in range(8):
+        x, y = t.rnd.randrange(S), t.rnd.randrange(S)
+        t.set(x, y, (230, 230, 226))
+    return t
+
+
+def switch_box():
+    t = panel((120, 124, 130), 67)
+    t.set(7, 7, (226, 60, 50))
+    return t
+
+
 def main(root):
     block_dir = os.path.join(root, "textures", "block")
     item_dir = os.path.join(root, "textures", "item")
@@ -556,6 +702,18 @@ def main(root):
         "mat_toilet": steel_panel(46, rivets=False, base=(182, 186, 190)), "mat_water": flat((96, 140, 176), 47),
         "mat_screen_frame": flat((24, 24, 26), 48), "mat_keyboard": keyboard(),
     }
+    textures.update({
+        "cell_cabinet_front": cabinet_front(), "cell_cabinet_side": panel((150, 156, 162), 70),
+        "cell_cabinet_top": panel((166, 170, 176), 71), "fridge_front": fridge_front(), "fridge_side": panel((196, 200, 204), 72),
+        "tool_cabinet_front": tool_front(), "tool_cabinet_side": panel((176, 40, 36), 73), "tool_cabinet_top": flat((32, 32, 34), 74),
+        "guard_locker_front": locker_front(), "guard_locker_side": panel((92, 108, 128), 75), "hazard_steel": hazard(),
+        "steel_ladder": steel_ladder(), "mat_scrap": stripes((128, 132, 136), 76, (100, 104, 108)),
+        "mat_scrap_lid": panel((112, 116, 120), 77), "mat_mattress": stripes((210, 210, 200), 78, (120, 140, 170)),
+        "mat_pillow": flat((236, 236, 230), 79, (0.95, 1.0, 1.0)), "mat_blanket_gray": blanket((122, 124, 122), 80),
+        "mat_blanket_blue": blanket((52, 74, 132), 81), "mat_blanket_white": blanket((230, 230, 226), 82),
+        "washer_front": washer_front(), "washer_side": panel((226, 228, 230), 83), "mat_canvas": flat((150, 146, 132), 84),
+        "mat_clothes": clothes(), "mat_switch": switch_box(),
+    })
     textures["cracked_prison_wall"] = cracks(prison_wall(), 101)
     textures["cracked_prison_wall_band"] = cracks(prison_wall_band(), 102, (34, 40, 44))
     textures["cracked_concrete_wall"] = cracks(concrete_wall(), 103)

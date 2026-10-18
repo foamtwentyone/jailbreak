@@ -1,0 +1,46 @@
+{
+ "variants": {
+  "facing=north,open=false": {
+   "model": "cellbreak:block/kitchen_fridge"
+  },
+  "facing=north,open=true": {
+   "model": "cellbreak:block/kitchen_fridge"
+  },
+  "facing=east,open=false": {
+   "model": "cellbreak:block/kitchen_fridge",
+   "y": 90
+  },
+  "facing=east,open=true": {
+   "model": "cellbreak:block/kitchen_fridge",
+   "y": 90
+  },
+  "facing=south,open=false": {
+   "model": "cellbreak:block/kitchen_fridge",
+   "y": 180
+  },
+  "facing=south,open=true": {
+   "model": "cellbreak:block/kitchen_fridge",
+   "y": 180
+  },
+  "facing=west,open=false": {
+   "model": "cellbreak:block/kitchen_fridge",
+   "y": 270
+  },
+  "facing=west,open=true": {
+   "model": "cellbreak:block/kitchen_fridge",
+   "y": 270
+  },
+  "facing=up,open=false": {
+   "model": "cellbreak:block/kitchen_fridge"
+  },
+  "facing=up,open=true": {
+   "model": "cellbreak:block/kitchen_fridge"
+  },
+  "facing=down,open=false": {
+   "model": "cellbreak:block/kitchen_fridge"
+  },
+  "facing=down,open=true": {
+   "model": "cellbreak:block/kitchen_fridge"
+  }
+ }
+}

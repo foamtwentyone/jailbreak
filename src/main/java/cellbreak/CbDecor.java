@@ -84,9 +84,34 @@ public final class CbDecor {
 	/** Canteen tables (the map's iron trapdoors) in stainless steel. */
 	public static final Block STEEL_TABLE = block("steel_table", s -> new TrapdoorBlock(BlockSetType.IRON, s),
 			steel().nonOpaque().allowsSpawning(Blocks::never));
-	/** Canteen benches (stairs, so that inmates sit on them). */
+	/** Canteen stools welded to the tables (stairs inside, so that inmates sit on them). */
 	public static final Block STEEL_SEAT = block("steel_seat",
-			s -> new StairsBlock(STEEL_PANEL.getDefaultState(), s), steel());
+			s -> new cellbreak.block.CanteenSeatBlock(STEEL_PANEL.getDefaultState(), s), steel().nonOpaque());
+
+	// ---- storage: barrels inside (27 slots), prison furniture outside
+	public static final Block CELL_CABINET = block("cell_cabinet", cellbreak.block.StorageBlock::new, steel().strength(2.5F));
+	public static final Block SCRAP_BIN = block("scrap_bin", cellbreak.block.StorageBlock::new, steel().strength(2.5F).nonOpaque());
+	public static final Block KITCHEN_FRIDGE = block("kitchen_fridge", cellbreak.block.StorageBlock::new, steel().strength(2.5F));
+	public static final Block TOOL_CABINET = block("tool_cabinet", cellbreak.block.StorageBlock::new, steel().strength(2.5F));
+	public static final Block GUARD_LOCKER = block("guard_locker", cellbreak.block.StorageBlock::new, steel().strength(2.5F));
+	/** Steel bunks: real beds drawn with a model (grey blanket; blue for the guards, white in the infirmary). */
+	public static final Block PRISON_BED = block("prison_bed",
+			s -> new cellbreak.block.PrisonBedBlock(net.minecraft.util.DyeColor.GRAY, s),
+			steel().strength(0.2F).nonOpaque().sounds(BlockSoundGroup.WOOL));
+	public static final Block GUARD_BED = block("guard_bed",
+			s -> new cellbreak.block.PrisonBedBlock(net.minecraft.util.DyeColor.BLUE, s),
+			steel().strength(0.2F).nonOpaque().sounds(BlockSoundGroup.WOOL));
+	public static final Block INFIRMARY_BED = block("infirmary_bed",
+			s -> new cellbreak.block.PrisonBedBlock(net.minecraft.util.DyeColor.WHITE, s),
+			steel().strength(0.2F).nonOpaque().sounds(BlockSoundGroup.WOOL));
+	/** Shower taps and wall switches: levers inside (the showers run on lever state). */
+	public static final Block SHOWER_VALVE = block("shower_valve", net.minecraft.block.LeverBlock::new,
+			steel().noCollision().strength(0.5F));
+	public static final Block WALL_SWITCH = block("wall_switch", net.minecraft.block.LeverBlock::new,
+			steel().noCollision().strength(0.5F));
+	public static final Block STEEL_LADDER = block("steel_ladder", net.minecraft.block.LadderBlock::new,
+			steel().strength(0.4F).nonOpaque().sounds(BlockSoundGroup.LADDER));
+	public static final Block HAZARD_STEEL = block("hazard_steel", Block::new, steel().mapColor(MapColor.YELLOW));
 
 	// ---- furniture with models (boxes in pixels, facing north)
 	public static final Block CCTV_CAMERA = block("cctv_camera",
@@ -119,6 +144,12 @@ public final class CbDecor {
 							{ 0, 0, 0, 16, 1, 16 } },
 					new double[][] { { 1, 0, 2, 3, 16, 4 }, { 13, 0, 2, 15, 16, 4 }, { 1, 0, 12, 3, 16, 14 }, { 13, 0, 12, 15, 16, 14 } }),
 			furniture());
+	public static final Block SHOWER_HEAD = block("shower_head",
+			s -> new DecorBlock(s, new double[][] { { 5, 8, 5, 11, 14, 16 } }), furniture().noCollision());
+	public static final Block WASHING_MACHINE = block("washing_machine",
+			s -> new DecorBlock(s, new double[][] { { 1, 0, 1, 15, 16, 15 } }), furniture());
+	public static final Block LAUNDRY_CART = block("laundry_cart",
+			s -> new DecorBlock(s, new double[][] { { 2, 0, 3, 14, 12, 13 } }), furniture().sounds(BlockSoundGroup.WOOL));
 	public static final Block PUNCHING_BAG = block("punching_bag",
 			s -> new TwoPartBlock(s, true, new double[][] { { 3, 0, 3, 13, 16, 13 } }, new double[][] { { 3, 0, 3, 13, 14, 13 } }),
 			furniture().sounds(BlockSoundGroup.WOOL));
@@ -126,11 +157,14 @@ public final class CbDecor {
 	/** Blocks drawn with cutout (holes) or translucency; registered on the client. */
 	public static final List<Block> CUTOUT = List.of(CAGED_LAMP, RAZOR_WIRE, STEEL_TABLE, CCTV_CAMERA, SECURITY_MONITOR,
 			STEEL_TOILET, STEEL_SINK, BENCH_PRESS, EXERCISE_BIKE, DUMBBELL_RACK, PLATE_TREE, GYM_MIRROR, TREADMILL,
-			POWER_RACK, PUNCHING_BAG);
+			POWER_RACK, PUNCHING_BAG, STEEL_SEAT, SCRAP_BIN, PRISON_BED, GUARD_BED, INFIRMARY_BED, SHOWER_VALVE, WALL_SWITCH,
+			STEEL_LADDER, WASHING_MACHINE, LAUNDRY_CART, SHOWER_HEAD);
 	public static final List<Block> TRANSLUCENT = List.of(WIRED_GLASS, WIRED_GLASS_PANE);
 
 	static void init() {
-		// Class loading registers everything.
+		for (Block b : List.of(CELL_CABINET, SCRAP_BIN, KITCHEN_FRIDGE, TOOL_CABINET, GUARD_LOCKER)) {
+			net.minecraft.block.entity.BlockEntityType.BARREL.addSupportedBlock(b);
+		}
 	}
 
 	/** The gym exercise a machine block stands for, or null if the block is not gym gear. */

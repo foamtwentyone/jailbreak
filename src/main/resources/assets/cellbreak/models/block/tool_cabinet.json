@@ -1,0 +1,8 @@
+{
+ "parent": "minecraft:block/orientable",
+ "textures": {
+  "front": "cellbreak:block/tool_cabinet_front",
+  "side": "cellbreak:block/tool_cabinet_side",
+  "top": "cellbreak:block/tool_cabinet_top"
+ }
+}
