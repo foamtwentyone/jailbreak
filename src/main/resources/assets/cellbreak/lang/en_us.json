@@ -101,5 +101,6 @@
   "block.cellbreak.shower_head": "Shower Head",
   "block.cellbreak.steel_sign": "Steel Plate",
   "block.cellbreak.steel_wall_sign": "Steel Plate",
-  "item.cellbreak.steel_sign": "Steel Plate"
+  "item.cellbreak.steel_sign": "Steel Plate",
+  "block.cellbreak.basketball_hoop": "Basketball Hoop"
 }

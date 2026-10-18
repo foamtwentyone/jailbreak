@@ -741,6 +741,29 @@ def towels():
     return t
 
 
+# ---------------------------------------------------------------- 0.5.6: basketball hoop
+
+def backboard():
+    t = flat((240, 240, 236), 92, (0.97, 1.0, 1.0, 1.02))
+    for i in range(S):
+        for x, y in ((i, 0), (i, S - 1), (0, i), (S - 1, i)):
+            t.set(x, y, (30, 30, 34))
+    for i in range(5, 11):
+        for x, y in ((i, 7), (i, 12), (5, i + 2), (10, i + 2)):
+            if 7 <= y <= 12:
+                t.set(x, y, (200, 40, 36))
+    return t
+
+
+def net():
+    t = Tex()
+    for y in range(S):
+        for x in range(S):
+            a, b = (x + y) % 4, (x - y) % 4
+            t.set(x, y, (236, 236, 232) if a == 0 or b == 0 else (0, 0, 0), 255 if a == 0 or b == 0 else 0)
+    return t
+
+
 def main(root):
     block_dir = os.path.join(root, "textures", "block")
     item_dir = os.path.join(root, "textures", "item")
@@ -785,6 +808,10 @@ def main(root):
     sign_plate().save(os.path.join(sign_dir, "steel_plate.png"))
     sign_item().save(os.path.join(item_dir, "steel_sign.png"))
     towels().img.save(os.path.join(block_dir, "mat_towels.png"))
+    backboard().img.save(os.path.join(block_dir, "mat_backboard.png"))
+    net().img.save(os.path.join(block_dir, "mat_net.png"))
+    flat((226, 108, 30), 93).img.save(os.path.join(block_dir, "mat_rim.png"))
+    flat((40, 76, 150), 94, (0.9, 0.96, 1.0, 1.04)).img.save(os.path.join(block_dir, "mat_pad_blue.png"))
 
 
 if __name__ == "__main__":

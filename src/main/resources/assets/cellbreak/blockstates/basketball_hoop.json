@@ -1,0 +1,34 @@
+{
+ "variants": {
+  "facing=north,part=base": {
+   "model": "cellbreak:block/basketball_hoop_base"
+  },
+  "facing=north,part=extra": {
+   "model": "cellbreak:block/basketball_hoop_extra"
+  },
+  "facing=east,part=base": {
+   "model": "cellbreak:block/basketball_hoop_base",
+   "y": 90
+  },
+  "facing=east,part=extra": {
+   "model": "cellbreak:block/basketball_hoop_extra",
+   "y": 90
+  },
+  "facing=south,part=base": {
+   "model": "cellbreak:block/basketball_hoop_base",
+   "y": 180
+  },
+  "facing=south,part=extra": {
+   "model": "cellbreak:block/basketball_hoop_extra",
+   "y": 180
+  },
+  "facing=west,part=base": {
+   "model": "cellbreak:block/basketball_hoop_base",
+   "y": 270
+  },
+  "facing=west,part=extra": {
+   "model": "cellbreak:block/basketball_hoop_extra",
+   "y": 270
+  }
+ }
+}

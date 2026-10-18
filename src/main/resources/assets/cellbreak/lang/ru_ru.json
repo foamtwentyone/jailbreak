@@ -101,5 +101,6 @@
   "block.cellbreak.shower_head": "Лейка душа",
   "block.cellbreak.steel_sign": "Стальная табличка",
   "block.cellbreak.steel_wall_sign": "Стальная табличка",
-  "item.cellbreak.steel_sign": "Стальная табличка"
+  "item.cellbreak.steel_sign": "Стальная табличка",
+  "block.cellbreak.basketball_hoop": "Баскетбольное кольцо"
 }

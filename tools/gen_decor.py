@@ -25,6 +25,7 @@ MAT = {
     "fridge_front": "fridge_front", "fridge_side": "fridge_side", "tool_front": "tool_cabinet_front",
     "tool_side": "tool_cabinet_side", "tool_top": "tool_cabinet_top", "locker_front": "guard_locker_front",
     "locker_side": "guard_locker_side", "towels": "mat_towels", "table": "steel_table",
+    "board": "mat_backboard", "rim": "mat_rim", "net": "mat_net", "pad_blue": "mat_pad_blue",
 }
 
 FACES = ("north", "south", "east", "west", "up", "down")
@@ -743,6 +744,25 @@ def main_053(root, write, bs_dir, bm_dir, im_dir):
     write(im_dir, "steel_sign", {"parent": "minecraft:item/generated", "textures": {"layer0": "cellbreak:item/steel_sign"}})
 
 
+def basketball_hoop():
+    """Three blocks tall (y 0..48), facing north: the court is in front (-z)."""
+    m = Model()
+    m.box((4, 0, 4), (12, 1, 12), "frame")
+    m.box((5, 1, 5), (11, 2.5, 11), "frame")
+    m.box((7, 2.5, 7), (9, 44, 9), "frame")
+    m.box((6.5, 2.5, 6.5), (9.5, 14, 9.5), "pad_blue")
+    m.box((7, 38, 1), (9, 40, 7), "frame")
+    m.box((7, 33, 3), (9, 34.5, 7), "frame")
+    m.box((-4, 30, 0), (20, 44, 1), {"*": "frame", "north": "board", "south": "board"}, full=("north", "south"))
+    m.box((7, 30.5, -1), (9, 31.5, 0), "rim")
+    for f, t in (((4, 30.5, -8), (12, 31.2, -7.3)), ((4, 30.5, -1), (12, 31.2, -0.3)), ((4, 30.5, -8), (4.7, 31.2, -0.3)),
+                 ((11.3, 30.5, -8), (12, 31.2, -0.3))):
+        m.box(f, t, "rim")
+    m.box((4.7, 25, -7.3), (11.3, 30.5, -1), "net", full=("north", "south", "east", "west"), faces=("north", "south", "east", "west"))
+    m.box((5.5, 22, -6.5), (10.5, 25, -1.8), "net", full=("north", "south", "east", "west"), faces=("north", "south", "east", "west"))
+    return split(m, "y", "frame")
+
+
 def main(root):
     bs_dir = os.path.join(root, "blockstates")
     bm_dir = os.path.join(root, "models", "block")
@@ -853,7 +873,8 @@ def main(root):
         write(bm_dir, name, fn())
         write(bs_dir, name, facing_variants(name))
         write(im_dir, name, {"parent": "cellbreak:block/" + name})
-    for name, fn in (("treadmill", treadmill), ("power_rack", power_rack), ("punching_bag", punching_bag)):
+    for name, fn in (("treadmill", treadmill), ("power_rack", power_rack), ("punching_bag", punching_bag),
+                     ("basketball_hoop", basketball_hoop)):
         base, extra = fn()
         write(bm_dir, name + "_base", base)
         write(bm_dir, name + "_extra", extra)
