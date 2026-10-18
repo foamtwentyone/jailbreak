@@ -1,0 +1,7 @@
+{
+ "variants": {
+  "": {
+   "model": "cellbreak:block/fake_concrete_column"
+  }
+ }
+}

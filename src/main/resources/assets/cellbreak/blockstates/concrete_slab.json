@@ -1,0 +1,13 @@
+{
+ "variants": {
+  "type=bottom": {
+   "model": "cellbreak:block/concrete_slab"
+  },
+  "type=top": {
+   "model": "cellbreak:block/concrete_slab_top"
+  },
+  "type=double": {
+   "model": "cellbreak:block/smooth_concrete"
+  }
+ }
+}

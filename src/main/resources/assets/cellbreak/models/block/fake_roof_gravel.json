@@ -1,0 +1,8 @@
+{
+ "parent": "minecraft:block/cube_bottom_top",
+ "textures": {
+  "top": "cellbreak:block/roof_gravel",
+  "side": "cellbreak:block/roof_gravel",
+  "bottom": "cellbreak:block/ceiling_tile"
+ }
+}

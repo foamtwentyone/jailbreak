@@ -1,0 +1,7 @@
+{
+ "parent": "minecraft:block/door_bottom_left_open",
+ "textures": {
+  "top": "cellbreak:block/cell_door_top",
+  "bottom": "cellbreak:block/cell_door_bottom"
+ }
+}

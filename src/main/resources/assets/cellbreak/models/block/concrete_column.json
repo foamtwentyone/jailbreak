@@ -1,0 +1,8 @@
+{
+ "parent": "minecraft:block/cube_bottom_top",
+ "textures": {
+  "top": "cellbreak:block/smooth_concrete",
+  "side": "cellbreak:block/concrete_column",
+  "bottom": "cellbreak:block/smooth_concrete"
+ }
+}

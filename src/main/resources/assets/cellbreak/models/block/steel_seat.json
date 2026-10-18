@@ -1,0 +1,8 @@
+{
+ "parent": "minecraft:block/stairs",
+ "textures": {
+  "bottom": "cellbreak:block/steel_table",
+  "top": "cellbreak:block/steel_table",
+  "side": "cellbreak:block/steel_table"
+ }
+}

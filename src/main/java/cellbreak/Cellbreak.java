@@ -206,13 +206,13 @@ public class Cellbreak implements ModInitializer {
 				if (ex.jobAt(pos) >= 0) {
 					return ex.work(sp, pos) ? ActionResult.SUCCESS : ActionResult.FAIL;
 				}
-				if (stack.isOf(CbContent.GATE_KEY) && state.isOf(Blocks.IRON_DOOR)) {
+				if (stack.isOf(CbContent.GATE_KEY) && CbContent.isDoor(state)) {
 					if (!ex.useGateKey(sp, pos)) {
 						sp.sendMessage(Text.literal("Этот ключ — от ворот.").formatted(Formatting.GRAY), true);
 					}
 					return ActionResult.SUCCESS;
 				}
-				if (stack.isOf(CbContent.CELL_KEY) && state.isOf(Blocks.IRON_DOOR) && ex.isGateDoor(pos) && !game.isGuard(sp)) {
+				if (stack.isOf(CbContent.CELL_KEY) && CbContent.isDoor(state) && ex.isGateDoor(pos) && !game.isGuard(sp)) {
 					sp.sendMessage(Text.literal("Ключ от камер к воротам не подходит.").formatted(Formatting.GRAY), true);
 					return ActionResult.FAIL;
 				}
@@ -244,7 +244,7 @@ public class Cellbreak implements ModInitializer {
 				return sp != null && game.drawGraffiti(sp, pos, hit.getSide()) ? ActionResult.SUCCESS : ActionResult.PASS;
 			}
 			// Cell key opens iron doors.
-			if (stack.isOf(CbContent.CELL_KEY) && state.isOf(Blocks.IRON_DOOR)) {
+			if (stack.isOf(CbContent.CELL_KEY) && CbContent.isDoor(state)) {
 				if (sp != null) {
 					((DoorBlock) state.getBlock()).setOpen(player, world, state, pos, !state.get(DoorBlock.OPEN));
 				}
@@ -307,8 +307,7 @@ public class Cellbreak implements ModInitializer {
 	}
 
 	private static boolean isWall(BlockState state) {
-		return CbContent.VANILLA_WALLS.contains(state.getBlock()) || state.isOf(CbContent.PRISON_WALL)
-				|| state.isOf(CbContent.CRACKED_PRISON_WALL);
+		return CbContent.VANILLA_WALLS.contains(state.getBlock()) || CbContent.WALLS.contains(state.getBlock());
 	}
 
 	private static boolean isMakeshiftTool(ServerPlayerEntity p) {
@@ -483,7 +482,7 @@ public class Cellbreak implements ModInitializer {
 
 	private static boolean nearIronDoor(net.minecraft.world.World world, BlockPos pos) {
 		for (BlockPos p : BlockPos.iterate(pos.add(-2, -2, -2), pos.add(2, 2, 2))) {
-			if (world.getBlockState(p).isOf(Blocks.IRON_DOOR)) {
+			if (CbContent.isDoor(world.getBlockState(p))) {
 				return true;
 			}
 		}

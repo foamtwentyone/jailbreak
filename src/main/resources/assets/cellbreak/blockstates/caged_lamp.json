@@ -1,0 +1,10 @@
+{
+ "variants": {
+  "hanging=false": {
+   "model": "cellbreak:block/caged_lamp"
+  },
+  "hanging=true": {
+   "model": "cellbreak:block/caged_lamp_hanging"
+  }
+ }
+}

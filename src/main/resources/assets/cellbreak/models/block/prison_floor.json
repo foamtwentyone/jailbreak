@@ -1,1 +1,8 @@
-{ "parent": "minecraft:block/cube_all", "textures": { "all": "cellbreak:block/prison_floor" } }
+{
+ "parent": "minecraft:block/cube_bottom_top",
+ "textures": {
+  "top": "cellbreak:block/prison_floor",
+  "side": "cellbreak:block/prison_floor",
+  "bottom": "cellbreak:block/ceiling_tile"
+ }
+}

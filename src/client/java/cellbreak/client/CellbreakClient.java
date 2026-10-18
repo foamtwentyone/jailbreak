@@ -22,6 +22,10 @@ public class CellbreakClient implements ClientModInitializer {
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.CELL_BARS, RenderLayer.getCutoutMipped());
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.DETECTOR, RenderLayer.getCutout());
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.GRAFFITI, RenderLayer.getCutout());
+		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.CHAIN_LINK, RenderLayer.getCutoutMipped());
+		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.CELL_DOOR, RenderLayer.getCutout());
+		cellbreak.CbDecor.CUTOUT.forEach(b -> BlockRenderLayerMap.INSTANCE.putBlock(b, RenderLayer.getCutout()));
+		cellbreak.CbDecor.TRANSLUCENT.forEach(b -> BlockRenderLayerMap.INSTANCE.putBlock(b, RenderLayer.getTranslucent()));
 
 		ItemTooltipCallback.EVENT.register((stack, context, type, lines) -> {
 			var item = stack.getItem();

@@ -1,0 +1,19 @@
+{
+ "variants": {
+  "facing=north": {
+   "model": "cellbreak:block/steel_toilet"
+  },
+  "facing=east": {
+   "model": "cellbreak:block/steel_toilet",
+   "y": 90
+  },
+  "facing=south": {
+   "model": "cellbreak:block/steel_toilet",
+   "y": 180
+  },
+  "facing=west": {
+   "model": "cellbreak:block/steel_toilet",
+   "y": 270
+  }
+ }
+}

@@ -152,8 +152,9 @@ public final class MapCommands {
 							if (f == null) {
 								throw error("Направление: north, south, east, west, up или down.");
 							}
-							world(c).setBlockState(p, net.minecraft.block.Blocks.OBSERVER.getDefaultState()
-									.with(net.minecraft.block.ObserverBlock.FACING, f));
+							world(c).setBlockState(p, f.getAxis().isHorizontal()
+									? cellbreak.CbDecor.CCTV_CAMERA.getDefaultState().with(cellbreak.block.DecorBlock.FACING, f)
+									: net.minecraft.block.Blocks.OBSERVER.getDefaultState().with(net.minecraft.block.ObserverBlock.FACING, f));
 							layout(c).cameras.add(p);
 							layout(c).cameraFacing.add(f.getId());
 							ok(c, "Камера №" + layout(c).cameras.size() + ": " + p.toShortString() + " смотрит " + f.asString());
@@ -253,6 +254,18 @@ public final class MapCommands {
 					layout(c).scrapChests.add(p);
 					ok(c, "Ящик с хламом №" + layout(c).scrapChests.size() + ": " + p.toShortString());
 				})))
+				.then(CommandManager.literal("gymclear").executes(c -> {
+					layout(c).gymMachines.clear();
+					layout(c).punchBags.clear();
+					save(c);
+					ok(c, "Тренажёры и груши сняты с разметки.");
+					return 1;
+				}))
+				.then(CommandManager.literal("restyle").executes(c -> {
+					int n = Restyle.run(world(c), layout(c));
+					ok(c, "Новый облик тюрьмы: заменено блоков — " + n);
+					return 1;
+				}))
 				.then(CommandManager.literal("info").executes(MapCommands::info));
 	}
 
@@ -380,7 +393,7 @@ public final class MapCommands {
 	/** The lower half of the iron door at this position (or the one right above/below), if any. */
 	static BlockPos lowerDoor(ServerWorld world, BlockPos p) {
 		BlockState state = world.getBlockState(p);
-		if (!state.isOf(Blocks.IRON_DOOR)) {
+		if (!CbContent.isDoor(state)) {
 			return null;
 		}
 		return state.get(DoorBlock.HALF) == DoubleBlockHalf.UPPER ? p.down().toImmutable() : p.toImmutable();
@@ -396,7 +409,7 @@ public final class MapCommands {
 		for (BlockPos q : BlockPos.iterate(p.add(-1, 0, -1), p.add(1, 2, 2))) {
 			world.setBlockState(q, Blocks.AIR.getDefaultState(), flags);
 		}
-		BlockState door = Blocks.IRON_DOOR.getDefaultState().with(DoorBlock.FACING, Direction.SOUTH);
+		BlockState door = cellbreak.CbContent.CELL_DOOR.getDefaultState().with(DoorBlock.FACING, Direction.SOUTH);
 		world.setBlockState(p.add(0, 0, 3), door.with(DoorBlock.HALF, DoubleBlockHalf.LOWER), flags);
 		world.setBlockState(p.add(0, 1, 3), door.with(DoorBlock.HALF, DoubleBlockHalf.UPPER), flags);
 		world.setBlockState(p.add(0, 2, 0), Blocks.LIGHT.getDefaultState().with(LightBlock.LEVEL_15, 6), flags);

@@ -1,0 +1,8 @@
+{
+ "parent": "minecraft:block/iron_bars_post_ends",
+ "textures": {
+  "particle": "cellbreak:block/chain_link",
+  "bars": "cellbreak:block/chain_link",
+  "edge": "cellbreak:block/chain_link_edge"
+ }
+}

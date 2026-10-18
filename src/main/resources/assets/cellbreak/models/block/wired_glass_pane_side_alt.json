@@ -1,0 +1,7 @@
+{
+ "parent": "minecraft:block/template_glass_pane_side_alt",
+ "textures": {
+  "pane": "cellbreak:block/wired_glass",
+  "edge": "cellbreak:block/wired_glass_pane_top"
+ }
+}

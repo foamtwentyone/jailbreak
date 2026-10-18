@@ -367,7 +367,7 @@ public class CellbreakExtras {
 
 	public boolean isGateDoor(BlockPos pos) {
 		BlockPos post = game.layout() == null ? null : game.layout().gatePost;
-		return post != null && pos.getSquaredDistance(post) < 7 * 7 && world().getBlockState(pos).isOf(Blocks.IRON_DOOR);
+		return post != null && pos.getSquaredDistance(post) < 7 * 7 && CbContent.isDoor(world().getBlockState(pos));
 	}
 
 	private List<BlockPos> gateDoors() {
@@ -378,7 +378,7 @@ public class CellbreakExtras {
 		}
 		for (BlockPos p : BlockPos.iterate(post.add(-7, -3, -7), post.add(7, 3, 7))) {
 			BlockState s = world().getBlockState(p);
-			if (s.isOf(Blocks.IRON_DOOR) && s.get(DoorBlock.HALF) == net.minecraft.block.enums.DoubleBlockHalf.LOWER) {
+			if (CbContent.isDoor(s) && s.get(DoorBlock.HALF) == net.minecraft.block.enums.DoubleBlockHalf.LOWER) {
 				list.add(p.toImmutable());
 			}
 		}

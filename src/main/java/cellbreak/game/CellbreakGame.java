@@ -2703,10 +2703,10 @@ public class CellbreakGame {
 		if (original.isOf(CbContent.VENT_COVER)) {
 			return "снятую решётку вентиляции";
 		}
-		if (original.isOf(CbContent.CELL_BARS) || original.isOf(Blocks.IRON_BARS)) {
+		if (original.isOf(CbContent.CELL_BARS) || original.isOf(Blocks.IRON_BARS) || original.isOf(CbContent.CHAIN_LINK)) {
 			return "перепиленную решётку";
 		}
-		if (original.isOf(CbContent.PRISON_FLOOR) || original.isOf(Blocks.SMOOTH_STONE)) {
+		if (CbContent.FLOORS.contains(original.getBlock()) || original.isOf(Blocks.SMOOTH_STONE)) {
 			return "дыру в полу";
 		}
 		if (original.isIn(BlockTags.DIRT) || original.isOf(Blocks.GRAVEL) || original.isOf(Blocks.SAND)) {
@@ -2898,6 +2898,24 @@ public class CellbreakGame {
 		}
 		if (original.isOf(CbContent.PRISON_WALL) || original.isOf(CbContent.CRACKED_PRISON_WALL)) {
 			return CbContent.FAKE_PRISON_WALL;
+		}
+		if (original.isOf(CbContent.PRISON_WALL_BAND) || original.isOf(CbContent.CRACKED_PRISON_WALL_BAND)) {
+			return CbContent.FAKE_PRISON_WALL_BAND;
+		}
+		if (original.isOf(CbContent.CONCRETE_WALL) || original.isOf(CbContent.CRACKED_CONCRETE_WALL)) {
+			return CbContent.FAKE_CONCRETE_WALL;
+		}
+		if (original.isOf(CbContent.CONCRETE_COLUMN)) {
+			return CbContent.FAKE_CONCRETE_COLUMN;
+		}
+		if (original.isOf(CbContent.FLOOR_TILE)) {
+			return CbContent.FAKE_FLOOR_TILE;
+		}
+		if (original.isOf(CbContent.GYM_FLOOR)) {
+			return CbContent.FAKE_GYM_FLOOR;
+		}
+		if (original.isOf(CbContent.ROOF_GRAVEL)) {
+			return CbContent.FAKE_ROOF_GRAVEL;
 		}
 		if (original.isIn(BlockTags.STONE_BRICKS)) {
 			return CbContent.FAKE_STONE_BRICKS;
@@ -3172,6 +3190,10 @@ public class CellbreakGame {
 	}
 
 	private static String exerciseName(BlockState st, boolean bag) {
+		String name = cellbreak.CbDecor.exerciseName(st.getBlock());
+		if (name != null) {
+			return name;
+		}
 		if (bag) {
 			return "Груша";
 		}
@@ -3190,6 +3212,7 @@ public class CellbreakGame {
 		if (!running || l == null) {
 			return false;
 		}
+		pos = cellbreak.CbDecor.basePos(world(), pos);
 		boolean bag = l.punchBags.contains(pos);
 		if (!bag && !l.gymMachines.contains(pos)) {
 			return false;
@@ -3925,7 +3948,7 @@ public class CellbreakGame {
 				for (BlockPos p : BlockPos.iterate(a.getMinX(), Math.max(a.getMinY(), l.breakMinY), a.getMinZ(), a.getMaxX(),
 						a.getMaxY(), a.getMaxZ())) {
 					BlockState s = world().getBlockState(p);
-					if (s.isOf(Blocks.IRON_DOOR) && s.get(DoorBlock.HALF) == DoubleBlockHalf.LOWER && !known.contains(p)) {
+					if (CbContent.isDoor(s) && s.get(DoorBlock.HALF) == DoubleBlockHalf.LOWER && !known.contains(p)) {
 						serviceDoors.add(p.toImmutable());
 						known.add(p.toImmutable());
 					}
@@ -3968,7 +3991,7 @@ public class CellbreakGame {
 	private boolean isOutdoorDoor(BlockPos door) {
 		return outdoorDoors.computeIfAbsent(door, d -> {
 			BlockState st = world().getBlockState(d);
-			if (!st.isOf(Blocks.IRON_DOOR)) {
+			if (!CbContent.isDoor(st)) {
 				return false;
 			}
 			Direction f = st.get(DoorBlock.FACING);
@@ -4010,7 +4033,7 @@ public class CellbreakGame {
 			return;
 		}
 		BlockState state = world().getBlockState(pos);
-		if (state.isOf(Blocks.IRON_DOOR)) {
+		if (CbContent.isDoor(state)) {
 			((DoorBlock) state.getBlock()).setOpen(null, world(), state, pos, open);
 		}
 	}

@@ -1,0 +1,13 @@
+{
+ "variants": {
+  "type=bottom": {
+   "model": "cellbreak:block/floor_slab"
+  },
+  "type=top": {
+   "model": "cellbreak:block/floor_slab_top"
+  },
+  "type=double": {
+   "model": "cellbreak:block/prison_floor"
+  }
+ }
+}

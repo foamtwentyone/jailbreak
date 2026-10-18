@@ -1,0 +1,34 @@
+{
+ "variants": {
+  "facing=north,part=base": {
+   "model": "cellbreak:block/treadmill_base"
+  },
+  "facing=north,part=extra": {
+   "model": "cellbreak:block/treadmill_extra"
+  },
+  "facing=east,part=base": {
+   "model": "cellbreak:block/treadmill_base",
+   "y": 90
+  },
+  "facing=east,part=extra": {
+   "model": "cellbreak:block/treadmill_extra",
+   "y": 90
+  },
+  "facing=south,part=base": {
+   "model": "cellbreak:block/treadmill_base",
+   "y": 180
+  },
+  "facing=south,part=extra": {
+   "model": "cellbreak:block/treadmill_extra",
+   "y": 180
+  },
+  "facing=west,part=base": {
+   "model": "cellbreak:block/treadmill_base",
+   "y": 270
+  },
+  "facing=west,part=extra": {
+   "model": "cellbreak:block/treadmill_extra",
+   "y": 270
+  }
+ }
+}

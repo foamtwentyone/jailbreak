@@ -54,6 +54,21 @@ public final class CbContent {
 	public static final Block CRACKED_PRISON_WALL = block("cracked_prison_wall",
 			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_PICKAXE, 160, null),
 			stone(MapColor.STONE_GRAY));
+	/** The lower, darker band of a painted wall (the first block above the floor). */
+	public static final Block PRISON_WALL_BAND = block("prison_wall_band",
+			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_PICKAXE, 160, () -> CbContent.CRACKED_PRISON_WALL_BAND),
+			stone(MapColor.GRAY));
+	public static final Block CRACKED_PRISON_WALL_BAND = block("cracked_prison_wall_band",
+			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_PICKAXE, 160, null), stone(MapColor.GRAY));
+	/** Outside walls: precast concrete panels. */
+	public static final Block CONCRETE_WALL = block("concrete_wall",
+			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_PICKAXE, 160, () -> CbContent.CRACKED_CONCRETE_WALL),
+			stone(MapColor.STONE_GRAY));
+	public static final Block CRACKED_CONCRETE_WALL = block("cracked_concrete_wall",
+			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_PICKAXE, 160, null), stone(MapColor.STONE_GRAY));
+	public static final Block CONCRETE_COLUMN = block("concrete_column",
+			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_PICKAXE, 160, () -> CbContent.CRACKED_PRISON_WALL),
+			stone(MapColor.OFF_WHITE));
 	public static final Block REINFORCED_WALL = block("reinforced_wall",
 			Block::new,
 			AbstractBlock.Settings.create().mapColor(MapColor.IRON_GRAY).strength(-1.0F, 3600000.0F)
@@ -69,6 +84,37 @@ public final class CbContent {
 	public static final Block PRISON_FLOOR = block("prison_floor",
 			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_SHOVEL, 120, null),
 			stone(MapColor.OFF_WHITE));
+	/** Ceramic tiles: canteen, showers, infirmary. */
+	public static final Block FLOOR_TILE = block("floor_tile",
+			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_SHOVEL, 120, null), stone(MapColor.OFF_WHITE));
+	/** Rubber flooring of the gym. */
+	public static final Block GYM_FLOOR = block("gym_floor",
+			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_SHOVEL, 120, null), stone(MapColor.BLACK));
+	/** Gravel-covered roofs. */
+	public static final Block ROOF_GRAVEL = block("roof_gravel",
+			s -> new ToolLockedBlock(s, () -> CbContent.MAKESHIFT_SHOVEL, 120, null),
+			stone(MapColor.STONE_GRAY).sounds(BlockSoundGroup.GRAVEL));
+	/** Outdoor fences: galvanised chain-link (cut with a file, like bars). */
+	public static final Block CHAIN_LINK = block("chain_link",
+			s -> new CellBarsBlock(s, () -> CbContent.FILE, 200),
+			AbstractBlock.Settings.create().mapColor(MapColor.IRON_GRAY).strength(50.0F, 1200.0F)
+					.sounds(BlockSoundGroup.CHAIN).nonOpaque().dropsNothing());
+	/** Steel cell door with a vision panel: opened only by the routine, keys and redstone. */
+	public static final Block CELL_DOOR = block("cell_door",
+			s -> new net.minecraft.block.DoorBlock(net.minecraft.block.BlockSetType.IRON, s),
+			AbstractBlock.Settings.copy(Blocks.IRON_DOOR).mapColor(MapColor.IRON_GRAY));
+
+	/** Every wall the makeshift pickaxe chips (they crack first). */
+	public static final List<Block> WALLS = List.of(PRISON_WALL, CRACKED_PRISON_WALL, PRISON_WALL_BAND,
+			CRACKED_PRISON_WALL_BAND, CONCRETE_WALL, CRACKED_CONCRETE_WALL, CONCRETE_COLUMN);
+	/** Every floor the makeshift shovel digs. */
+	public static final List<Block> FLOORS = List.of(PRISON_FLOOR, FLOOR_TILE, GYM_FLOOR, ROOF_GRAVEL);
+
+	/** Iron doors of the map and our cell doors. */
+	public static boolean isDoor(net.minecraft.block.BlockState state) {
+		return state.isOf(Blocks.IRON_DOOR) || state.isOf(CELL_DOOR);
+	}
+
 	/** Prisoners hand in their work here (planks, iron ingots) for money. */
 	public static final Block JOB_DESK = block("job_desk", Block::new,
 			AbstractBlock.Settings.create().mapColor(MapColor.OAK_TAN).strength(2.5F).sounds(BlockSoundGroup.WOOD));
@@ -86,6 +132,12 @@ public final class CbContent {
 	public static final Block FAKE_PRISON_FLOOR = fake("fake_prison_floor", false);
 	public static final Block FAKE_SMOOTH_STONE = fake("fake_smooth_stone", false);
 	public static final Block FAKE_VENT_COVER = fake("fake_vent_cover", true);
+	public static final Block FAKE_PRISON_WALL_BAND = fake("fake_prison_wall_band", false);
+	public static final Block FAKE_CONCRETE_WALL = fake("fake_concrete_wall", false);
+	public static final Block FAKE_CONCRETE_COLUMN = fake("fake_concrete_column", false);
+	public static final Block FAKE_FLOOR_TILE = fake("fake_floor_tile", false);
+	public static final Block FAKE_GYM_FLOOR = fake("fake_gym_floor", false);
+	public static final Block FAKE_ROOF_GRAVEL = fake("fake_roof_gravel", false);
 
 	/** Vanilla walls of existing maps that the makeshift pickaxe can chip (they crack first). */
 	public static final List<Block> VANILLA_WALLS = List.of(Blocks.STONE_BRICKS, Blocks.MOSSY_STONE_BRICKS,
@@ -98,14 +150,14 @@ public final class CbContent {
 	// Mining speeds = hardness * 30 / ticks: stone bricks 8 s per stage, smooth stone floor 6 s,
 	// ground 2 s, iron bars 10 s.
 	public static final Item MAKESHIFT_PICKAXE = item("makeshift_pickaxe",
-			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(5), List.of(PRISON_WALL, CRACKED_PRISON_WALL),
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(5), WALLS,
 					ToolComponent.Rule.ofAlwaysDropping(VANILLA_WALLS, 0.28F)), () -> CbContent.BROKEN_PICKAXE));
 	public static final Item MAKESHIFT_SHOVEL = item("makeshift_shovel",
-			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(12), List.of(PRISON_FLOOR),
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(12), FLOORS,
 					ToolComponent.Rule.ofAlwaysDropping(VANILLA_FLOORS, 0.5F),
 					ToolComponent.Rule.ofAlwaysDropping(VANILLA_GROUND, 0.375F)), () -> CbContent.BROKEN_SHOVEL));
 	public static final Item FILE = item("file",
-			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(3), List.of(CELL_BARS, VENT_COVER),
+			new MakeshiftToolItem(tool(new Item.Settings().maxDamage(3), List.of(CELL_BARS, VENT_COVER, CHAIN_LINK),
 					ToolComponent.Rule.ofAlwaysDropping(VANILLA_BARS, 0.75F)), () -> CbContent.BROKEN_FILE));
 	/** What is left of a snapped tool: fixed with one more part (see the repair recipes). */
 	public static final Item BROKEN_PICKAXE = item("broken_pickaxe", new Item(new Item.Settings().maxCount(1)));
@@ -118,7 +170,7 @@ public final class CbContent {
 	// Ore 3 s (hardness 3), logs 2 s (hardness 2).
 	// A real pickaxe: ore on the field, but stone brick walls too (like the makeshift one).
 	public static final Item WORK_PICKAXE = item("work_pickaxe", new Item(tool(new Item.Settings().maxDamage(80),
-			List.of(PRISON_WALL, CRACKED_PRISON_WALL), 1, ToolComponent.Rule.ofAlwaysDropping(WORK_ORES, 1.5F),
+			WALLS, 1, ToolComponent.Rule.ofAlwaysDropping(WORK_ORES, 1.5F),
 			ToolComponent.Rule.ofAlwaysDropping(VANILLA_WALLS, 0.28F))));
 	public static final Item WORK_AXE = item("work_axe", new Item(tool(new Item.Settings().maxDamage(80),
 			List.of(), 1, ToolComponent.Rule.ofAlwaysDropping(WORK_LOGS, 1.5F))));
@@ -203,11 +255,17 @@ public final class CbContent {
 				.add(net.minecraft.entity.attribute.EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.3)
 				.add(net.minecraft.entity.attribute.EntityAttributes.GENERIC_FOLLOW_RANGE, 64));
 
-		List<Item> tabItems = List.of(PRISON_WALL.asItem(), CRACKED_PRISON_WALL.asItem(), REINFORCED_WALL.asItem(),
+		CbDecor.init();
+		List<Item> tabItems = new ArrayList<>(List.of(PRISON_WALL.asItem(), CRACKED_PRISON_WALL.asItem(), REINFORCED_WALL.asItem(),
 				CELL_BARS.asItem(), VENT_COVER.asItem(), PRISON_FLOOR.asItem(), JOB_DESK.asItem(), DETECTOR.asItem(),
 				MAKESHIFT_PICKAXE, MAKESHIFT_SHOVEL, FILE, BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE, SHIV, CELL_KEY,
 				FAKE_WALL, FAKE_VENT, CHALK, RAG, WORK_PICKAXE, WORK_AXE, MONEY, HANDCUFFS, BATON,
-				DUMMY, GATE_KEY, ROPE_HOOK, TABLET, PARCEL, GUARD_SPAWN_EGG, PRISONER_SPAWN_EGG);
+				DUMMY, GATE_KEY, ROPE_HOOK, TABLET, PARCEL, GUARD_SPAWN_EGG, PRISONER_SPAWN_EGG));
+		for (Block b : List.of(PRISON_WALL_BAND, CRACKED_PRISON_WALL_BAND, CONCRETE_WALL, CRACKED_CONCRETE_WALL, CONCRETE_COLUMN,
+				FLOOR_TILE, GYM_FLOOR, ROOF_GRAVEL, CHAIN_LINK, CELL_DOOR)) {
+			tabItems.add(b.asItem());
+		}
+		CbDecor.BLOCKS.forEach(b -> tabItems.add(b.asItem()));
 		Registry.register(Registries.ITEM_GROUP, id("main"), FabricItemGroup.builder()
 				.icon(() -> new ItemStack(MAKESHIFT_PICKAXE))
 				.displayName(Text.translatable("itemGroup.cellbreak"))
