@@ -151,6 +151,12 @@ public final class CbDecor {
 			s -> new TwoPartBlock(s, true, new double[][] { { 6.5, 0, 6.5, 9.5, 16, 9.5 } },
 					new double[][] { { 6.5, 0, 6.5, 9.5, 16, 9.5 } }),
 			furniture());
+	public static final Block HOOP_POLE_MID = block("hoop_pole_mid",
+			s -> new DecorBlock(s, new double[][] { { 6.5, 0, 6.5, 9.5, 16, 9.5 } }), furniture());
+	/** A park bench for the exercise yard. */
+	public static final Block YARD_BENCH = block("yard_bench",
+			s -> new DecorBlock(s, new double[][] { { 0, 0, 3, 16, 8.5, 12 }, { 0, 0, 11.5, 16, 14, 13.5 } }),
+			furniture().sounds(BlockSoundGroup.WOOD));
 	/** The padded foot the hoop stands on (the hoop is four blocks tall in all). */
 	public static final Block HOOP_POLE = block("hoop_pole",
 			s -> new DecorBlock(s, new double[][] { { 5, 0, 5, 11, 16, 11 } }), furniture());
@@ -176,7 +182,7 @@ public final class CbDecor {
 	public static final List<Block> CUTOUT = List.of(CAGED_LAMP, RAZOR_WIRE, STEEL_TABLE, CCTV_CAMERA, SECURITY_MONITOR,
 			STEEL_TOILET, STEEL_SINK, BENCH_PRESS, EXERCISE_BIKE, DUMBBELL_RACK, PLATE_TREE, GYM_MIRROR, TREADMILL,
 			POWER_RACK, PUNCHING_BAG, STEEL_SEAT, SCRAP_BIN, PRISON_BED, GUARD_BED, INFIRMARY_BED, SHOWER_VALVE, WALL_SWITCH,
-			STEEL_LADDER, WASHING_MACHINE, LAUNDRY_CART, SHOWER_HEAD, BASKETBALL_HOOP, HOOP_POLE);
+			STEEL_LADDER, WASHING_MACHINE, LAUNDRY_CART, SHOWER_HEAD, BASKETBALL_HOOP, HOOP_POLE, HOOP_POLE_MID, YARD_BENCH);
 	public static final List<Block> TRANSLUCENT = List.of(WIRED_GLASS, WIRED_GLASS_PANE);
 
 	static void init() {

@@ -25,7 +25,7 @@ MAT = {
     "fridge_front": "fridge_front", "fridge_side": "fridge_side", "tool_front": "tool_cabinet_front",
     "tool_side": "tool_cabinet_side", "tool_top": "tool_cabinet_top", "locker_front": "guard_locker_front",
     "locker_side": "guard_locker_side", "towels": "mat_towels", "table": "steel_table",
-    "board": "mat_backboard", "rim": "mat_rim", "net": "mat_net", "pad_blue": "mat_pad_blue",
+    "wood": "minecraft:block/spruce_planks", "concrete": "smooth_concrete", "board": "mat_backboard", "rim": "mat_rim", "net": "mat_net", "pad_blue": "mat_pad_blue",
 }
 
 FACES = ("north", "south", "east", "west", "up", "down")
@@ -85,8 +85,9 @@ class Model:
         return el
 
     def json(self, particle):
-        tex = {k: "cellbreak:block/" + MAT[k] for k in sorted(self.textures)}
-        tex["particle"] = "cellbreak:block/" + MAT[particle]
+        path = lambda v: v if ":" in v else "cellbreak:block/" + v
+        tex = {k: path(MAT[k]) for k in sorted(self.textures)}
+        tex["particle"] = path(MAT[particle])
         return {"textures": tex, "elements": self.elements}
 
 
@@ -637,7 +638,7 @@ def main_052(root, write, bs_dir, bm_dir, im_dir):
     write(im_dir, "hazard_steel", {"parent": b + "hazard_steel"})
     # Laundry.
     for name, fn in (("washing_machine", washing_machine), ("laundry_cart", laundry_cart), ("shower_head", shower_head),
-                     ("hoop_pole", hoop_pole)):
+                     ("hoop_pole", hoop_pole), ("hoop_pole_mid", hoop_pole_mid), ("yard_bench", yard_bench)):
         write(bm_dir, name, fn())
         write(bs_dir, name, facing_variants(name))
         write(im_dir, name, {"parent": b + name})
@@ -772,6 +773,25 @@ def hoop_pole():
     m.box((4, 1.5, 4), (12, 2.5, 12), "frame")
     m.box((5.5, 2.5, 5.5), (10.5, 16, 10.5), "pad_blue")
     return m.json("frame")
+
+
+def hoop_pole_mid():
+    m = Model()
+    m.box((6.5, 0, 6.5), (9.5, 16, 9.5), "frame")
+    return m.json("frame")
+
+
+def yard_bench():
+    """A park bench: concrete legs, spruce slats, a backrest at the back (south)."""
+    m = Model()
+    for x in (1, 13):
+        m.box((x, 0, 3), (x + 2, 7, 12), "concrete")
+        m.box((x, 7, 11.5), (x + 2, 14, 13), "concrete")
+    for z in (3, 6, 9):
+        m.box((0, 7, z), (16, 8.5, z + 2.6), "wood")
+    for y in (9.5, 12):
+        m.box((0, y, 12.5), (16, y + 2, 13.5), "wood")
+    return m.json("wood")
 
 
 def main(root):

@@ -103,5 +103,7 @@
   "block.cellbreak.steel_wall_sign": "Стальная табличка",
   "item.cellbreak.steel_sign": "Стальная табличка",
   "block.cellbreak.basketball_hoop": "Баскетбольное кольцо",
-  "block.cellbreak.hoop_pole": "Стойка кольца"
+  "block.cellbreak.hoop_pole": "Стойка кольца",
+  "block.cellbreak.hoop_pole_mid": "Секция стойки кольца",
+  "block.cellbreak.yard_bench": "Скамейка"
 }

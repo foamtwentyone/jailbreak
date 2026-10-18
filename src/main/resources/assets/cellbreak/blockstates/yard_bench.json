@@ -1,0 +1,19 @@
+{
+ "variants": {
+  "facing=north": {
+   "model": "cellbreak:block/yard_bench"
+  },
+  "facing=east": {
+   "model": "cellbreak:block/yard_bench",
+   "y": 90
+  },
+  "facing=south": {
+   "model": "cellbreak:block/yard_bench",
+   "y": 180
+  },
+  "facing=west": {
+   "model": "cellbreak:block/yard_bench",
+   "y": 270
+  }
+ }
+}

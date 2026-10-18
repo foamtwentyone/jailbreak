@@ -1,0 +1,76 @@
+{
+ "textures": {
+  "frame": "cellbreak:block/mat_powder_black",
+  "particle": "cellbreak:block/mat_powder_black"
+ },
+ "elements": [
+  {
+   "from": [
+    6.5,
+    0,
+    6.5
+   ],
+   "to": [
+    9.5,
+    16,
+    9.5
+   ],
+   "faces": {
+    "north": {
+     "uv": [
+      6.5,
+      0,
+      9.5,
+      16
+     ],
+     "texture": "#frame"
+    },
+    "south": {
+     "uv": [
+      6.5,
+      0,
+      9.5,
+      16
+     ],
+     "texture": "#frame"
+    },
+    "east": {
+     "uv": [
+      6.5,
+      0,
+      9.5,
+      16
+     ],
+     "texture": "#frame"
+    },
+    "west": {
+     "uv": [
+      6.5,
+      0,
+      9.5,
+      16
+     ],
+     "texture": "#frame"
+    },
+    "up": {
+     "uv": [
+      6.5,
+      6.5,
+      9.5,
+      9.5
+     ],
+     "texture": "#frame"
+    },
+    "down": {
+     "uv": [
+      6.5,
+      6.5,
+      9.5,
+      9.5
+     ],
+     "texture": "#frame"
+    }
+   }
+  }
+ ]
+}

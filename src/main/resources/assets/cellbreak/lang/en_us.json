@@ -103,5 +103,7 @@
   "block.cellbreak.steel_wall_sign": "Steel Plate",
   "item.cellbreak.steel_sign": "Steel Plate",
   "block.cellbreak.basketball_hoop": "Basketball Hoop",
-  "block.cellbreak.hoop_pole": "Hoop Pole"
+  "block.cellbreak.hoop_pole": "Hoop Pole",
+  "block.cellbreak.hoop_pole_mid": "Hoop Pole Section",
+  "block.cellbreak.yard_bench": "Yard Bench"
 }
