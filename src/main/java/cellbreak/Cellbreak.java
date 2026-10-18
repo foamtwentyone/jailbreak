@@ -56,6 +56,7 @@ public class Cellbreak implements ModInitializer {
 
 	private static void registerEvents() {
 		ServerTickEvents.END_SERVER_TICK.register(server -> CellbreakGame.get(server).tick());
+		ServerTickEvents.END_SERVER_TICK.register(cellbreak.game.Seats::tick);
 		net.fabricmc.fabric.api.message.v1.ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, params) ->
 				!CellbreakGame.get(sender.getServer()).extras().radio(sender, message.getSignedContent()));
 		ServerLifecycleEvents.SERVER_STOPPED.register(CellbreakGame::remove);
@@ -169,6 +170,10 @@ public class Cellbreak implements ModInitializer {
 			ServerPlayerEntity sp = player instanceof ServerPlayerEntity s ? s : null;
 			CellbreakGame game = sp != null ? CellbreakGame.get(sp.getServer()) : null;
 
+			// Benches and canteen stools: sit down.
+			if (sp != null && cellbreak.game.Seats.sit(sp, pos, state)) {
+				return ActionResult.SUCCESS;
+			}
 			// A dummy in the bed (or taking it back).
 			if (state.getBlock() instanceof BedBlock && sp != null && game.isRunning()) {
 				BlockPos head = state.get(BedBlock.PART) == net.minecraft.block.enums.BedPart.HEAD ? pos

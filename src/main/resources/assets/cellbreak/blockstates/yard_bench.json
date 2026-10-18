@@ -1,18 +1,33 @@
 {
  "variants": {
-  "facing=north": {
-   "model": "cellbreak:block/yard_bench"
+  "facing=north,part=base": {
+   "model": "cellbreak:block/yard_bench_base"
   },
-  "facing=east": {
-   "model": "cellbreak:block/yard_bench",
+  "facing=north,part=extra": {
+   "model": "cellbreak:block/yard_bench_extra"
+  },
+  "facing=east,part=base": {
+   "model": "cellbreak:block/yard_bench_base",
    "y": 90
   },
-  "facing=south": {
-   "model": "cellbreak:block/yard_bench",
+  "facing=east,part=extra": {
+   "model": "cellbreak:block/yard_bench_extra",
+   "y": 90
+  },
+  "facing=south,part=base": {
+   "model": "cellbreak:block/yard_bench_base",
    "y": 180
   },
-  "facing=west": {
-   "model": "cellbreak:block/yard_bench",
+  "facing=south,part=extra": {
+   "model": "cellbreak:block/yard_bench_extra",
+   "y": 180
+  },
+  "facing=west,part=base": {
+   "model": "cellbreak:block/yard_bench_base",
+   "y": 270
+  },
+  "facing=west,part=extra": {
+   "model": "cellbreak:block/yard_bench_extra",
    "y": 270
   }
  }

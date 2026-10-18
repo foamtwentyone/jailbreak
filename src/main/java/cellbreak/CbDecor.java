@@ -155,8 +155,15 @@ public final class CbDecor {
 			s -> new DecorBlock(s, new double[][] { { 6.5, 0, 6.5, 9.5, 16, 9.5 } }), furniture());
 	/** A park bench for the exercise yard. */
 	public static final Block YARD_BENCH = block("yard_bench",
-			s -> new DecorBlock(s, new double[][] { { 0, 0, 3, 16, 8.5, 12 }, { 0, 0, 11.5, 16, 14, 13.5 } }),
+			s -> new TwoPartBlock(s, TwoPartBlock.Layout.WIDE,
+					new double[][] { { 0, 0, 2, 16, 8, 13 }, { 0, 0, 12.5, 16, 16, 14.5 } },
+					new double[][] { { 0, 0, 2, 16, 8, 13 }, { 0, 0, 12.5, 16, 16, 14.5 } }),
 			furniture().sounds(BlockSoundGroup.WOOD));
+
+	/** Seats people can sit on with a right click (up again with sneak). */
+	public static boolean isSeat(Block block) {
+		return block == YARD_BENCH || block == STEEL_SEAT;
+	}
 	/** The padded foot the hoop stands on (the hoop is four blocks tall in all). */
 	public static final Block HOOP_POLE = block("hoop_pole",
 			s -> new DecorBlock(s, new double[][] { { 5, 0, 5, 11, 16, 11 } }), furniture());

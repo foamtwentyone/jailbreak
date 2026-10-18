@@ -97,7 +97,7 @@ def rot(axis, angle, origin):
 
 def split(model, axis, particle):
     """Two parts from one model: axis 'z' (long, extra = z 16..32) or 'y' (tall, extra = y 16..32)."""
-    i = 2 if axis == "z" else 1
+    i = {"x": 0, "y": 1, "z": 2}[axis]
     base, extra = Model(), Model()
     for el in model.elements:
         f, t = el["from"], el["to"]
@@ -638,7 +638,7 @@ def main_052(root, write, bs_dir, bm_dir, im_dir):
     write(im_dir, "hazard_steel", {"parent": b + "hazard_steel"})
     # Laundry.
     for name, fn in (("washing_machine", washing_machine), ("laundry_cart", laundry_cart), ("shower_head", shower_head),
-                     ("hoop_pole", hoop_pole), ("hoop_pole_mid", hoop_pole_mid), ("yard_bench", yard_bench)):
+                     ("hoop_pole", hoop_pole), ("hoop_pole_mid", hoop_pole_mid)):
         write(bm_dir, name, fn())
         write(bs_dir, name, facing_variants(name))
         write(im_dir, name, {"parent": b + name})
@@ -782,16 +782,20 @@ def hoop_pole_mid():
 
 
 def yard_bench():
-    """A park bench: concrete legs, spruce slats, a backrest at the back (south)."""
+    """A two-seat park bench (x 0..32, facing north): concrete supports, wide spruce slats, a tall
+    backrest at the back and armrests at both ends."""
     m = Model()
-    for x in (1, 13):
-        m.box((x, 0, 3), (x + 2, 7, 12), "concrete")
-        m.box((x, 7, 11.5), (x + 2, 14, 13), "concrete")
-    for z in (3, 6, 9):
-        m.box((0, 7, z), (16, 8.5, z + 2.6), "wood")
-    for y in (9.5, 12):
-        m.box((0, y, 12.5), (16, y + 2, 13.5), "wood")
-    return m.json("wood")
+    for x in (1, 14.5, 28):
+        m.box((x, 0, 3), (x + 3, 7.5, 13), "concrete")
+        m.box((x, 7.5, 12), (x + 3, 17.5, 14), "concrete")
+    for z0, z1 in ((2.5, 5), (5.5, 8), (8.5, 11), (11.5, 13.5)):
+        m.box((0, 7.5, z0), (32, 9, z1), "wood")
+    for y in (10.5, 14):
+        m.box((0, y, 14), (32, y + 2.5, 15), "wood")
+    for x in (0.5, 27.5):
+        m.box((x, 13, 3), (x + 4, 14, 12.5), "concrete")
+        m.box((x + 1, 9, 3.5), (x + 3, 13, 5), "concrete")
+    return split(m, "x", "wood")
 
 
 def main(root):
@@ -905,7 +909,7 @@ def main(root):
         write(bs_dir, name, facing_variants(name))
         write(im_dir, name, {"parent": "cellbreak:block/" + name})
     for name, fn in (("treadmill", treadmill), ("power_rack", power_rack), ("punching_bag", punching_bag),
-                     ("basketball_hoop", basketball_hoop)):
+                     ("basketball_hoop", basketball_hoop), ("yard_bench", yard_bench)):
         base, extra = fn()
         write(bm_dir, name + "_base", base)
         write(bm_dir, name + "_extra", extra)

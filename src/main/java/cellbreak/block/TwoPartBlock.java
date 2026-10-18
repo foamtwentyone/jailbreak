@@ -18,7 +18,8 @@ import net.minecraft.world.World;
 import net.minecraft.world.WorldAccess;
 
 /**
- * Furniture two blocks big: tall (the second part above: power rack, punching bag) or long (the
+ * Furniture two blocks big: tall (the second part above: power rack, punching bag), wide (to the
+ * right: the yard bench) or long (the
  * second part behind: treadmill). The base part is the one the game remembers.
  */
 public class TwoPartBlock extends DecorBlock {
@@ -33,12 +34,21 @@ public class TwoPartBlock extends DecorBlock {
 
 	public static final EnumProperty<Part> PART = EnumProperty.of("part", Part.class);
 
-	private final boolean tall;
+	/** Where the second part is: above, behind, or to the right (seen from the front). */
+	public enum Layout {
+		TALL, LONG, WIDE
+	}
+
+	private final Layout layout;
 	private final VoxelShape[] extraShapes = new VoxelShape[4];
 
 	public TwoPartBlock(Settings settings, boolean tall, double[][] baseBoxes, double[][] extraBoxes) {
+		this(settings, tall ? Layout.TALL : Layout.LONG, baseBoxes, extraBoxes);
+	}
+
+	public TwoPartBlock(Settings settings, Layout layout, double[][] baseBoxes, double[][] extraBoxes) {
 		super(settings, baseBoxes);
-		this.tall = tall;
+		this.layout = layout;
 		setDefaultState(getDefaultState().with(PART, Part.BASE));
 		for (Direction d : Direction.Type.HORIZONTAL) {
 			extraShapes[d.getHorizontal()] = rotated(extraBoxes, d);
@@ -47,7 +57,11 @@ public class TwoPartBlock extends DecorBlock {
 
 	/** Where the second part goes for a base at pos. */
 	public BlockPos extraPos(BlockPos base, Direction facing) {
-		return tall ? base.up() : base.offset(facing.getOpposite());
+		return switch (layout) {
+			case TALL -> base.up();
+			case LONG -> base.offset(facing.getOpposite());
+			case WIDE -> base.offset(facing.rotateYClockwise());
+		};
 	}
 
 	/** The base of the furniture a block belongs to. */
@@ -55,15 +69,22 @@ public class TwoPartBlock extends DecorBlock {
 		if (state.get(PART) == Part.BASE) {
 			return pos;
 		}
-		return tall ? pos.down() : pos.offset(state.get(FACING));
+		Direction f = state.get(FACING);
+		return switch (layout) {
+			case TALL -> pos.down();
+			case LONG -> pos.offset(f);
+			case WIDE -> pos.offset(f.rotateYCounterclockwise());
+		};
 	}
 
 	private Direction towardsPartner(BlockState state) {
 		Direction f = state.get(FACING);
-		if (tall) {
-			return state.get(PART) == Part.BASE ? Direction.UP : Direction.DOWN;
-		}
-		return state.get(PART) == Part.BASE ? f.getOpposite() : f;
+		boolean base = state.get(PART) == Part.BASE;
+		return switch (layout) {
+			case TALL -> base ? Direction.UP : Direction.DOWN;
+			case LONG -> base ? f.getOpposite() : f;
+			case WIDE -> base ? f.rotateYClockwise() : f.rotateYCounterclockwise();
+		};
 	}
 
 	@Override
