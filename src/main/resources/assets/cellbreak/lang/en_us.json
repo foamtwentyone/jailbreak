@@ -105,5 +105,9 @@
   "block.cellbreak.basketball_hoop": "Basketball Hoop",
   "block.cellbreak.hoop_pole": "Hoop Pole",
   "block.cellbreak.hoop_pole_mid": "Hoop Pole Section",
-  "block.cellbreak.yard_bench": "Yard Bench"
+  "block.cellbreak.yard_bench": "Yard Bench",
+  "key.cellbreak.guide": "Routine arrow",
+  "key.categories.cellbreak": "Cellbreak",
+  "message.cellbreak.guide_on": "Routine arrow: on",
+  "message.cellbreak.guide_off": "Routine arrow: off"
 }

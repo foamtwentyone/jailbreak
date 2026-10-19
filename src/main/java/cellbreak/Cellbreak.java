@@ -50,6 +50,8 @@ public class Cellbreak implements ModInitializer {
 		CbContent.init();
 		net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.playS2C().register(cellbreak.net.SearchlightPayload.ID,
 				cellbreak.net.SearchlightPayload.CODEC);
+		net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.playS2C().register(cellbreak.net.GuidePayload.ID,
+				cellbreak.net.GuidePayload.CODEC);
 		CommandRegistrationCallback.EVENT.register((dispatcher, registries, env) -> registerCommands(dispatcher));
 		registerEvents();
 	}

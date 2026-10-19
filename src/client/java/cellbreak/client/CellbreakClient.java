@@ -18,6 +18,20 @@ public class CellbreakClient implements ClientModInitializer {
 		EntityRendererRegistry.register(CbContent.DOG, GuardDogRenderer::new);
 		net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(
 				cellbreak.net.SearchlightPayload.ID, (payload, context) -> SearchlightRenderer.receive(payload));
+		net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(
+				cellbreak.net.GuidePayload.ID, (payload, context) -> GuideHud.receive(payload));
+		net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(GuideHud::render);
+		var guideKey = net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
+				new net.minecraft.client.option.KeyBinding("key.cellbreak.guide", org.lwjgl.glfw.GLFW.GLFW_KEY_H, "key.categories.cellbreak"));
+		net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			while (guideKey.wasPressed()) {
+				GuideHud.enabled = !GuideHud.enabled;
+				if (client.player != null) {
+					client.player.sendMessage(Text.translatable(GuideHud.enabled ? "message.cellbreak.guide_on" : "message.cellbreak.guide_off")
+							.formatted(Formatting.GRAY), true);
+				}
+			}
+		});
 		net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_TRANSLUCENT.register(SearchlightRenderer::render);
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.CELL_BARS, RenderLayer.getCutoutMipped());
 		BlockRenderLayerMap.INSTANCE.putBlock(CbContent.DETECTOR, RenderLayer.getCutout());

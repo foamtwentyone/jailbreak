@@ -197,6 +197,7 @@ public class CellbreakGame {
 
 	final MinecraftServer server;
 	final CellbreakExtras extras = new CellbreakExtras(this);
+	private final Guide guide = new Guide(this);
 
 	public CellbreakExtras extras() {
 		return extras;
@@ -502,6 +503,7 @@ public class CellbreakGame {
 
 		scheduleIndex = 0;
 		extras.onStart();
+		guide.onStart();
 		beginPhase();
 		broadcast(Text.literal("Раунд начался (Cellbreak " + net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("cellbreak")
 				.map(m -> m.getMetadata().getVersion().getFriendlyString()).orElse("?") + ")! Заключённых: " + prisoners.size() + " (+" + npcCount + " NPC), охранников: "
@@ -515,6 +517,7 @@ public class CellbreakGame {
 			return;
 		}
 		extras.onStop();
+		guide.onStop();
 		running = false;
 		clearSearchlights();
 		removeNpcs();
@@ -550,6 +553,7 @@ public class CellbreakGame {
 		}
 		ticks++;
 		extras.tick();
+		guide.tick();
 		benchTick();
 		if (--phaseTicksLeft <= 0) {
 			endPhase();
@@ -1068,7 +1072,7 @@ public class CellbreakGame {
 	}
 
 	/** Where the prisoner should be: {"where" (в столовой), "whither" (в столовую)}. */
-	private static String[] placeName(Phase phase) {
+	static String[] placeName(Phase phase) {
 		return switch (phase.zone) {
 			case ROLL_CALL -> new String[] { "на перекличке", "на перекличку" };
 			case CANTEEN -> new String[] { "в столовой", "в столовую" };
@@ -3893,6 +3897,28 @@ public class CellbreakGame {
 		double own = from.getSquaredDistance(goal);
 		return points.stream().filter(p -> p.getSquaredDistance(goal) < own && p.getSquaredDistance(from) > 9)
 				.sorted(java.util.Comparator.comparingDouble(p -> p.getSquaredDistance(goal))).limit(4).toList();
+	}
+
+	/** A standing spot as near the middle of the zone as there is (the routine arrow's goal). */
+	BlockPos floorSpotIn(BlockBox box) {
+		ServerWorld world = world();
+		BlockPos c = box.getCenter();
+		for (int r = 0; r <= 4; r++) {
+			for (int dx = -r; dx <= r; dx++) {
+				for (int dz = -r; dz <= r; dz++) {
+					if (Math.max(Math.abs(dx), Math.abs(dz)) != r || !box.contains(new BlockPos(c.getX() + dx, box.getMinY(), c.getZ() + dz))) {
+						continue;
+					}
+					for (int y = box.getMaxY(); y >= box.getMinY(); y--) {
+						BlockPos p = new BlockPos(c.getX() + dx, y, c.getZ() + dz);
+						if (!empty(world, p.down()) && empty(world, p) && empty(world, p.up())) {
+							return p;
+						}
+					}
+				}
+			}
+		}
+		return randomSpotIn(box);
 	}
 
 	private BlockPos randomSpotIn(BlockBox box) {

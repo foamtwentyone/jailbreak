@@ -105,5 +105,9 @@
   "block.cellbreak.basketball_hoop": "Баскетбольное кольцо",
   "block.cellbreak.hoop_pole": "Стойка кольца",
   "block.cellbreak.hoop_pole_mid": "Секция стойки кольца",
-  "block.cellbreak.yard_bench": "Скамейка"
+  "block.cellbreak.yard_bench": "Скамейка",
+  "key.cellbreak.guide": "Стрелка-подсказка",
+  "key.categories.cellbreak": "Cellbreak",
+  "message.cellbreak.guide_on": "Стрелка-подсказка: включена",
+  "message.cellbreak.guide_off": "Стрелка-подсказка: выключена"
 }
