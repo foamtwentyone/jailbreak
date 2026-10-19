@@ -84,6 +84,15 @@ public class Cellbreak implements ModInitializer {
 			return true;
 		});
 
+		// A snapped tool digs nothing (not even what a bare hand would); in creative anything goes.
+		net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register((player, world, hand, pos, dir) -> {
+			if (!player.isCreative() && CbContent.BROKEN_TOOLS.contains(player.getMainHandStack().getItem())) {
+				player.sendMessage(Text.literal("Инструмент сломан — сначала почини его.").formatted(Formatting.RED), true);
+				return ActionResult.FAIL;
+			}
+			return ActionResult.PASS;
+		});
+
 		// Left click on a bed with the dummy: lay it in, same as a right click.
 		net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register((player, world, hand, pos, dir) -> {
 			BlockState state = world.getBlockState(pos);
@@ -97,6 +106,9 @@ public class Cellbreak implements ModInitializer {
 		});
 
 		PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
+			if (!player.isCreative() && CbContent.BROKEN_TOOLS.contains(player.getMainHandStack().getItem())) {
+				return false;
+			}
 			if (player instanceof ServerPlayerEntity p && CbContent.WORK_TOOLS.contains(p.getMainHandStack().getItem())
 					&& !p.isCreative() && !CellbreakGame.get(p.getServer()).canWorkAt(pos)
 					&& !(p.getMainHandStack().isOf(CbContent.WORK_PICKAXE) && isWall(state))) {

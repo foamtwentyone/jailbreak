@@ -238,6 +238,8 @@ public final class CbContent {
 
 	/** Work tools may be carried on the work field during work; anywhere else they are contraband too. */
 	public static final Set<Item> WORK_TOOLS = Set.of(WORK_PICKAXE, WORK_AXE);
+	/** Remains of snapped tools: they dig nothing until fixed. */
+	public static final Set<Item> BROKEN_TOOLS = Set.of(BROKEN_PICKAXE, BROKEN_SHOVEL, BROKEN_FILE);
 
 	public static final EntityType<GuardEntity> GUARD = Registry.register(Registries.ENTITY_TYPE, id("guard"),
 			EntityType.Builder.create(GuardEntity::new, SpawnGroup.MISC).dimensions(0.6F, 1.8F).maxTrackingRange(10)

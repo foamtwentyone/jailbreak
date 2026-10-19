@@ -620,6 +620,7 @@ public class CellbreakGame {
 			PlayerData d = data(p);
 			if (!d.escaped && d.solitaryUntil == 0) {
 				checkDetector(p, d);
+				ladderIntoDuct(p);
 			}
 		}
 		checkThrownContraband();
@@ -1826,12 +1827,13 @@ public class CellbreakGame {
 		PrisonLayout layout = layout();
 		BlockBox z = layout.rollCallZone;
 		if (phase == Phase.LIGHTS_OUT && !nightRoutes().isEmpty()) {
-			// Night rounds: up and down the galleries past every cell door, tier by tier.
-			List<List<BlockPos>> routes = nightRoutes();
+			// Night rounds: one loop past the players' cells (the NPC inmates are always in bed), the
+			// guards spread out along it, so every such cell is looked into every little while.
+			List<BlockPos> loop = nightLoop();
 			for (int i = 0; i < guards.size(); i++) {
-				List<BlockPos> route = routes.get(i % routes.size());
-				BlockPos mid = route.get(route.size() / 2);
-				guards.get(i).setDuty(route, mid, true);
+				List<BlockPos> route = new ArrayList<>(loop);
+				Collections.rotate(route, -(i * loop.size() / guards.size()));
+				guards.get(i).setNightRound(route, loop.get(loop.size() / 2));
 			}
 			return;
 		}
@@ -1916,6 +1918,38 @@ public class CellbreakGame {
 			}
 		}
 		return nightRoutes;
+	}
+
+	/**
+	 * The night loop: the galleries tier by tier, stopping in front of every player's cell and,
+	 * to walk the galleries rather than jump between doors, in front of every fourth other cell.
+	 */
+	private List<BlockPos> nightLoop() {
+		Set<BlockPos> players = new HashSet<>();
+		for (ServerPlayerEntity p : online(Role.PRISONER)) {
+			PlayerData d = data(p);
+			if (d != null && d.cell >= 0 && d.cell < layout().cells.size()) {
+				BlockPos front = cellFront(layout().cells.get(d.cell));
+				if (front != null) {
+					players.add(front);
+				}
+			}
+		}
+		List<BlockPos> loop = new ArrayList<>();
+		for (List<BlockPos> tier : nightRoutes()) {
+			if (tier.stream().noneMatch(players::contains)) {
+				continue;
+			}
+			for (int i = 0; i < tier.size(); i++) {
+				if (players.contains(tier.get(i)) || i % 4 == 0) {
+					loop.add(tier.get(i));
+				}
+			}
+		}
+		if (loop.isEmpty()) {
+			nightRoutes().forEach(loop::addAll);
+		}
+		return loop;
 	}
 
 	/** The walkable spot just outside a cell door, on the gallery side. */
@@ -3211,6 +3245,38 @@ public class CellbreakGame {
 		return best;
 	}
 
+	/** Ticks a climber has spent at the top of a ladder, facing a duct opening. */
+	private final Map<UUID, Integer> ladderTop = new HashMap<>();
+
+	/**
+	 * At the top of a ladder shaft, head against the ceiling and facing a duct 1 block high: after a
+	 * moment the climber squeezes in, instead of bumping against the ceiling.
+	 */
+	private void ladderIntoDuct(ServerPlayerEntity p) {
+		ServerWorld world = p.getServerWorld();
+		BlockPos into = null;
+		if (p.isClimbing() && !p.isInSwimmingPose() && !p.isSneaking()
+				&& !empty(world, BlockPos.ofFloored(p.getX(), p.getY() + p.getHeight() + 0.05, p.getZ()))) {
+			BlockPos feet = BlockPos.ofFloored(p.getX(), p.getY() + 0.3, p.getZ());
+			for (BlockPos q : List.of(feet.up(), feet)) {
+				BlockPos t = q.offset(p.getHorizontalFacing());
+				if (isCrawlSpace(world, t)) {
+					into = t;
+					break;
+				}
+			}
+		}
+		if (into == null) {
+			ladderTop.remove(p.getUuid());
+			return;
+		}
+		if (ladderTop.merge(p.getUuid(), 1, Integer::sum) >= 8) {
+			ladderTop.remove(p.getUuid());
+			p.teleport(world, into.getX() + 0.5, into.getY(), into.getZ() + 0.5, p.getYaw(), p.getPitch());
+			p.setPose(EntityPose.SWIMMING);
+		}
+	}
+
 	private static boolean isCrawlSpace(ServerWorld world, BlockPos p) {
 		return empty(world, p) && !empty(world, p.up()) && !empty(world, p.down());
 	}
@@ -4187,6 +4253,10 @@ public class CellbreakGame {
 		int missing = npcGuardCount - npcGuards().size();
 		for (int i = 0; i < missing; i++) {
 			spawnNpcGuard();
+		}
+		if (missing > 0 && phase() == Phase.LIGHTS_OUT) {
+			// The new guard joins the night rounds.
+			assignGuardDuties(Phase.LIGHTS_OUT);
 		}
 	}
 

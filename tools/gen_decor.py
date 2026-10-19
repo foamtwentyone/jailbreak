@@ -257,11 +257,11 @@ def cctv_camera():
     m.box((6, 5, 15), (10, 11, 16), "cam")
     m.box((7.5, 7.5, 11), (8.5, 8.5, 15), "cam")
     m.box((7, 7, 10.5), (9, 9, 12), "frame")
-    r = rot("x", 22.5, (8, 9, 11))
-    m.box((5, 7, 2), (11, 11, 11), "cam", rot=r)
-    m.box((4.5, 11, 1), (11.5, 11.5, 11), "cam", rot=r)
-    m.box((5.5, 7.5, 1.5), (10.5, 10.5, 2), {"*": "frame", "north": "lens"}, full=("north",), rot=r)
-    m.box((9.5, 10, 1.25), (10.25, 10.5, 1.5), "led", rot=r)
+    # The body sits level on its bracket, looking straight ahead.
+    m.box((5, 7, 2), (11, 11, 11), "cam")
+    m.box((4.5, 11, 1), (11.5, 11.5, 11), "cam")
+    m.box((5.5, 7.5, 1.5), (10.5, 10.5, 2), {"*": "frame", "north": "lens"}, full=("north",))
+    m.box((9.5, 10, 1.25), (10.25, 10.5, 1.5), "led")
     return m.json("cam")
 
 

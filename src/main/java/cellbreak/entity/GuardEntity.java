@@ -95,6 +95,8 @@ public class GuardEntity extends PathAwareEntity {
 	private BlockPos dutyLook;
 	/** Walk the duty route round and round (watching a zone) instead of staying at its end. */
 	private boolean dutyLoop;
+	/** Only a short look at each stop of the loop (the night round past the cell doors). */
+	private boolean shortStops;
 	/** A short job (checking a noise) on top of the usual duty; the usual one comes back after. */
 	private List<BlockPos> savedDuty;
 	private BlockPos savedLook;
@@ -142,7 +144,14 @@ public class GuardEntity extends PathAwareEntity {
 		duty = route;
 		dutyLook = lookAt;
 		dutyLoop = loop;
+		shortStops = false;
 		checkUntil = -1;
+	}
+
+	/** The night round: round and round the route, a short look in at each stop. */
+	public void setNightRound(List<BlockPos> route, BlockPos lookAt) {
+		setDuty(route, lookAt, true);
+		shortStops = true;
 	}
 
 	/** Goes to look at what made a noise, then gets back to what they were doing. */
@@ -628,7 +637,7 @@ public class GuardEntity extends PathAwareEntity {
 				// Watching a zone: stands a while at each point, looking around, then goes on.
 				guard.getNavigation().stop();
 				if (pause == 0) {
-					pause = 60 + guard.getRandom().nextInt(80);
+					pause = guard.shortStops ? 25 + guard.getRandom().nextInt(25) : 60 + guard.getRandom().nextInt(80);
 				}
 				if (--pause <= 0) {
 					index = (index + 1) % route.size();
