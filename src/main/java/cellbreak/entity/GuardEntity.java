@@ -102,6 +102,8 @@ public class GuardEntity extends PathAwareEntity {
 	private int checkUntil = -1;
 	/** A prisoner caught fighting: the guard goes to stop them until this age. */
 	private int breakUpUntil = -1;
+	private PlayerEntity confronted;
+	private int confrontUntil;
 	private String breakUpReason = "задержан за драку";
 
 	public GuardEntity(EntityType<? extends PathAwareEntity> type, World world) {
@@ -173,6 +175,20 @@ public class GuardEntity extends PathAwareEntity {
 		}
 	}
 
+	/** Walks after a prisoner (staying a couple of steps away, eyes on them) until the given age. */
+	public void confront(PlayerEntity p, int ticks) {
+		if (sniper) {
+			return;
+		}
+		confronted = p;
+		confrontUntil = age + ticks;
+	}
+
+	/** Stops following the prisoner (they handed it over, or it came to blows). */
+	public void endConfront() {
+		confronted = null;
+	}
+
 	/** A prisoner was seen fighting: run there and stop them with the baton. */
 	public void breakUpFight(PlayerEntity p) {
 		beat(p, "задержан за драку");
@@ -201,6 +217,7 @@ public class GuardEntity extends PathAwareEntity {
 	protected void initGoals() {
 		goalSelector.add(0, new SwimGoal(this));
 		goalSelector.add(1, new ChaseGoal(this));
+		goalSelector.add(1, new ConfrontGoal(this));
 		goalSelector.add(2, new DutyGoal(this));
 		goalSelector.add(3, new PatrolGoal(this));
 		goalSelector.add(4, new LookAtEntityGoal(this, PlayerEntity.class, 12.0F));
@@ -421,6 +438,56 @@ public class GuardEntity extends PathAwareEntity {
 		RadioTargetGoal(GuardEntity guard) {
 			super(guard, PlayerEntity.class, 5, false, false, guard::isWantedPrisoner);
 			targetPredicate = targetPredicate.ignoreVisibility();
+		}
+	}
+
+	/** Follows a prisoner who was told to hand something over: close behind, watching them. */
+	static class ConfrontGoal extends Goal {
+		private final GuardEntity guard;
+		private int repath;
+
+		ConfrontGoal(GuardEntity guard) {
+			this.guard = guard;
+			setControls(EnumSet.of(Control.MOVE, Control.LOOK));
+		}
+
+		private boolean active() {
+			PlayerEntity p = guard.confronted;
+			return p != null && p.isAlive() && !p.isRemoved() && guard.age < guard.confrontUntil && guard.getTarget() == null
+					&& p.getWorld() == guard.getWorld();
+		}
+
+		@Override
+		public boolean canStart() {
+			return active();
+		}
+
+		@Override
+		public boolean shouldContinue() {
+			return active();
+		}
+
+		@Override
+		public void stop() {
+			guard.getNavigation().stop();
+			if (guard.age >= guard.confrontUntil) {
+				guard.confronted = null;
+			}
+		}
+
+		@Override
+		public void tick() {
+			PlayerEntity p = guard.confronted;
+			guard.getLookControl().lookAt(p, 30.0F, 30.0F);
+			if (guard.squaredDistanceTo(p) < 2.2 * 2.2) {
+				guard.getNavigation().stop();
+				return;
+			}
+			if (--repath <= 0) {
+				repath = 5;
+				// Briskly: keeps up with a walking prisoner, not with a running one.
+				guard.getNavigation().startMovingTo(p, 1.15);
+			}
 		}
 	}
 

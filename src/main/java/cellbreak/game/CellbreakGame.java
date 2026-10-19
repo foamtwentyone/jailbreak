@@ -4033,7 +4033,7 @@ public class CellbreakGame {
 		d.demandGuard = g.getUuid();
 		d.demandUntil = ticks + DEMAND_SECONDS * 20L;
 		addHeat(p, 10);
-		g.goCheck(p.getBlockPos(), p.getBlockPos(), DEMAND_SECONDS + 5);
+		g.confront(p, (DEMAND_SECONDS + 2) * 20);
 		guardSays(g, p.getName().getString() + ", что это у тебя? А ну отдай сюда!");
 		p.sendMessage(Text.literal("Охрана требует отдать ").formatted(Formatting.RED)
 				.append(item.getName().copy().formatted(Formatting.GOLD))
@@ -4047,6 +4047,9 @@ public class CellbreakGame {
 		GuardEntity g = world().getEntity(d.demandGuard) instanceof GuardEntity e && e.isAlive() ? e : null;
 		if (g == null || d.wanted || d.solitaryUntil != 0 || d.infirmaryUntil != 0) {
 			d.demandUntil = 0;
+			if (g != null) {
+				g.endConfront();
+			}
 			return;
 		}
 		if (count(p, d.demandItem) == 0) {
@@ -4056,7 +4059,7 @@ public class CellbreakGame {
 					p.getBoundingBox().expand(6), it -> it.getStack().isOf(d.demandItem))) {
 				it.discard();
 			}
-			g.endCheck();
+			g.endConfront();
 			guardSays(g, "Так-то лучше. Изъято. Ещё раз увижу — пеняй на себя.");
 			return;
 		}
@@ -4069,6 +4072,7 @@ public class CellbreakGame {
 			return;
 		}
 		d.demandUntil = 0;
+		g.endConfront();
 		guardSays(g, "Не хочешь по-хорошему?! Ну держись!");
 		addHeat(p, 25);
 		g.beat(p, "не отдал запрещённое охране");
