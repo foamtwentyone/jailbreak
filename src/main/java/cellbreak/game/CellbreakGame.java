@@ -3161,12 +3161,54 @@ public class CellbreakGame {
 				}
 			}
 		}
+		if (target == null) {
+			target = crawlSpaceAlongLook(world, p);
+		}
 		if (target == null || p.getEyePos().squaredDistanceTo(Vec3d.ofCenter(target)) > 16) {
 			return false;
 		}
 		p.teleport(world, target.getX() + 0.5, target.getY(), target.getZ() + 0.5, p.getYaw(), p.getPitch());
 		p.setPose(EntityPose.SWIMMING);
 		return true;
+	}
+
+	/**
+	 * Looking into a vent hole high in a wall (the duct runs above it, in the ceiling over the wall):
+	 * the first crawl space along the look, or the duct right over an open hole.
+	 */
+	private static BlockPos crawlSpaceAlongLook(ServerWorld world, ServerPlayerEntity p) {
+		Vec3d eye = p.getEyePos();
+		Vec3d look = p.getRotationVec(1.0F);
+		BlockPos best = null;
+		double bestDot = 0.8;
+		BlockPos at = p.getBlockPos();
+		for (BlockPos q : BlockPos.iterate(at.add(-3, 1, -3), at.add(3, 4, 3))) {
+			// A crawl space in reach, or an open hole with the duct right over it.
+			BlockPos into = null;
+			if (isCrawlSpace(world, q)) {
+				into = q.toImmutable();
+			} else if (empty(world, q) && empty(world, q.up()) && !empty(world, q.up(2)) && !empty(world, q.down())) {
+				for (Direction dir : Direction.Type.HORIZONTAL) {
+					if (isCrawlSpace(world, q.up().offset(dir))) {
+						into = q.up().offset(dir).toImmutable();
+						break;
+					}
+				}
+			}
+			if (into == null) {
+				continue;
+			}
+			Vec3d to = Vec3d.ofCenter(q).subtract(eye);
+			if (to.lengthSquared() > 3.5 * 3.5) {
+				continue;
+			}
+			double dot = to.normalize().dotProduct(look);
+			if (dot > bestDot) {
+				bestDot = dot;
+				best = into;
+			}
+		}
+		return best;
 	}
 
 	private static boolean isCrawlSpace(ServerWorld world, BlockPos p) {
