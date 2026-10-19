@@ -8,8 +8,8 @@ import net.minecraft.text.Text;
 import net.minecraft.text.TextCodecs;
 
 /**
- * The round's status line (phase, suspicion, money, day). Drawn by the client on a line of its own
- * above the action bar, so the action bar stays free for training, work and other messages.
+ * The round's status line (phase, suspicion, money, day). Drawn by the client in the action bar's
+ * place, while the action bar messages themselves (training, work, warnings) move under the crosshair.
  * An empty text: no line.
  */
 public record HudPayload(Text text) implements CustomPayload {

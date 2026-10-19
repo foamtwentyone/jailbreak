@@ -24,6 +24,8 @@ public class CellbreakClient implements ClientModInitializer {
 		net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(
 				cellbreak.net.HudPayload.ID, (payload, context) -> StatusLine.receive(payload));
 		net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(StatusLine::render);
+		net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents.ALLOW_GAME
+				.register((message, overlay) -> !overlay || StatusLine.allowOverlay(message));
 		var guideKey = net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
 				new net.minecraft.client.option.KeyBinding("key.cellbreak.guide", org.lwjgl.glfw.GLFW.GLFW_KEY_H, "key.categories.cellbreak"));
 		net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(client -> {
