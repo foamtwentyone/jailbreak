@@ -44,6 +44,9 @@ final class Guide {
 	void onStop() {
 		for (ServerPlayerEntity p : game.server.getPlayerManager().getPlayerList()) {
 			send(p, GuidePayload.NONE);
+			if (ServerPlayNetworking.canSend(p, cellbreak.net.HudPayload.ID)) {
+				ServerPlayNetworking.send(p, new cellbreak.net.HudPayload(net.minecraft.text.Text.empty()));
+			}
 		}
 		shown.clear();
 		walker = null;

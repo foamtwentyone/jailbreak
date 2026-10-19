@@ -1160,7 +1160,8 @@ public class CellbreakGame {
 		}
 		for (ServerPlayerEntity p : allOnline()) {
 			PlayerData d = data(p);
-			if (ticks < d.hudQuietUntil) {
+			boolean ownLine = net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.canSend(p, cellbreak.net.HudPayload.ID);
+			if (!ownLine && ticks < d.hudQuietUntil) {
 				continue;
 			}
 			Text hud;
@@ -1184,7 +1185,11 @@ public class CellbreakGame {
 						.append(wanted.isEmpty() ? Text.empty()
 								: Text.literal("  |  Розыск: " + String.join(", ", wanted)).formatted(Formatting.RED));
 			}
-			p.sendMessage(hud, true);
+			if (ownLine) {
+				net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(p, new cellbreak.net.HudPayload(hud));
+			} else {
+				p.sendMessage(hud, true);
+			}
 		}
 	}
 
