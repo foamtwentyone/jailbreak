@@ -222,6 +222,20 @@ public final class CbContent {
 		return CONTRABAND.contains(item) || item.getRegistryEntry().isIn(net.minecraft.registry.tag.ItemTags.LOGS);
 	}
 
+	/** As above, for a real stack: the guards' uniform (navy leather cap, jacket, trousers) is contraband too. */
+	public static boolean isContraband(net.minecraft.item.ItemStack stack) {
+		return isContraband(stack.getItem()) || isGuardUniform(stack);
+	}
+
+	/** The guards' navy colour (their uniform, and a prisoner's disguise). */
+	public static final int GUARD_NAVY = 0x222E54;
+
+	public static boolean isGuardUniform(net.minecraft.item.ItemStack s) {
+		var c = s.get(net.minecraft.component.DataComponentTypes.DYED_COLOR);
+		return c != null && c.rgb() == GUARD_NAVY && (s.isOf(net.minecraft.item.Items.LEATHER_CHESTPLATE)
+				|| s.isOf(net.minecraft.item.Items.LEATHER_HELMET) || s.isOf(net.minecraft.item.Items.LEATHER_LEGGINGS));
+	}
+
 	/** Work tools may be carried on the work field during work; anywhere else they are contraband too. */
 	public static final Set<Item> WORK_TOOLS = Set.of(WORK_PICKAXE, WORK_AXE);
 

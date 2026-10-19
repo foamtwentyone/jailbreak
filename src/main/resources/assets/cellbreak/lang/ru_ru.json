@@ -109,5 +109,7 @@
   "key.cellbreak.guide": "Стрелка-подсказка",
   "key.categories.cellbreak": "Cellbreak",
   "message.cellbreak.guide_on": "Стрелка-подсказка: включена",
-  "message.cellbreak.guide_off": "Стрелка-подсказка: выключена"
+  "message.cellbreak.guide_off": "Стрелка-подсказка: выключена",
+  "block.cellbreak.hanging_rope": "Верёвка на стене",
+  "block.cellbreak.rope_top": "Крюк верёвки"
 }

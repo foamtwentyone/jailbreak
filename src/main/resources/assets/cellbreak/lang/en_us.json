@@ -109,5 +109,7 @@
   "key.cellbreak.guide": "Routine arrow",
   "key.categories.cellbreak": "Cellbreak",
   "message.cellbreak.guide_on": "Routine arrow: on",
-  "message.cellbreak.guide_off": "Routine arrow: off"
+  "message.cellbreak.guide_off": "Routine arrow: off",
+  "block.cellbreak.hanging_rope": "Hanging Rope",
+  "block.cellbreak.rope_top": "Rope Hook"
 }

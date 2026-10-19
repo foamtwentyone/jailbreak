@@ -671,6 +671,19 @@ def dummy_face():
     return t
 
 
+def rope():
+    """Twisted hemp rope: diagonal strands."""
+    t = Tex(seed=97)
+    for y in range(S):
+        for x in range(S):
+            k = (x + y) % 4
+            base = (176, 146, 98) if k < 2 else (150, 120, 76)
+            if k == 3:
+                base = (120, 94, 58)
+            t.set(x, y, tone(base, t.rnd.choice((0.94, 1.0, 1.05))))
+    return t
+
+
 def washer_front():
     t = panel((226, 228, 230), 65)
     for x in range(1, 15):
@@ -831,6 +844,7 @@ def main(root):
     backboard().img.save(os.path.join(block_dir, "mat_backboard.png"))
     net().img.save(os.path.join(block_dir, "mat_net.png"))
     flat((226, 108, 30), 93).img.save(os.path.join(block_dir, "mat_rim.png"))
+    rope().img.save(os.path.join(block_dir, "mat_rope.png"))
     dummy_face().img.save(os.path.join(block_dir, "mat_dummy_face.png"))
     flat((70, 48, 30), 96, (0.85, 0.95, 1.0, 1.08)).img.save(os.path.join(block_dir, "mat_dummy_hair.png"))
     flat((40, 76, 150), 94, (0.9, 0.96, 1.0, 1.04)).img.save(os.path.join(block_dir, "mat_pad_blue.png"))

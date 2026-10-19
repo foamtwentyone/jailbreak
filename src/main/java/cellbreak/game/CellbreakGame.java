@@ -149,7 +149,7 @@ public class CellbreakGame {
 	private static final int MAX_TRADERS = 3;
 	private static final int MAX_NPC_PRISONERS = 16;
 	private static final int PRISONER_ORANGE = 0xE6761E;
-	static final int GUARD_NAVY = 0x222E54;
+	static final int GUARD_NAVY = CbContent.GUARD_NAVY;
 
 	public static class PlayerData {
 		public Role role;
@@ -170,7 +170,7 @@ public class CellbreakGame {
 		boolean warnedContraband;
 		/** A guard told the prisoner to hand over a forbidden item: until when, what, which guard (0: no demand). */
 		long demandUntil;
-		Item demandItem;
+		ItemStack demandItem;
 		UUID demandGuard;
 		public long infirmaryUntil;
 		long lastScoldTick = -10000;
@@ -1625,11 +1625,12 @@ public class CellbreakGame {
 	}
 
 	/** What a scanner arch finds: contraband (an outer arch lets field nuggets and logs through), plus workshop materials at a materials arch. */
-	private static boolean scannerFinds(Item item, boolean materials) {
+	private static boolean scannerFinds(ItemStack stack, boolean materials) {
+		Item item = stack.getItem();
 		if (materials) {
-			return CbContent.isContraband(item) || CbContent.isWorkshopMaterial(item);
+			return CbContent.isContraband(stack) || CbContent.isWorkshopMaterial(item);
 		}
-		return CbContent.isContraband(item) && item != Items.IRON_NUGGET && !item.getRegistryEntry().isIn(ItemTags.LOGS);
+		return CbContent.isContraband(stack) && item != Items.IRON_NUGGET && !item.getRegistryEntry().isIn(ItemTags.LOGS);
 	}
 
 	private static List<Text> scannedNames(PlayerEntity p, boolean materials) {
@@ -1638,7 +1639,7 @@ public class CellbreakGame {
 		PlayerInventory inv = p.getInventory();
 		for (int i = 0; i < inv.size(); i++) {
 			ItemStack stack = inv.getStack(i);
-			if (!stack.isEmpty() && scannerFinds(stack.getItem(), materials) && !seen.contains(stack.getItem())) {
+			if (!stack.isEmpty() && scannerFinds(stack, materials) && !seen.contains(stack.getItem())) {
 				seen.add(stack.getItem());
 				names.add(stack.getName());
 			}
@@ -1664,7 +1665,7 @@ public class CellbreakGame {
 			Box arch = new Box(lower).stretch(0, 1, 0).expand(0.1);
 			boolean materials = layout().materialDetectors.contains(lower);
 			for (net.minecraft.entity.ItemEntity item : world.getEntitiesByClass(net.minecraft.entity.ItemEntity.class, arch,
-					i -> scannerFinds(i.getStack().getItem(), materials))) {
+					i -> scannerFinds(i.getStack(), materials))) {
 				Text name = item.getStack().getName();
 				item.discard();
 				DetectorBlock.flash(world, lower, true);
@@ -1721,7 +1722,7 @@ public class CellbreakGame {
 		PlayerInventory inv = p.getInventory();
 		for (int i = 0; i < inv.size(); i++) {
 			ItemStack stack = inv.getStack(i);
-			if (CbContent.isContraband(stack.getItem()) && !seen.contains(stack.getItem())) {
+			if (CbContent.isContraband(stack) && !seen.contains(stack.getItem())) {
 				seen.add(stack.getItem());
 				names.add(stack.getName());
 			}
@@ -4028,7 +4029,7 @@ public class CellbreakGame {
 
 	/** A guard sees something forbidden in a prisoner's hands: "hand it over" (drop it or give it to them). */
 	private void demandHandOver(ServerPlayerEntity p, PlayerData d, GuardEntity g) {
-		Item item = isForbidden(p, p.getMainHandStack().getItem()) ? p.getMainHandStack().getItem() : p.getOffHandStack().getItem();
+		ItemStack item = (isForbidden(p, p.getMainHandStack()) ? p.getMainHandStack() : p.getOffHandStack()).copyWithCount(1);
 		d.demandItem = item;
 		d.demandGuard = g.getUuid();
 		d.demandUntil = ticks + DEMAND_SECONDS * 20L;
@@ -4052,11 +4053,11 @@ public class CellbreakGame {
 			}
 			return;
 		}
-		if (count(p, d.demandItem) == 0) {
+		if (countSame(p, d.demandItem) == 0) {
 			d.demandUntil = 0;
 			// What was dropped is picked up and taken away.
 			for (net.minecraft.entity.ItemEntity it : world().getEntitiesByClass(net.minecraft.entity.ItemEntity.class,
-					p.getBoundingBox().expand(6), it -> it.getStack().isOf(d.demandItem))) {
+					p.getBoundingBox().expand(6), it -> ItemStack.areItemsAndComponentsEqual(it.getStack(), d.demandItem))) {
 				it.discard();
 			}
 			g.endConfront();
@@ -4086,11 +4087,11 @@ public class CellbreakGame {
 		}
 		PlayerInventory inv = p.getInventory();
 		for (int i = 0; i < inv.size(); i++) {
-			if (inv.getStack(i).isOf(d.demandItem)) {
+			if (ItemStack.areItemsAndComponentsEqual(inv.getStack(i), d.demandItem)) {
 				inv.setStack(i, ItemStack.EMPTY);
 			}
 		}
-		if (!p.getOffHandStack().isEmpty() && p.getOffHandStack().isOf(d.demandItem)) {
+		if (ItemStack.areItemsAndComponentsEqual(p.getOffHandStack(), d.demandItem)) {
 			p.setStackInHand(net.minecraft.util.Hand.OFF_HAND, ItemStack.EMPTY);
 		}
 		demandTick(p, d);
@@ -4099,10 +4100,11 @@ public class CellbreakGame {
 
 	/** Whether a guard who looks at the prisoner sees forbidden things in their hands (work tools at work are fine). */
 	boolean holdsContraband(ServerPlayerEntity p) {
-		return isForbidden(p, p.getMainHandStack().getItem()) || isForbidden(p, p.getOffHandStack().getItem());
+		return isForbidden(p, p.getMainHandStack()) || isForbidden(p, p.getOffHandStack());
 	}
 
-	private boolean isForbidden(ServerPlayerEntity p, Item item) {
+	private boolean isForbidden(ServerPlayerEntity p, ItemStack stack) {
+		Item item = stack.getItem();
 		if ((item == Items.IRON_NUGGET || item.getRegistryEntry().isIn(ItemTags.LOGS)) && phase() == Phase.WORK
 				&& layout().workZone != null
 				&& layout().workZone.expand(3).contains(p.getBlockPos())) {
@@ -4116,14 +4118,14 @@ public class CellbreakGame {
 				return false;
 			}
 		}
-		return CbContent.isContraband(item);
+		return CbContent.isContraband(stack);
 	}
 
 	static int countContraband(PlayerEntity p) {
 		int n = 0;
 		PlayerInventory inv = p.getInventory();
 		for (int i = 0; i < inv.size(); i++) {
-			if (CbContent.isContraband(inv.getStack(i).getItem())) {
+			if (CbContent.isContraband(inv.getStack(i))) {
 				n += inv.getStack(i).getCount();
 			}
 		}
@@ -4141,11 +4143,23 @@ public class CellbreakGame {
 		return n;
 	}
 
+	/** How many of exactly this item (with its colour, name...) the player has. */
+	private static int countSame(PlayerEntity p, ItemStack like) {
+		int n = 0;
+		PlayerInventory inv = p.getInventory();
+		for (int i = 0; i < inv.size(); i++) {
+			if (ItemStack.areItemsAndComponentsEqual(inv.getStack(i), like)) {
+				n += inv.getStack(i).getCount();
+			}
+		}
+		return n;
+	}
+
 	static int removeContraband(PlayerEntity p) {
 		int n = 0;
 		PlayerInventory inv = p.getInventory();
 		for (int i = 0; i < inv.size(); i++) {
-			if (CbContent.isContraband(inv.getStack(i).getItem())) {
+			if (CbContent.isContraband(inv.getStack(i))) {
 				n += inv.getStack(i).getCount();
 				inv.setStack(i, ItemStack.EMPTY);
 			}

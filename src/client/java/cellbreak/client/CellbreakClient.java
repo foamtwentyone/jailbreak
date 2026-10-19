@@ -48,7 +48,7 @@ public class CellbreakClient implements ClientModInitializer {
 
 		ItemTooltipCallback.EVENT.register((stack, context, type, lines) -> {
 			var item = stack.getItem();
-			if (CbContent.isContraband(item)) {
+			if (CbContent.isContraband(stack)) {
 				lines.add(Text.translatable("tooltip.cellbreak.contraband").formatted(Formatting.RED));
 			}
 			if (CbContent.WORK_TOOLS.contains(item)) {

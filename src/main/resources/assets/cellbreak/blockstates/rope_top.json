@@ -1,0 +1,19 @@
+{
+ "variants": {
+  "facing=north": {
+   "model": "cellbreak:block/rope_top"
+  },
+  "facing=east": {
+   "model": "cellbreak:block/rope_top",
+   "y": 90
+  },
+  "facing=south": {
+   "model": "cellbreak:block/rope_top",
+   "y": 180
+  },
+  "facing=west": {
+   "model": "cellbreak:block/rope_top",
+   "y": 270
+  }
+ }
+}

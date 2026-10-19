@@ -144,6 +144,13 @@ public final class CbDecor {
 							{ 0, 0, 0, 16, 1, 16 } },
 					new double[][] { { 1, 0, 2, 3, 16, 4 }, { 13, 0, 2, 15, 16, 4 }, { 1, 0, 12, 3, 16, 14 }, { 13, 0, 12, 15, 16, 14 } }),
 			furniture());
+	/** The escape rope hanging down a wall (placed by the rope with a hook, gone a minute later). */
+	public static final Block HANGING_ROPE = block("hanging_rope",
+			s -> new DecorBlock(s, new double[][] { { 7, 0, 13, 9, 16, 15.5 } }),
+			furniture().noCollision().sounds(BlockSoundGroup.WOOL));
+	public static final Block ROPE_TOP = block("rope_top",
+			s -> new DecorBlock(s, new double[][] { { 7, 0, 13, 9, 16, 15.5 } }),
+			furniture().noCollision().sounds(BlockSoundGroup.WOOL));
 	public static final Block SHOWER_HEAD = block("shower_head",
 			s -> new DecorBlock(s, new double[][] { { 5, 8, 5, 11, 14, 16 } }), furniture().noCollision());
 	/** A basketball hoop on a padded pole: backboard, rim and net (three blocks tall, two block parts). */
@@ -189,7 +196,7 @@ public final class CbDecor {
 	public static final List<Block> CUTOUT = List.of(CAGED_LAMP, RAZOR_WIRE, STEEL_TABLE, CCTV_CAMERA, SECURITY_MONITOR,
 			STEEL_TOILET, STEEL_SINK, BENCH_PRESS, EXERCISE_BIKE, DUMBBELL_RACK, PLATE_TREE, GYM_MIRROR, TREADMILL,
 			POWER_RACK, PUNCHING_BAG, STEEL_SEAT, SCRAP_BIN, PRISON_BED, GUARD_BED, INFIRMARY_BED, SHOWER_VALVE, WALL_SWITCH,
-			STEEL_LADDER, WASHING_MACHINE, LAUNDRY_CART, SHOWER_HEAD, BASKETBALL_HOOP, HOOP_POLE, HOOP_POLE_MID, YARD_BENCH);
+			STEEL_LADDER, WASHING_MACHINE, LAUNDRY_CART, SHOWER_HEAD, BASKETBALL_HOOP, HOOP_POLE, HOOP_POLE_MID, YARD_BENCH, HANGING_ROPE, ROPE_TOP);
 	public static final List<Block> TRANSLUCENT = List.of(WIRED_GLASS, WIRED_GLASS_PANE);
 
 	static void init() {

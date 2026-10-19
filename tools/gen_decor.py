@@ -26,7 +26,7 @@ MAT = {
     "tool_side": "tool_cabinet_side", "tool_top": "tool_cabinet_top", "locker_front": "guard_locker_front",
     "locker_side": "guard_locker_side", "towels": "mat_towels", "table": "steel_table",
     "wood": "minecraft:block/spruce_planks", "concrete": "smooth_concrete", "board": "mat_backboard", "rim": "mat_rim", "net": "mat_net", "pad_blue": "mat_pad_blue",
-    "dface": "mat_dummy_face", "dhair": "mat_dummy_hair",
+    "rope": "mat_rope", "dface": "mat_dummy_face", "dhair": "mat_dummy_hair",
 }
 
 FACES = ("north", "south", "east", "west", "up", "down")
@@ -679,7 +679,8 @@ def main_052(root, write, bs_dir, bm_dir, im_dir):
     write(im_dir, "hazard_steel", {"parent": b + "hazard_steel"})
     # Laundry.
     for name, fn in (("washing_machine", washing_machine), ("laundry_cart", laundry_cart), ("shower_head", shower_head),
-                     ("hoop_pole", hoop_pole), ("hoop_pole_mid", hoop_pole_mid)):
+                     ("hoop_pole", hoop_pole), ("hoop_pole_mid", hoop_pole_mid), ("hanging_rope", hanging_rope),
+                     ("rope_top", rope_top)):
         write(bm_dir, name, fn())
         write(bs_dir, name, facing_variants(name))
         write(im_dir, name, {"parent": b + name})
@@ -815,6 +816,28 @@ def basketball_hoop():
 def net_wall(m, f, t, faces):
     """A flat (zero thickness) piece of net with both faces, the whole texture on each."""
     m.box(f, t, "net", full=faces, faces=faces)
+
+
+def hanging_rope():
+    """The escape rope hanging down a wall (the wall behind it, to the south)."""
+    m = Model()
+    m.box((7.25, 0, 13.5), (8.75, 16, 15), "rope")
+    for y in (3, 9, 15):
+        m.box((7, y, 13.25), (9, y + 1, 15.25), "rope")
+    return m.json("rope")
+
+
+def rope_top():
+    """The top of the rope: up the face of the wall and the steel hook over its top edge."""
+    m = Model()
+    m.box((7.25, 0, 13.5), (8.75, 16, 15), "rope")
+    m.box((7, 9, 13.25), (9, 10, 15.25), "rope")
+    m.box((7.25, 16, 13.5), (8.75, 17.5, 16.5), "chrome")
+    m.box((7.25, 16.5, 16.5), (8.75, 17.5, 21), "chrome")
+    m.box((7.25, 14.5, 20), (8.75, 16.5, 21), "chrome")
+    for x in (5.5, 9):
+        m.box((x, 16.5, 19), (x + 1.5, 17.5, 21.5), "chrome")
+    return m.json("rope")
 
 
 def hoop_pole():
