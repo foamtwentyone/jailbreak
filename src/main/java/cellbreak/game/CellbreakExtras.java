@@ -776,8 +776,8 @@ public class CellbreakExtras {
 			boolean wrongPlace = phase.zone != CellbreakGame.Zone.ANYWHERE && game.phaseElapsed() > CellbreakGame.GRACE_SECONDS * 20
 					&& !game.isInPlace(p, d, phase);
 			boolean night = phase == Phase.LIGHTS_OUT && game.doorsLocked;
-			boolean bad = wrongPlace || night || CellbreakGame.countContraband(p) > 0 && p.getMainHandStack().getItem() != Items.AIR
-					&& CbContent.isContraband(p.getMainHandStack().getItem());
+			// Forbidden things in hand, by the same rules as a guard's eyes (work tools and field goods at work are fine).
+			boolean bad = wrongPlace || night || game.holdsContraband(p);
 			if (!bad) {
 				continue;
 			}

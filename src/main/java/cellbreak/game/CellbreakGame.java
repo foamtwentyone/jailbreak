@@ -1062,7 +1062,8 @@ public class CellbreakGame {
 		return switch (phase.zone) {
 			case ANYWHERE -> true;
 			case CELLS -> layout.cells.get(d.cell).interior.contains(pos);
-			case WORK -> layout.workZone.contains(pos) || layout.workshopZone != null && layout.workshopZone.contains(pos)
+			// The field and a step round it (mining the ore at its edge from outside it is work too).
+			case WORK -> layout.workZone.expand(2).contains(pos) || layout.workshopZone != null && layout.workshopZone.contains(pos)
 					|| extras.nearJob(pos);
 			default -> {
 				BlockBox zone = zoneBox(phase.zone);
