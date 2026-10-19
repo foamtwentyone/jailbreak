@@ -4,13 +4,15 @@ import cellbreak.net.GuidePayload;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 
 /** The routine arrow at the top of the screen: which way to walk, where to and how far. */
 public final class GuideHud {
+	private static final net.minecraft.util.Identifier TEXTURE = cellbreak.CbContent.id("textures/gui/guide_arrow.png");
+	/** The arrow in 32 pre-drawn directions (pixel art, like the compass), 24 pixels each. */
+	private static final int ARROW = 24;
+	private static final int FRAMES = 32;
 	private static GuidePayload guide = GuidePayload.NONE;
 	private static long received;
 	/** Smoothed arrow angle (degrees, 0 = straight ahead). */
@@ -43,34 +45,30 @@ public final class GuideHud {
 		float angle = MathHelper.wrapDegrees(targetYaw - mc.player.getYaw(counter.getTickDelta(true)));
 		shownAngle += MathHelper.wrapDegrees(angle - shownAngle) * 0.35F;
 
-		int cx = ctx.getScaledWindowWidth() / 2;
-		int cy = 36;
-		MatrixStack m = ctx.getMatrices();
-		m.push();
-		m.translate(cx, cy, 0);
-		m.scale(1.5F, 1.5F, 1);
-		m.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(shownAngle));
-		arrow(ctx, 0xC0000000, 1);
-		arrow(ctx, 0xFFFFC832, 0);
-		m.pop();
-
 		double dx = guide.goalX() - eye.x;
 		double dy = guide.goalY() - eye.y;
 		double dz = guide.goalZ() - eye.z;
 		int dist = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
-		String text = guide.label() + "  " + dist + " м" + (dy > 2.5 ? "  ▲ выше" : dy < -2.5 ? "  ▼ ниже" : "");
-		ctx.drawCenteredTextWithShadow(mc.textRenderer, text, cx, cy + 20, 0xFFFFE08A);
-	}
+		String title = guide.label();
+		String sub = dist + " м" + (dy > 2.5 ? " · этажом выше" : dy < -2.5 ? " · этажом ниже" : "");
 
-	/** An arrow pointing up, centred on the origin; grow: outline thickness. */
-	private static void arrow(DrawContext ctx, int color, int grow) {
-		// Shaft.
-		ctx.fill(-2 - grow, -2, 2 + grow, 10 + grow, color);
-		// Head: rows getting wider downwards.
-		for (int i = 0; i <= 7; i++) {
-			int y = -11 + i;
-			int w = i + grow;
-			ctx.fill(-w, y - grow, w + 1, y + 1, color);
-		}
+		// A small dark panel at the top: the arrow on the left, where to and how far on the right.
+		var tr = mc.textRenderer;
+		int textW = Math.max(tr.getWidth(title), tr.getWidth(sub));
+		int w = 5 + ARROW + 5 + textW + 7;
+		int h = ARROW + 6;
+		int x = (ctx.getScaledWindowWidth() - w) / 2;
+		int y = 6;
+		ctx.fill(x + 1, y, x + w - 1, y + h, 0xC0101418);
+		ctx.fill(x, y + 1, x + w, y + h - 1, 0xC0101418);
+		ctx.fill(x + 1, y + 1, x + w - 1, y + 2, 0x30FFFFFF);
+		ctx.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, 0x40000000);
+
+		int frame = Math.floorMod(Math.round(shownAngle / (360F / FRAMES)), FRAMES);
+		com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+		ctx.drawTexture(TEXTURE, x + 5, y + 3, (frame % 8) * ARROW, (frame / 8) * ARROW, ARROW, ARROW, ARROW * 8, ARROW * 4);
+		com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+		ctx.drawTextWithShadow(tr, title, x + 5 + ARROW + 5, y + 5, 0xFFFFD866);
+		ctx.drawTextWithShadow(tr, sub, x + 5 + ARROW + 5, y + 16, 0xFFB8B8B8);
 	}
 }
