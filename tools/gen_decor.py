@@ -133,8 +133,36 @@ def split(model, axis, particle):
 # ---------------------------------------------------------------- the models
 
 def plate_pair(m, x, y0, y1, z0, z1, thick=2):
-    """A weight plate standing in the y-z plane at x (face along x)."""
-    m.box((x, y0, z0), (x + thick, y1, z1), {"*": "rubber", "east": "plate", "west": "plate"}, full=("east", "west"))
+    """A round weight plate standing in the y-z plane at x (faces along x).
+
+    Built of horizontal bands stepping in towards the top and bottom (a round disc in pixels),
+    the plate texture mapped over the whole disc, the bands' edges in rubber.
+    """
+    disc(m, x, x + thick, (y0 + y1) / 2, (z0 + z1) / 2, (y1 - y0) / 2, "plate", "rubber")
+
+
+# Band edges (fractions of the radius from the centre) and each band's half width.
+DISC_BANDS = ((-1.0, -0.72, 0.68), (-0.72, -0.36, 0.93), (-0.36, 0.36, 1.0), (0.36, 0.72, 0.93), (0.72, 1.0, 0.68))
+
+
+def disc(m, xa, xb, cy, cz, r, face, edge):
+    bands = []
+    for a, b, w in DISC_BANDS:
+        # Cut a band crossing a block boundary (y = 16) here, so that split() keeps the uvs.
+        cut = (16 - cy) / r
+        if a < cut < b:
+            bands += [(a, cut, w), (cut, b, w)]
+        else:
+            bands.append((a, b, w))
+    for a, b, w in bands:
+        f = (xa, cy + a * r, cz - w * r)
+        t = (xb, cy + b * r, cz + w * r)
+        # The disc's own texture space: the whole disc spans 0..16 on the face.
+        k = 8 / r
+        lf = (0, 8 + a * r * k, 8 - w * r * k)
+        lt = (0, 8 + b * r * k, 8 + w * r * k)
+        m.box(f, t, {"*": edge, "east": face, "west": face},
+              uvs={"east": auto_uv("east", lf, lt), "west": auto_uv("west", lf, lt)})
 
 
 def barbell(m, y, z, x0=-12, x1=28, plates=True):
@@ -169,7 +197,7 @@ def exercise_bike():
     m.box((3, 0, 2), (13, 1.5, 4), "frame")
     m.box((3, 0, 13), (13, 1.5, 15), "frame")
     m.box((7, 1, 3), (9, 3, 14), "frame")
-    m.box((7.25, 2, 1), (8.75, 11, 10), {"*": "frame", "east": "plate", "west": "plate"}, full=("east", "west"))
+    disc(m, 7.25, 8.75, 6.5, 5.5, 4.5, "plate", "frame")
     m.box((7, 3, 5), (9, 14, 7), "frame")
     m.box((3, 14, 4), (13, 15, 6), "chrome")
     m.box((3, 13.75, 4), (5, 15.25, 6), "rubber")

@@ -416,25 +416,27 @@ def console():
 
 
 def plate():
+    """A rubber weight plate seen face on, filling the whole texture (the model cuts it round)."""
     t = Tex(seed=34)
     for y in range(S):
         for x in range(S):
             r = math.hypot(x - 7.5, y - 7.5)
-            if r > 7.8:
-                t.set(x, y, (0, 0, 0), 0)
-            elif r > 6.5:
-                t.set(x, y, (58, 58, 62))
-            elif r > 3:
-                t.set(x, y, tone((36, 36, 38), t.rnd.choice((0.9, 1.0, 1.1))))
-            elif r > 1.6:
-                t.set(x, y, (178, 182, 188))
-            else:
+            if r > 6.6:
+                t.set(x, y, tone((54, 54, 58), t.rnd.choice((0.95, 1.0, 1.05))))
+            elif r > 5.8:
                 t.set(x, y, (30, 30, 32))
-    t.set(6, 4, (230, 230, 230))
-    t.set(7, 4, (230, 230, 230))
-    t.set(9, 4, (230, 230, 230))
-    t.set(7, 11, (200, 50, 40))
-    t.set(8, 11, (200, 50, 40))
+            elif r > 3.2:
+                t.set(x, y, tone((40, 40, 43), t.rnd.choice((0.9, 1.0, 1.1))))
+            elif r > 2.4:
+                t.set(x, y, (30, 30, 32))
+            elif r > 1.4:
+                t.set(x, y, (182, 186, 192))
+            else:
+                t.set(x, y, (24, 24, 26))
+    # Raised lettering on the field, above and below the hub.
+    for x in (6, 7, 8, 9):
+        t.set(x, 4, (150, 150, 150))
+        t.set(x, 11, (190, 52, 42))
     return t
 
 

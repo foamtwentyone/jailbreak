@@ -24,7 +24,7 @@
 1. Minecraft **Java Edition 1.21.1**.
 2. Установщик **Fabric Loader** с fabricmc.net: выбрать версию 1.21.1 и нажать «Install».
 3. Мод **Fabric API** для 1.21.1 (Modrinth или CurseForge) положить в папку `mods`.
-4. Файл `cellbreak-0.5.15.jar` из папки [`dist`](dist) положить туда же, в `mods`.
+4. Файл `cellbreak-0.5.16.jar` из папки [`dist`](dist) положить туда же, в `mods`.
 5. Запустить игру с профилем «fabric-loader-1.21.1».
 
 ## Как играть с друзьями
@@ -38,7 +38,7 @@
 - или через **Radmin VPN / ZeroTier**: все в одной виртуальной сети, адрес как в локальной.
 
 **Через сервер.** Сервер Fabric 1.21.1 (fabricmc.net → Server), в его `mods` кладутся
-Fabric API и `cellbreak-0.5.15.jar`. Чтобы друзья зашли через интернет, удобно использовать
+Fabric API и `cellbreak-0.5.16.jar`. Чтобы друзья зашли через интернет, удобно использовать
 **playit.gg**. Чтобы вводить команды, хост должен быть оператором (`/op ник`).
 
 ## Команды
@@ -397,7 +397,7 @@ Fabric API и `cellbreak-0.5.15.jar`. Чтобы друзья зашли чер�
 
 ## Для разработчиков
 
-- Сборка: `./gradlew build` → `build/libs/cellbreak-0.5.15.jar`.
+- Сборка: `./gradlew build` → `build/libs/cellbreak-0.5.16.jar`.
 - Текстуры генерируются скриптами `tools/gen_textures.py` (основа, рабочие инструменты) и `tools/gen_textures_v6.py` (всё остальное, начиная с 0.3.11), `tools/gen_textures_v7.py` (предметы 0.4.0), `tools/gen_textures_v9.py` (облик тюрьмы 16×16 в стиле ванилы, 0.5.1; `gen_textures_v8.py` — прежний вариант 64×64) и `tools/gen_decor.py` (3D-модели и blockstate-файлы 0.5.0), `tools/gen_guide_arrow.py` (стрелка-подсказка), превью рисует `tools/preview.py`.
 - `./gradlew runTestServer` запускает сервер с тестовыми ботами (`src/testmod`, команды
   `/cbtest ...`). `./gradlew runTestClient` запускает клиент, который сам подключается к
