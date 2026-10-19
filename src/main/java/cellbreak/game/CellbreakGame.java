@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 
 import cellbreak.CbContent;
@@ -90,7 +92,7 @@ public class CellbreakGame {
 		ROLL_CALL("Утренняя перекличка", "Все в зону переклички! Охрана будет обыскивать.", 0, Zone.ROLL_CALL),
 		BREAKFAST("Завтрак", "Все в столовую!", 1000, Zone.CANTEEN),
 		WORK("Работа", "На рабочее поле! Добывай руду и брёвна, сдавай на столе в мастерской.", 3000, Zone.WORK),
-		FREE_TIME("Свободное время", "Можно ходить где угодно (кроме улицы ночью).", 6000, Zone.ANYWHERE),
+		FREE_TIME("Свободное время", "Можно ходить где угодно.", 6000, Zone.ANYWHERE),
 		EXERCISE("Прогулка", "Все на прогулочный двор!", 7000, Zone.YARD),
 		GYM("Качалка", "Все в качалку! Тренажёры и груша — ПКМ.", 8000, Zone.GYM),
 		SHOWER("Душ", "Все в душевую!", 9000, Zone.SHOWER),
@@ -209,6 +211,8 @@ public class CellbreakGame {
 	final Map<UUID, PlayerData> players = new HashMap<>();
 	/** Blocks broken by prisoners and what was there before; guards repair what they notice. */
 	private final Map<BlockPos, BlockState> damage = new HashMap<>();
+	/** Who broke each damaged block (their tunnels are filled in when they are caught). */
+	private final Map<BlockPos, UUID> damageBy = new HashMap<>();
 	private boolean running;
 	long ticks;
 	/** The day of the stay, counted from the start of the round. */
@@ -1947,6 +1951,20 @@ public class CellbreakGame {
 				continue;
 			}
 			PrisonLayout.Cell c = l.cells.get(d.cell);
+			if (extras.isCurtained(d.cell)) {
+				// A curtain at night: the guard on the round tears it down and looks in.
+				for (GuardEntity g : npcGuards()) {
+					if (g.getBlockPos().getSquaredDistance(c.door) < 4 * 4) {
+						extras.uncoverCell(c.interior.expand(1));
+						guardSays(g, "Занавесился, значит? Снять! Посмотрим, кто тут спит...");
+						addHeat(p, 15);
+						break;
+					}
+				}
+				if (extras.isCurtained(d.cell)) {
+					continue;
+				}
+			}
 			if (c.interior.expand(1).contains(p.getBlockPos())) {
 				continue;
 			}
@@ -2146,11 +2164,15 @@ public class CellbreakGame {
 		for (Object o : chosen) {
 			if (o instanceof ServerPlayerEntity p) {
 				List<Text> found = contrabandNames(p);
+				String cellFind = searchCell(p);
 				if (!found.isEmpty()) {
 					p.sendMessage(Text.literal("При обыске у тебя нашли: ").append(joined(found)).formatted(Formatting.RED));
 					arrest(p, "запрещёнка найдена при обыске на перекличке");
+				} else if (cellFind != null) {
+					p.sendMessage(Text.literal("Обыск в твоей камере: " + cellFind).formatted(Formatting.RED));
+					arrest(p, "обыск камеры: " + cellFind);
 				} else {
-					p.sendMessage(Text.literal("Тебя обыскали. Чисто.").formatted(Formatting.GREEN), false);
+					p.sendMessage(Text.literal("Тебя и твою камеру обыскали. Чисто.").formatted(Formatting.GREEN), false);
 				}
 			} else if (o instanceof PrisonerNpcEntity npc && world().random.nextInt(5) == 0) {
 				npc.solitaryUntil = ticks + SOLITARY_SECONDS * 20L;
@@ -2161,6 +2183,58 @@ public class CellbreakGame {
 						.formatted(Formatting.GRAY));
 			}
 		}
+	}
+
+	/**
+	 * Roll call search of a prisoner's cell: the storage (contraband is taken), holes and cracks in
+	 * the floor and walls (filled in), the bars curtained off. Null: nothing found; else what was found.
+	 */
+	private String searchCell(ServerPlayerEntity p) {
+		PlayerData d = data(p);
+		if (d == null || d.cell < 0 || d.cell >= layout().cells.size()) {
+			return null;
+		}
+		ServerWorld world = world();
+		BlockBox box = layout().cells.get(d.cell).interior.expand(1);
+		List<String> found = new ArrayList<>();
+		int items = 0;
+		for (BlockPos q : BlockPos.iterate(box.getMinX(), box.getMinY(), box.getMinZ(), box.getMaxX(), box.getMaxY(), box.getMaxZ())) {
+			if (world.getBlockEntity(q) instanceof net.minecraft.inventory.Inventory inv) {
+				for (int i = 0; i < inv.size(); i++) {
+					if (CbContent.isContraband(inv.getStack(i))) {
+						items += inv.getStack(i).getCount();
+						inv.setStack(i, ItemStack.EMPTY);
+					}
+				}
+			}
+		}
+		if (items > 0) {
+			found.add("запрещённое в тумбочке (" + items + ")");
+		}
+		int fakes = 0;
+		for (BlockPos q : BlockPos.iterate(box.getMinX(), box.getMinY(), box.getMinZ(), box.getMaxX(), box.getMaxY(), box.getMaxZ())) {
+			if (world.getBlockState(q).getBlock() instanceof FakeBlock && damage.containsKey(q)) {
+				// A painted fake wall or vent over a hole: knocked out, the hole behind it filled.
+				world.setBlockState(q, Blocks.AIR.getDefaultState());
+				fakes++;
+			}
+		}
+		if (fakes > 0) {
+			found.add("муляж на стене");
+		}
+		int holes = 0;
+		for (BlockPos q : new ArrayList<>(damage.keySet())) {
+			if (box.contains(q) && damage.containsKey(q)) {
+				holes += repairTunnel(q).size();
+			}
+		}
+		if (holes > 0) {
+			found.add("подкоп/пролом (" + holes + " блоков засыпано)");
+		}
+		if (extras.uncoverCell(box)) {
+			found.add("завешенная решётка");
+		}
+		return found.isEmpty() ? null : String.join(", ", found);
 	}
 
 	// ------------------------------------------------------------------ heat and arrests
@@ -2196,6 +2270,7 @@ public class CellbreakGame {
 		}
 		if (damage.putIfAbsent(pos.toImmutable(), original) == null) {
 			extras.stats(p.getUuid()).holes++;
+			damageBy.put(pos.toImmutable(), p.getUuid());
 		}
 		suspiciousOutdoors(p, pos);
 		makeNoise(p, pos);
@@ -2395,6 +2470,11 @@ public class CellbreakGame {
 			return;
 		}
 		int removed = removeContraband(p);
+		int filled = repairDamageBy(p.getUuid());
+		if (filled > 0) {
+			broadcast(Text.literal("Охрана нашла и засыпала подкоп " + p.getName().getString() + " (" + filled + " блоков).")
+					.formatted(Formatting.GRAY));
+		}
 		d.heat = 0;
 		d.wanted = false;
 		d.sniperSpotTick = 0;
@@ -2691,21 +2771,110 @@ public class CellbreakGame {
 			if (!world.getEntitiesByClass(LivingEntity.class, new Box(pos), le -> le.isAlive()).isEmpty()) {
 				continue;
 			}
+			LivingEntity finder = null;
 			for (GuardEntity g : guards) {
-				if (g.getBlockPos().getSquaredDistance(pos) < 100 && canSeeBlock(g, pos)) {
-					world.setBlockState(pos, e.getValue());
-					it.remove();
-					holesFound++;
-					broadcast(Text.literal("Охрана нашла " + describe(e.getValue()) + " (" + pos.toShortString()
-							+ ") и заделала. Будут искать виновного!").formatted(Formatting.RED));
-					ServerPlayerEntity owner = cellOwner(pos);
-					if (owner != null) {
-						addHeat(owner, 50);
-					}
+				if (g.getBlockPos().getSquaredDistance(pos) < 16 * 16 && canSeeBlock(g, pos)) {
+					finder = g;
 					break;
 				}
 			}
+			// A hole out in the open (the work field, the yard): the tower can see it from far away.
+			if (finder == null && openSky(pos)) {
+				for (GuardEntity sniper : snipers()) {
+					if (sniper.getBlockPos().getSquaredDistance(pos) < 48 * 48 && hasLineOfSight(sniper, pos)) {
+						finder = sniper;
+						break;
+					}
+				}
+			}
+			if (finder != null) {
+				BlockState was = e.getValue();
+				Set<BlockPos> filled = repairTunnel(pos);
+				holesFound++;
+				broadcast(Text.literal("Охрана нашла " + describe(was) + (filled.size() > 1 ? " — подкоп в " + filled.size() + " блоков" : "")
+						+ " (" + pos.toShortString() + ") и заделала. Будут искать виновного!").formatted(Formatting.RED));
+				if (finder instanceof GuardEntity g) {
+					guardSays(g, filled.size() > 1 ? "Тут подкоп! Засыпать немедленно!" : "Тут дыра! Заделать!");
+				}
+				ServerPlayerEntity owner = null;
+				for (BlockPos q : filled) {
+					UUID by = damageBy.remove(q);
+					if (owner == null && by != null) {
+						owner = server.getPlayerManager().getPlayer(by);
+					}
+				}
+				if (owner == null) {
+					owner = cellOwner(pos);
+				}
+				if (owner != null && isPrisoner(owner)) {
+					addHeat(owner, 50);
+				}
+				// The map changed under the iterator: start over next time.
+				return;
+			}
 		}
+	}
+
+	/**
+	 * Fills a hole and every damaged block connected to it (a whole tunnel), except where someone
+	 * stands. Returns what was filled.
+	 */
+	private Set<BlockPos> repairTunnel(BlockPos start) {
+		ServerWorld world = world();
+		Set<BlockPos> seen = new HashSet<>();
+		java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
+		queue.add(start);
+		seen.add(start);
+		while (!queue.isEmpty() && seen.size() < 400) {
+			BlockPos q = queue.poll();
+			for (Direction dir : Direction.values()) {
+				BlockPos n = q.offset(dir);
+				if (damage.containsKey(n) && seen.add(n)) {
+					queue.add(n);
+				}
+			}
+		}
+		Set<BlockPos> filled = new HashSet<>();
+		for (BlockPos q : seen) {
+			BlockState original = damage.get(q);
+			if (original == null || world.getBlockState(q).getBlock() instanceof FakeBlock
+					|| !world.getEntitiesByClass(LivingEntity.class, new Box(q), le -> le.isAlive()).isEmpty()) {
+				continue;
+			}
+			world.setBlockState(q, original);
+			damage.remove(q);
+			filled.add(q);
+		}
+		return filled;
+	}
+
+	/** Everything a caught prisoner broke is filled in (the guards search their route). */
+	private int repairDamageBy(UUID who) {
+		int n = 0;
+		ServerWorld world = world();
+		for (Iterator<Map.Entry<BlockPos, UUID>> it = damageBy.entrySet().iterator(); it.hasNext();) {
+			Map.Entry<BlockPos, UUID> e = it.next();
+			if (!e.getValue().equals(who)) {
+				continue;
+			}
+			BlockState original = damage.get(e.getKey());
+			if (original != null && !(world.getBlockState(e.getKey()).getBlock() instanceof FakeBlock)
+					&& world.getEntitiesByClass(LivingEntity.class, new Box(e.getKey()), le -> le.isAlive()).isEmpty()) {
+				world.setBlockState(e.getKey(), original);
+				damage.remove(e.getKey());
+				n++;
+			}
+			it.remove();
+		}
+		return n;
+	}
+
+	private boolean hasLineOfSight(LivingEntity watcher, BlockPos pos) {
+		Vec3d eye = watcher.getEyePos();
+		Vec3d center = Vec3d.ofCenter(pos);
+		BlockHitResult hit = watcher.getWorld().raycast(new RaycastContext(eye, center, RaycastContext.ShapeType.COLLIDER,
+				RaycastContext.FluidHandling.NONE, watcher));
+		return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(pos);
 	}
 
 	private boolean canSeeBlock(LivingEntity watcher, BlockPos pos) {
@@ -2754,6 +2923,7 @@ public class CellbreakGame {
 		ServerWorld world = world();
 		damage.forEach((pos, state) -> world.setBlockState(pos, state));
 		damage.clear();
+		damageBy.clear();
 		for (BlockPos pos : graffiti.keySet()) {
 			if (world.getBlockState(pos).isOf(CbContent.GRAFFITI)) {
 				world.setBlockState(pos, Blocks.AIR.getDefaultState());

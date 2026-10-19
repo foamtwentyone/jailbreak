@@ -942,7 +942,10 @@ def main(root):
     for part in ("post_ends", "post", "cap", "cap_alt", "side", "side_alt"):
         write(bm_dir, "chain_link_" + part, {"parent": "minecraft:block/iron_bars_" + part, "textures": link})
     with open(os.path.join(bs_dir, "cell_bars.json")) as fh:
-        bars = fh.read().replace("cell_bars", "chain_link")
+        bars = fh.read()
+    # The chain link fence has no curtain (that is the cell bars' own state).
+    parts = [x for x in json.loads(bars)["multipart"] if "curtain" not in x.get("when", {})]
+    bars = json.dumps({"multipart": parts}, indent=2).replace("cell_bars", "chain_link")
     with open(os.path.join(bs_dir, "chain_link.json"), "w") as fh:
         fh.write(bars)
     write(im_dir, "chain_link", {"parent": "minecraft:item/generated", "textures": {"layer0": b + "chain_link"}})

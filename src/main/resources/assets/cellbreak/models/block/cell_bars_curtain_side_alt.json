@@ -1,0 +1,40 @@
+{
+ "textures": {
+  "particle": "cellbreak:block/mat_blanket_gray",
+  "cloth": "cellbreak:block/mat_blanket_gray"
+ },
+ "elements": [
+  {
+   "from": [
+    6.8,
+    0,
+    8
+   ],
+   "to": [
+    9.2,
+    16,
+    16
+   ],
+   "faces": {
+    "north": {
+     "texture": "#cloth"
+    },
+    "south": {
+     "texture": "#cloth"
+    },
+    "east": {
+     "texture": "#cloth"
+    },
+    "west": {
+     "texture": "#cloth"
+    },
+    "up": {
+     "texture": "#cloth"
+    },
+    "down": {
+     "texture": "#cloth"
+    }
+   }
+  }
+ ]
+}

@@ -379,6 +379,19 @@ public class CellbreakTest implements ModInitializer {
 							reply(c, "useas " + pos.toShortString() + " -> " + result);
 							return 1;
 						}))))
+				.then(CommandManager.literal("usesideas").then(CommandManager.argument("player", net.minecraft.command.argument.EntityArgumentType.player())
+						.then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
+								.then(CommandManager.argument("side", StringArgumentType.word()).executes(c -> {
+									ServerPlayerEntity p = net.minecraft.command.argument.EntityArgumentType.getPlayer(c, "player");
+									BlockPos pos = BlockPosArgumentType.getBlockPos(c, "pos");
+									Direction side = Direction.byName(StringArgumentType.getString(c, "side"));
+									BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(pos).add(Vec3d.of(side.getVector()).multiply(0.5)),
+											side, pos, false);
+									var result = UseBlockCallback.EVENT.invoker().interact(p, p.getServerWorld(), Hand.MAIN_HAND, hit);
+									reply(c, "usesideas " + pos.toShortString() + " " + side + " -> " + result + " hand=" + p.getMainHandStack()
+											+ " prisoner=" + cellbreak.game.CellbreakGame.get(p.getServer()).isPrisoner(p) + " at " + p.getBlockPos().toShortString());
+									return 1;
+								})))))
 				.then(CommandManager.literal("crawl").then(CommandManager.argument("name", StringArgumentType.word())
 						.then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
 								.then(CommandManager.argument("side", StringArgumentType.word()).executes(c -> {

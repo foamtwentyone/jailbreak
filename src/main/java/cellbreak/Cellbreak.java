@@ -233,6 +233,12 @@ public class Cellbreak implements ModInitializer {
 					sp.sendMessage(Text.literal("Ключ от камер к воротам не подходит.").formatted(Formatting.GRAY), true);
 					return ActionResult.FAIL;
 				}
+				if (ex.useCurtain(sp, pos)) {
+					return ActionResult.SUCCESS;
+				}
+				if (ex.useHangingRope(sp, pos)) {
+					return ActionResult.SUCCESS;
+				}
 				if (stack.isOf(CbContent.ROPE_HOOK) && ex.useRope(sp, hit)) {
 					return ActionResult.SUCCESS;
 				}

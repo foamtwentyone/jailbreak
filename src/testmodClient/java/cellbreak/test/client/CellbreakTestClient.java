@@ -73,6 +73,8 @@ public class CellbreakTestClient implements ClientModInitializer {
 				case "front" -> Perspective.THIRD_PERSON_FRONT;
 				default -> Perspective.FIRST_PERSON;
 			});
+			case "sneak" -> client.options.sneakKey.setPressed(a[1].equals("on"));
+			case "yaw" -> System.out.println("[testclient] yaw=" + client.player.getYaw() + " pitch=" + client.player.getPitch());
 			case "slot" -> client.player.getInventory().selectedSlot = Integer.parseInt(a[1]);
 			case "wait" -> wait = Integer.parseInt(a[1]);
 			default -> System.out.println("[testclient] unknown command");

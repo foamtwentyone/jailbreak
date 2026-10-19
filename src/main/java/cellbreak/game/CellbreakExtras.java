@@ -47,6 +47,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
@@ -112,9 +113,39 @@ public class CellbreakExtras {
 	private final Set<UUID> sniffed = new HashSet<>();
 	private long nextDogCheck;
 
-	/** A climb up the rope: from where the prisoner stood, along the rope in front of the wall, to the top. */
-	private record Climb(BlockPos top, Vec3d start, Vec3d foot, long from, long until, List<BlockPos> rope) {
+	/**
+	 * Someone on a rope: going up (hand over hand, from where they stood to the top of the wall) or
+	 * sliding down. Moved by velocity, not teleports, so the camera stays free.
+	 */
+	private static final class Climb {
+		final BlockPos top;
+		final Vec3d start;
+		final Vec3d foot;
+		final List<BlockPos> rope;
+		/** Their own rope, thrown just now: used up at the top, pulled back down if they climb down. */
+		final boolean own;
+		final double upSpeed;
+		long from;
+		double y;
+		boolean down;
+
+		Climb(BlockPos top, Vec3d start, Vec3d foot, List<BlockPos> rope, boolean own, long from, int seconds) {
+			this.top = top;
+			this.start = start;
+			this.foot = foot;
+			this.rope = rope;
+			this.own = own;
+			this.from = from;
+			this.y = start.y;
+			this.upSpeed = (top.getY() - 0.9 - foot.y) / Math.max(20, seconds * 20 - 10);
+		}
+
+		double height() {
+			return top.getY() - foot.y;
+		}
 	}
+
+	private static final double SLIDE_SPEED = 0.16;
 
 	/** Ropes left hanging on walls: where, and when they are taken down. */
 	private final Map<BlockPos, Long> hangingRopes = new HashMap<>();
@@ -131,7 +162,6 @@ public class CellbreakExtras {
 		viewing.clear();
 		viewFrom.clear();
 		climbs.clear();
-		takeDownRopes(true);
 		jobReps.clear();
 		java.util.Arrays.fill(cameraBlindUntil, 0);
 		lockdownUntil = 0;
@@ -183,6 +213,10 @@ public class CellbreakExtras {
 		}
 		cameraEyes.clear();
 		dummies.clear();
+		for (PrisonLayout.Cell c : game.layout().cells) {
+			uncoverCell(c.interior.expand(1));
+		}
+		curtained.clear();
 		// Dummies left in the bunks by an earlier round (or a crash).
 		for (PrisonLayout.Cell c : game.layout().cells) {
 			for (BlockPos q : BlockPos.iterate(c.interior.getMinX() - 1, c.interior.getMinY() - 1, c.interior.getMinZ() - 1,
@@ -210,6 +244,9 @@ public class CellbreakExtras {
 			lockdownTick();
 			climbTick();
 			viewTick();
+		}
+		if (t % 20 == 7) {
+			curtainChecks();
 		}
 		if (t % 10 == 5) {
 			dogTick();
@@ -414,6 +451,111 @@ public class CellbreakExtras {
 		return false;
 	}
 
+	// ------------------------------------------------------------------ the curtain over the cell bars
+
+	/** Cells whose bars are curtained off (the rag is on the bars). */
+	private final Set<Integer> curtained = new HashSet<>();
+
+	/**
+	 * Right click on your own cell's bars with a rag: a curtain over all of them (nobody looks in).
+	 * Again with an empty hand: the rag comes down and back into the pocket.
+	 */
+	public boolean useCurtain(ServerPlayerEntity p, BlockPos pos) {
+		BlockState st = world().getBlockState(pos);
+		if (!st.isOf(CbContent.CELL_BARS) || !game.isRunning() || !game.isPrisoner(p)) {
+			return false;
+		}
+		PlayerData d = game.data(p);
+		if (d.cell < 0 || d.cell >= game.layout().cells.size()) {
+			return false;
+		}
+		BlockBox box = game.layout().cells.get(d.cell).interior.expand(1);
+		if (!box.contains(pos)) {
+			return false;
+		}
+		boolean on = st.get(cellbreak.block.CellBarsBlock.CURTAIN);
+		ItemStack hand = p.getMainHandStack();
+		if (!on && hand.isOf(CbContent.RAG)) {
+			setCurtain(box, true);
+			curtained.add(d.cell);
+			hand.decrement(1);
+			world().playSound(null, pos, SoundEvents.BLOCK_WOOL_PLACE, SoundCategory.BLOCKS, 1.0F, 0.9F);
+			p.sendMessage(Text.literal("Ты завесил решётку тряпкой: снаружи не видно, что в камере. "
+					+ "Охрана такого не любит — сорвут и запомнят. Снять: ПКМ пустой рукой.").formatted(Formatting.GOLD));
+			return true;
+		}
+		if (on && hand.isEmpty()) {
+			setCurtain(box, false);
+			curtained.remove(d.cell);
+			p.giveItemStack(new ItemStack(CbContent.RAG));
+			p.sendMessage(Text.literal("Ты снял тряпку с решётки.").formatted(Formatting.GRAY), true);
+			return true;
+		}
+		return false;
+	}
+
+	private void setCurtain(BlockBox box, boolean on) {
+		for (BlockPos q : BlockPos.iterate(box.getMinX(), box.getMinY(), box.getMinZ(), box.getMaxX(), box.getMaxY(), box.getMaxZ())) {
+			BlockState st = world().getBlockState(q);
+			if (st.isOf(CbContent.CELL_BARS) && st.get(cellbreak.block.CellBarsBlock.CURTAIN) != on) {
+				world().setBlockState(q, st.with(cellbreak.block.CellBarsBlock.CURTAIN, on), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+			}
+		}
+	}
+
+	/** Takes a curtain down (a guard does): true if there was one. */
+	boolean uncoverCell(BlockBox box) {
+		boolean had = false;
+		for (BlockPos q : BlockPos.iterate(box.getMinX(), box.getMinY(), box.getMinZ(), box.getMaxX(), box.getMaxY(), box.getMaxZ())) {
+			BlockState st = world().getBlockState(q);
+			if (st.isOf(CbContent.CELL_BARS) && st.get(cellbreak.block.CellBarsBlock.CURTAIN)) {
+				had = true;
+				world().setBlockState(q, st.with(cellbreak.block.CellBarsBlock.CURTAIN, false), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+			}
+		}
+		for (int i = 0; i < game.layout().cells.size(); i++) {
+			if (game.layout().cells.get(i).interior.expand(1).equals(box)) {
+				curtained.remove(i);
+			}
+		}
+		return had;
+	}
+
+	/** Whether a cell is curtained off (for the night round). */
+	boolean isCurtained(int cell) {
+		return curtained.contains(cell);
+	}
+
+	/** By day an NPC guard who sees a curtain on a cell's bars tears it down; the owner is noted. */
+	private void curtainChecks() {
+		if (curtained.isEmpty()) {
+			return;
+		}
+		for (int cell : new ArrayList<>(curtained)) {
+			PrisonLayout.Cell c = game.layout().cells.get(cell);
+			for (GuardEntity g : game.npcGuards()) {
+				if (g.getBlockPos().getSquaredDistance(c.door) < 8 * 8 && hasClearView(g, c.door)) {
+					uncoverCell(c.interior.expand(1));
+					game.guardSays(g, "Это что ещё за занавески? Снять! Решётку не завешивать!");
+					ServerPlayerEntity owner = game.cellOwner(c.spawn);
+					if (owner != null) {
+						game.addHeat(owner, 15);
+						owner.sendMessage(Text.literal("Охрана сорвала тряпку с решётки твоей камеры. Подозрение +15").formatted(Formatting.RED));
+					}
+					break;
+				}
+			}
+		}
+	}
+
+	private boolean hasClearView(GuardEntity g, BlockPos pos) {
+		Vec3d eye = g.getEyePos();
+		Vec3d to = Vec3d.ofCenter(pos);
+		BlockHitResult hit = world().raycast(new RaycastContext(eye, to, RaycastContext.ShapeType.COLLIDER,
+				RaycastContext.FluidHandling.NONE, g));
+		return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().getSquaredDistance(pos) <= 2;
+	}
+
 	// ------------------------------------------------------------------ 2. the guard disguise
 
 	/** A prisoner in a guard's cap and jacket (navy leather): passes for a guard from a distance. */
@@ -572,7 +714,8 @@ public class CellbreakExtras {
 		List<BlockPos> rope = new ArrayList<>();
 		for (int y = top.getY() - 1; y >= p.getBlockY() - 1; y--) {
 			BlockPos q = new BlockPos(column.getX(), y, column.getZ());
-			if (!world().getBlockState(q).isAir()) {
+			BlockState here = world().getBlockState(q);
+			if (!here.isAir() && !here.isOf(cellbreak.CbDecor.HANGING_ROPE) && !here.isOf(cellbreak.CbDecor.ROPE_TOP)) {
 				break;
 			}
 			boolean hook = rope.isEmpty();
@@ -582,90 +725,177 @@ public class CellbreakExtras {
 			hangingRopes.put(q, Long.MAX_VALUE);
 		}
 		Vec3d foot = new Vec3d(column.getX() + 0.5 + side.getOffsetX() * 0.2, p.getY(), column.getZ() + 0.5 + side.getOffsetZ() * 0.2);
-		climbs.put(p.getUuid(), new Climb(top, p.getPos(), foot, ticks(), ticks() + seconds * 20L, rope));
-		p.sendMessage(Text.literal("Крюк зацепился! Лезешь вверх (" + seconds + " с). Присесть — отпустить верёвку.")
+		climbs.put(p.getUuid(), new Climb(top, p.getPos(), foot, rope, true, ticks(), seconds));
+		p.sendMessage(Text.literal("Крюк зацепился! Лезешь вверх (" + seconds + " с). Присесть — слезть вниз, отойти от стены — спрыгнуть.")
 				.formatted(Formatting.GOLD));
 		return true;
 	}
 
-	/** Every tick: the climbers go up their ropes (step by step, hand over hand). */
+	/** Right click on a rope hanging on a wall: climb it (from below) or climb down it (from the top of the wall). */
+	public boolean useHangingRope(ServerPlayerEntity p, BlockPos pos) {
+		BlockState st = world().getBlockState(pos);
+		if (!game.isRunning() || !game.isPrisoner(p) || climbs.containsKey(p.getUuid())
+				|| !(st.isOf(cellbreak.CbDecor.HANGING_ROPE) || st.isOf(cellbreak.CbDecor.ROPE_TOP))) {
+			return false;
+		}
+		// The whole rope: up to the hook, down to its end.
+		BlockPos hook = pos;
+		while (world().getBlockState(hook.up()).isOf(cellbreak.CbDecor.HANGING_ROPE) || world().getBlockState(hook.up()).isOf(cellbreak.CbDecor.ROPE_TOP)) {
+			hook = hook.up();
+		}
+		BlockPos end = pos;
+		while (world().getBlockState(end.down()).isOf(cellbreak.CbDecor.HANGING_ROPE)) {
+			end = end.down();
+		}
+		Direction side = world().getBlockState(hook).get(net.minecraft.state.property.Properties.HORIZONTAL_FACING);
+		BlockPos top = hook.offset(side.getOpposite()).up();
+		Vec3d foot = new Vec3d(end.getX() + 0.5 + side.getOffsetX() * 0.2, end.getY(), end.getZ() + 0.5 + side.getOffsetZ() * 0.2);
+		List<BlockPos> rope = new ArrayList<>();
+		for (BlockPos q = hook; q.getY() >= end.getY(); q = q.down()) {
+			rope.add(q);
+		}
+		int seconds = 2 + (top.getY() - end.getY());
+		// Nobody takes the rope down under a climber.
+		for (BlockPos q : rope) {
+			hangingRopes.computeIfPresent(q, (k, v) -> Math.max(v, ticks() + (seconds + 10) * 20L));
+		}
+		Climb c = new Climb(top, p.getPos(), foot, rope, false, ticks(), seconds);
+		if (p.getY() >= top.getY() - 0.5) {
+			// From the top of the wall: over the edge and down.
+			c.down = true;
+			c.y = top.getY() - 0.9;
+			p.teleport(world(), foot.x, c.y, foot.z, p.getYaw(), p.getPitch());
+			p.sendMessage(Text.literal("Спускаешься по верёвке...").formatted(Formatting.GOLD), true);
+		} else {
+			p.sendMessage(Text.literal("Лезешь по верёвке (" + seconds + " с). Присесть — слезть вниз.").formatted(Formatting.GOLD), true);
+		}
+		climbs.put(p.getUuid(), c);
+		return true;
+	}
+
+	/** Every tick: the climbers go up their ropes (hand over hand) or slide down. */
 	void climbMove() {
 		for (var it = climbs.entrySet().iterator(); it.hasNext();) {
 			var e = it.next();
 			ServerPlayerEntity p = game.server.getPlayerManager().getPlayer(e.getKey());
 			Climb c = e.getValue();
-			if (p == null || !game.isPrisoner(p) || p.isSneaking() || p.hurtTime > 0) {
+			long t = ticks() - c.from;
+			boolean onRope = t < 10 && !c.down
+					|| Math.abs(p == null ? 99 : p.getX() - c.foot.x) < 1.5 && Math.abs(p.getZ() - c.foot.z) < 1.5;
+			if (p == null || !game.isPrisoner(p) || p.hurtTime > 0 || !onRope) {
+				// Hit, or stepped away from the wall: let go and fall.
 				if (p != null) {
-					p.sendMessage(Text.literal("Ты сорвался с верёвки.").formatted(Formatting.RED), true);
+					p.sendMessage(Text.literal("Ты сорвался с верёвки!").formatted(Formatting.RED), true);
+					if (c.own) {
+						// The rope stays up on the wall: it is not in the pocket any more.
+						ItemStack rope = findRope(p);
+						if (rope != null) {
+							rope.decrement(1);
+						}
+					}
 				}
-				leaveRope(c);
+				finish(c, false);
 				it.remove();
 				continue;
 			}
-			long t = ticks() - c.from();
-			long total = c.until() - c.from();
-			double x;
-			double y;
-			double z;
-			if (t < 10) {
+			if (p.isSneaking() && !c.down && t >= 10) {
+				c.down = true;
+				p.sendMessage(Text.literal("Слезаешь вниз...").formatted(Formatting.GOLD), true);
+			}
+			double x = c.foot.x;
+			double z = c.foot.z;
+			if (c.down) {
+				c.y -= SLIDE_SPEED;
+				if (c.y <= c.foot.y) {
+					p.setVelocity(Vec3d.ZERO);
+					p.velocityModified = true;
+					p.fallDistance = 0;
+					if (c.own) {
+						// Down again before the top: the rope is pulled back off the wall, still usable.
+						removeRope(c.rope);
+						p.sendMessage(Text.literal("Ты слез и снял верёвку.").formatted(Formatting.GRAY), true);
+					} else {
+						p.sendMessage(Text.literal("Ты спустился.").formatted(Formatting.GRAY), true);
+					}
+					it.remove();
+					continue;
+				}
+			} else if (t < 10) {
 				// First a step up to the rope.
 				double k = t / 10.0;
-				x = c.start().x + (c.foot().x - c.start().x) * k;
-				y = c.start().y;
-				z = c.start().z + (c.foot().z - c.start().z) * k;
+				x = c.start.x + (c.foot.x - c.start.x) * k;
+				z = c.start.z + (c.foot.z - c.start.z) * k;
 			} else {
-				// Hand over hand: up in jerks, a pull every half second.
-				double k = Math.min(1, (t - 10) / (double) (total - 10));
-				double pulls = (total - 10) / 10.0;
-				double stepped = Math.floor(k * pulls) + Math.min(1, (k * pulls % 1) * 2.5);
-				double kk = Math.min(1, stepped / pulls);
-				x = c.foot().x;
-				z = c.foot().z;
-				y = c.foot().y + (c.top().getY() - 0.9 - c.foot().y) * kk;
+				// Hand over hand: a pull every half second.
+				double phase = ((t - 10) % 10) / 10.0;
+				c.y += c.upSpeed * (phase < 0.4 ? 2.5 : 0);
+				if (c.y >= c.top.getY() - 0.9) {
+					it.remove();
+					p.teleport(world(), c.top.getX() + 0.5, c.top.getY(), c.top.getZ() + 0.5, p.getYaw(), p.getPitch());
+					p.fallDistance = 0;
+					finish(c, true);
+					if (c.own) {
+						ItemStack rope = p.getMainHandStack().isOf(CbContent.ROPE_HOOK) ? p.getMainHandStack() : findRope(p);
+						if (rope != null) {
+							rope.decrement(1);
+						}
+					}
+					p.sendMessage(Text.literal("Ты наверху! Верёвка осталась висеть на стене.").formatted(Formatting.GREEN), true);
+					continue;
+				}
 			}
-			p.networkHandler.requestTeleport(x, y, z, 0, 0,
-					java.util.EnumSet.of(net.minecraft.network.packet.s2c.play.PositionFlag.X_ROT,
-							net.minecraft.network.packet.s2c.play.PositionFlag.Y_ROT));
-			p.setVelocity(Vec3d.ZERO);
+			// Pulled to where they should be by velocity: the camera stays the player's own.
+			Vec3d want = new Vec3d(x, c.y, z);
+			p.setVelocity(want.subtract(p.getPos()).multiply(0.8));
+			p.velocityModified = true;
 			p.fallDistance = 0;
 		}
 	}
 
 	private void climbTick() {
-		long now = ticks();
-		for (var it = climbs.entrySet().iterator(); it.hasNext();) {
-			var e = it.next();
+		for (var e : climbs.entrySet()) {
 			ServerPlayerEntity p = game.server.getPlayerManager().getPlayer(e.getKey());
 			Climb c = e.getValue();
 			if (p == null) {
 				continue;
 			}
 			world().playSound(null, p.getBlockPos(), SoundEvents.BLOCK_WOOL_STEP, SoundCategory.PLAYERS, 1.0F, 0.7F);
-			world().playSound(null, c.top(), SoundEvents.BLOCK_CHAIN_STEP, SoundCategory.PLAYERS, 0.8F, 0.6F);
+			world().playSound(null, c.top, SoundEvents.BLOCK_CHAIN_STEP, SoundCategory.PLAYERS, 0.8F, 0.6F);
 			game.makeNoise(p.getBlockPos(), p.getBlockPos());
 			game.suspiciousOutdoors(p, p.getBlockPos());
-			// Progress under the crosshair (with a bar): metres climbed of the wall's height.
-			int height = Math.max(1, c.top().getY() - (int) Math.floor(c.foot().y));
-			int done = (int) Math.min(height, Math.round(height * Math.max(0, now - c.from() - 10) / (double) (c.until() - c.from() - 10)));
-			p.sendMessage(Text.literal("Подъём по верёвке: " + done + "/" + height + " м").formatted(Formatting.GOLD), true);
-			if (now >= c.until()) {
-				it.remove();
-				p.teleport(world(), c.top().getX() + 0.5, c.top().getY(), c.top().getZ() + 0.5, p.getYaw(), p.getPitch());
-				ItemStack rope = p.getMainHandStack().isOf(CbContent.ROPE_HOOK) ? p.getMainHandStack() : findRope(p);
-				if (rope != null) {
-					rope.decrement(1);
-				}
-				leaveRope(c);
-				p.sendMessage(Text.literal("Ты наверху! Верёвка осталась висеть на стене.").formatted(Formatting.GREEN), true);
-			}
+			// Progress under the crosshair (with a bar): metres up the wall.
+			int height = (int) Math.max(1, Math.round(c.height()));
+			int done = (int) Math.max(0, Math.min(height, Math.round(c.y - c.foot.y)));
+			p.sendMessage(Text.literal((c.down ? "Спуск по верёвке: " : "Подъём по верёвке: ") + done + "/" + height + " м")
+					.formatted(Formatting.GOLD), true);
 		}
 		takeDownRopes(false);
+	}
+
+	/** A climb is over: an own rope that was not pulled back stays on the wall for a while. */
+	private void finish(Climb c, boolean atTop) {
+		if (c.own || atTop) {
+			leaveRope(c);
+		}
+	}
+
+	private void removeRope(List<BlockPos> rope) {
+		for (BlockPos q : rope) {
+			BlockState st = world().getBlockState(q);
+			if (st.isOf(cellbreak.CbDecor.HANGING_ROPE) || st.isOf(cellbreak.CbDecor.ROPE_TOP)) {
+				world().setBlockState(q, Blocks.AIR.getDefaultState());
+			}
+			hangingRopes.remove(q);
+		}
 	}
 
 	/** The rope stays on the wall for a while (anyone can see where someone went over). */
 	private void leaveRope(Climb c) {
 		long at = ticks() + ROPE_STAYS_SECONDS * 20L;
-		for (BlockPos q : c.rope()) {
+		for (BlockPos q : c.rope) {
+			if (hangingRopes.getOrDefault(q, 0L) != Long.MAX_VALUE && !c.own) {
+				continue;
+			}
 			hangingRopes.put(q, at);
 		}
 	}
@@ -674,6 +904,17 @@ public class CellbreakExtras {
 		if (game.layout() == null) {
 			hangingRopes.clear();
 			return;
+		}
+		if (all) {
+			// Also ropes from a round that did not end properly (a crash): look over the whole prison.
+			for (net.minecraft.util.math.BlockBox a : game.layout().areas) {
+				for (BlockPos q : BlockPos.iterate(a.getMinX(), a.getMinY(), a.getMinZ(), a.getMaxX(), a.getMaxY(), a.getMaxZ())) {
+					BlockState st = world().getBlockState(q);
+					if (st.isOf(cellbreak.CbDecor.HANGING_ROPE) || st.isOf(cellbreak.CbDecor.ROPE_TOP)) {
+						world().setBlockState(q, Blocks.AIR.getDefaultState());
+					}
+				}
+			}
 		}
 		for (var it = hangingRopes.entrySet().iterator(); it.hasNext();) {
 			var e = it.next();
@@ -770,7 +1011,10 @@ public class CellbreakExtras {
 	/** At roll call the dogs walk along the line-up and sniff every prisoner for contraband. */
 	private void sniffLineup(GuardDogEntity dog, int index) {
 		List<ServerPlayerEntity> line = new ArrayList<>(game.online(Role.PRISONER));
-		line.removeIf(p -> sniffed.contains(p.getUuid()) || game.data(p).solitaryUntil != 0 || game.data(p).escaped);
+		// Only who stands in the line-up: the missing are the counting guard's business, not the dogs'.
+		BlockBox zone = game.layout().rollCallZone;
+		line.removeIf(p -> sniffed.contains(p.getUuid()) || game.data(p).solitaryUntil != 0 || game.data(p).escaped
+				|| zone != null && !zone.expand(1).contains(p.getBlockPos()));
 		if (line.isEmpty()) {
 			return;
 		}
