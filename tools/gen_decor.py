@@ -788,24 +788,33 @@ def main_053(root, write, bs_dir, bm_dir, im_dir):
 
 
 def basketball_hoop():
-    """The top of the hoop (y 0..48 over two blocks), standing on a hoop_pole block. Facing north:
-    the court is in front (-z); the rim hangs about 0.6 block out over it."""
+    """The top of the hoop (two blocks), standing on the pole blocks. Facing north: the court is in
+    front (-z); the rim hangs about 0.6 block out over it, 3.3 blocks above the court."""
     m = Model()
-    m.box((6.5, 0, 6.5), (9.5, 41, 9.5), "frame")
-    m.box((6.5, 38.5, -2), (9.5, 41, 6.5), "frame")
-    m.box((7, 32, 1), (9, 34, 6.5), "frame")
-    m.box((7, 34, -1), (9, 38.5, 1), "frame")
-    m.box((-6, 27, -3), (22, 46, -2), {"*": "frame", "north": "board", "south": "board"}, full=("north", "south"))
-    m.box((7, 29, -4), (9, 30.5, -3), "rim")
-    rim = (2.5, 29.2, -15.5, 13.5, 30.2, -4)
+    d = 8  # how much lower than the first version (0.5.6), in pixels
+    m.box((6.5, 0, 6.5), (9.5, 41 - d, 9.5), "frame")
+    m.box((6.5, 38.5 - d, -2), (9.5, 41 - d, 6.5), "frame")
+    m.box((7, 32 - d, 1), (9, 34 - d, 6.5), "frame")
+    m.box((7, 34 - d, -1), (9, 38.5 - d, 1), "frame")
+    m.box((-6, 27 - d, -3), (22, 46 - d, -2), {"*": "frame", "north": "board", "south": "board"}, full=("north", "south"))
+    m.box((7, 29 - d, -4), (9, 30.5 - d, -3), "rim")
+    rim = (2.5, 29.2 - d, -15.5, 13.5, 30.2 - d, -4)
     x0, y0, z0, x1, y1, z1 = rim
     for f, t in (((x0, y0, z0), (x1, y1, z0 + 0.8)), ((x0, y0, z1 - 0.8), (x1, y1, z1)), ((x0, y0, z0), (x0 + 0.8, y1, z1)),
                  ((x1 - 0.8, y0, z0), (x1, y1, z1))):
         m.box(f, t, "rim")
-    sides = ("north", "south", "east", "west")
-    m.box((3.3, 24, -14.7), (12.7, 29.2, -4.8), "net", full=sides, faces=sides)
-    m.box((4.3, 20, -13.7), (11.7, 24, -5.8), "net", full=sides, faces=sides)
+    # The net: flat walls with a face on each side, so it is seen from inside through the mesh too.
+    for (nx0, ny0, nz0, nx1, ny1, nz1) in ((3.3, 24 - d, -14.7, 12.7, 29.2 - d, -4.8), (4.3, 20 - d, -13.7, 11.7, 24 - d, -5.8)):
+        net_wall(m, (nx0, ny0, nz0), (nx1, ny1, nz0), ("north", "south"))
+        net_wall(m, (nx0, ny0, nz1), (nx1, ny1, nz1), ("north", "south"))
+        net_wall(m, (nx0, ny0, nz0), (nx0, ny1, nz1), ("east", "west"))
+        net_wall(m, (nx1, ny0, nz0), (nx1, ny1, nz1), ("east", "west"))
     return split(m, "y", "frame")
+
+
+def net_wall(m, f, t, faces):
+    """A flat (zero thickness) piece of net with both faces, the whole texture on each."""
+    m.box(f, t, "net", full=faces, faces=faces)
 
 
 def hoop_pole():

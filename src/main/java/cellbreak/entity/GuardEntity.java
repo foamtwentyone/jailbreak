@@ -102,6 +102,7 @@ public class GuardEntity extends PathAwareEntity {
 	private int checkUntil = -1;
 	/** A prisoner caught fighting: the guard goes to stop them until this age. */
 	private int breakUpUntil = -1;
+	private String breakUpReason = "задержан за драку";
 
 	public GuardEntity(EntityType<? extends PathAwareEntity> type, World world) {
 		super(type, world);
@@ -174,11 +175,17 @@ public class GuardEntity extends PathAwareEntity {
 
 	/** A prisoner was seen fighting: run there and stop them with the baton. */
 	public void breakUpFight(PlayerEntity p) {
+		beat(p, "задержан за драку");
+	}
+
+	/** Runs at the prisoner and beats them with the baton (a few hits: arrested for the given reason). */
+	public void beat(PlayerEntity p, String reason) {
 		if (sniper) {
 			return;
 		}
 		setTarget(p);
 		breakUpUntil = age + 15 * 20;
+		breakUpReason = reason;
 	}
 
 	private boolean isBreakingUp(LivingEntity target) {
@@ -372,7 +379,7 @@ public class GuardEntity extends PathAwareEntity {
 			if (n >= HITS_TO_ARREST) {
 				hits.remove(p.getUuid());
 				setTarget(null);
-				game.arrest(p, isBreakingUp(p) ? "задержан за драку" : "задержан охраной");
+				game.arrest(p, isBreakingUp(p) ? breakUpReason : "задержан охраной");
 				breakUpUntil = -1;
 			}
 		}
@@ -384,6 +391,10 @@ public class GuardEntity extends PathAwareEntity {
 	protected net.minecraft.util.ActionResult interactMob(PlayerEntity player, Hand hand) {
 		if (hand != Hand.MAIN_HAND || sniper) {
 			return net.minecraft.util.ActionResult.PASS;
+		}
+		if (!getWorld().isClient && player instanceof net.minecraft.server.network.ServerPlayerEntity sp && game() != null
+				&& game().handOver(sp, this)) {
+			return net.minecraft.util.ActionResult.SUCCESS;
 		}
 		if (!getWorld().isClient) {
 			String[] lines = switch (manner) {

@@ -168,6 +168,10 @@ public class CellbreakGame {
 		public GameMode previousMode;
 		boolean heatRaised;
 		boolean warnedContraband;
+		/** A guard told the prisoner to hand over a forbidden item: until when, what, which guard (0: no demand). */
+		long demandUntil;
+		Item demandItem;
+		UUID demandGuard;
 		public long infirmaryUntil;
 		long lastScoldTick = -10000;
 		/** Caught in somebody else's cell: since when, and which guard waits for them to leave. */
@@ -843,7 +847,11 @@ public class CellbreakGame {
 				d.lastSeenPos = pos;
 			}
 			d.heatRaised = false;
-			if (seen && holdsContraband(p)) {
+			if (d.demandUntil != 0) {
+				demandTick(p, d);
+			} else if (seen && watcher instanceof GuardEntity g && !g.isSniper() && !d.wanted && holdsContraband(p)) {
+				demandHandOver(p, d, g);
+			} else if (seen && holdsContraband(p)) {
 				addHeat(p, 5);
 				if (!d.warnedContraband) {
 					d.warnedContraband = true;
@@ -4014,6 +4022,75 @@ public class CellbreakGame {
 		stack.set(DataComponentTypes.DYED_COLOR, new DyedColorComponent(color, false));
 		stack.set(DataComponentTypes.UNBREAKABLE, new UnbreakableComponent(false));
 		return stack;
+	}
+
+	private static final int DEMAND_SECONDS = 10;
+
+	/** A guard sees something forbidden in a prisoner's hands: "hand it over" (drop it or give it to them). */
+	private void demandHandOver(ServerPlayerEntity p, PlayerData d, GuardEntity g) {
+		Item item = isForbidden(p, p.getMainHandStack().getItem()) ? p.getMainHandStack().getItem() : p.getOffHandStack().getItem();
+		d.demandItem = item;
+		d.demandGuard = g.getUuid();
+		d.demandUntil = ticks + DEMAND_SECONDS * 20L;
+		addHeat(p, 10);
+		g.goCheck(p.getBlockPos(), p.getBlockPos(), DEMAND_SECONDS + 5);
+		guardSays(g, p.getName().getString() + ", что это у тебя? А ну отдай сюда!");
+		p.sendMessage(Text.literal("Охрана требует отдать ").formatted(Formatting.RED)
+				.append(item.getName().copy().formatted(Formatting.GOLD))
+				.append(Text.literal(" — брось его (Q) или дай охраннику в руки (ПКМ по нему). " + DEMAND_SECONDS
+						+ " секунд, иначе побьют.").formatted(Formatting.RED)));
+		title(p, Text.empty(), Text.literal("Отдай запрещённое охране!").formatted(Formatting.RED));
+	}
+
+	/** While a demand runs: handed over (none left) — fine; time is up — the guard beats it out of them. */
+	private void demandTick(ServerPlayerEntity p, PlayerData d) {
+		GuardEntity g = world().getEntity(d.demandGuard) instanceof GuardEntity e && e.isAlive() ? e : null;
+		if (g == null || d.wanted || d.solitaryUntil != 0 || d.infirmaryUntil != 0) {
+			d.demandUntil = 0;
+			return;
+		}
+		if (count(p, d.demandItem) == 0) {
+			d.demandUntil = 0;
+			// What was dropped is picked up and taken away.
+			for (net.minecraft.entity.ItemEntity it : world().getEntitiesByClass(net.minecraft.entity.ItemEntity.class,
+					p.getBoundingBox().expand(6), it -> it.getStack().isOf(d.demandItem))) {
+				it.discard();
+			}
+			g.endCheck();
+			guardSays(g, "Так-то лучше. Изъято. Ещё раз увижу — пеняй на себя.");
+			return;
+		}
+		g.getLookControl().lookAt(p);
+		if (ticks < d.demandUntil) {
+			long left = (d.demandUntil - ticks) / 20;
+			if (left == 5 && (d.demandUntil - ticks) % 20 < 10) {
+				guardSays(g, "Я жду, " + p.getName().getString() + "! Отдавай по-хорошему.");
+			}
+			return;
+		}
+		d.demandUntil = 0;
+		guardSays(g, "Не хочешь по-хорошему?! Ну держись!");
+		addHeat(p, 25);
+		g.beat(p, "не отдал запрещённое охране");
+	}
+
+	/** A prisoner gives the guard what they demanded (right click on the guard). */
+	public boolean handOver(ServerPlayerEntity p, GuardEntity g) {
+		PlayerData d = data(p);
+		if (d == null || d.demandUntil == 0 || !g.getUuid().equals(d.demandGuard)) {
+			return false;
+		}
+		PlayerInventory inv = p.getInventory();
+		for (int i = 0; i < inv.size(); i++) {
+			if (inv.getStack(i).isOf(d.demandItem)) {
+				inv.setStack(i, ItemStack.EMPTY);
+			}
+		}
+		if (!p.getOffHandStack().isEmpty() && p.getOffHandStack().isOf(d.demandItem)) {
+			p.setStackInHand(net.minecraft.util.Hand.OFF_HAND, ItemStack.EMPTY);
+		}
+		demandTick(p, d);
+		return true;
 	}
 
 	/** Whether a guard who looks at the prisoner sees forbidden things in their hands (work tools at work are fine). */
