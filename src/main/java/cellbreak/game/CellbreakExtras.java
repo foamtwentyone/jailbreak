@@ -16,7 +16,11 @@ import cellbreak.entity.PrisonerNpcEntity;
 import cellbreak.game.CellbreakGame.Phase;
 import cellbreak.game.CellbreakGame.PlayerData;
 import cellbreak.game.CellbreakGame.Role;
+import cellbreak.block.PrisonBedBlock;
+import net.minecraft.block.BedBlock;
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.enums.BedPart;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.DoorBlock;
 import net.minecraft.component.DataComponentTypes;
@@ -25,6 +29,7 @@ import net.minecraft.component.type.NbtComponent;
 import net.minecraft.component.type.WrittenBookContentComponent;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -92,7 +97,7 @@ public class CellbreakExtras {
 	private final Map<UUID, Stats> stats = new HashMap<>();
 	private UUID snitch;
 	private long lastReport = -100000;
-	private final Map<Integer, UUID> dummies = new HashMap<>();
+	private final Map<Integer, DummyBed> dummies = new HashMap<>();
 	private final Set<UUID> dummyChecked = new HashSet<>();
 	private final long[] cameraBlindUntil = new long[64];
 	private final Map<UUID, Integer> viewing = new HashMap<>();
@@ -171,6 +176,16 @@ public class CellbreakExtras {
 		}
 		cameraEyes.clear();
 		dummies.clear();
+		// Dummies left in the bunks by an earlier round (or a crash).
+		for (PrisonLayout.Cell c : game.layout().cells) {
+			for (BlockPos q : BlockPos.iterate(c.interior.getMinX() - 1, c.interior.getMinY() - 1, c.interior.getMinZ() - 1,
+					c.interior.getMaxX() + 1, c.interior.getMaxY() + 1, c.interior.getMaxZ() + 1)) {
+				BlockState st = world().getBlockState(q);
+				if (st.getBlock() instanceof PrisonBedBlock && st.get(PrisonBedBlock.DUMMY)) {
+					world().setBlockState(q, st.with(PrisonBedBlock.DUMMY, false), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+				}
+			}
+		}
 	}
 
 	private static final String TAG_DUMMY = "cellbreak_dummy";
@@ -188,6 +203,7 @@ public class CellbreakExtras {
 		}
 		if (t % 10 == 5) {
 			dogTick();
+			droppedDummies();
 		}
 		if (gateCloseTick > 0 && t >= gateCloseTick) {
 			gateCloseTick = -1;
@@ -234,49 +250,138 @@ public class CellbreakExtras {
 
 	// ------------------------------------------------------------------ 1. the bed dummy
 
-	/** Right click on a bed: lay a dummy in your own bed, or (sneaking, empty hand) take it back. */
-	public boolean useBed(ServerPlayerEntity p, BlockPos bed) {
+	/** A dummy in a cell's bed: the bunk's own dummy model, or (an ordinary bed) a head on an armor stand. */
+	private record DummyBed(BlockPos head, UUID stand) {
+	}
+
+	/**
+	 * Right or left click on a bed (or the dummy thrown onto it): lay a dummy in your own bed, or
+	 * (sneaking, empty hand) take it back. A guard who clicks a dummy bed pulls the dummy out.
+	 * Returns true when the click was handled (a message says what happened).
+	 */
+	public boolean useBed(ServerPlayerEntity p, BlockPos bed, boolean dropped) {
 		PlayerData d = game.data(p);
-		if (!game.isRunning() || d == null || d.role != Role.PRISONER || d.cell < 0) {
+		ItemStack hand = dropped ? new ItemStack(CbContent.DUMMY) : p.getMainHandStack();
+		boolean holding = hand.isOf(CbContent.DUMMY);
+		if (!game.isRunning() || d == null) {
+			if (holding) {
+				p.sendMessage(Text.literal("Кукла работает только во время раунда.").formatted(Formatting.GRAY));
+				return !dropped;
+			}
+			return false;
+		}
+		if (d.role == Role.GUARD && !dropped) {
+			for (var en : dummies.entrySet()) {
+				if (en.getValue().head().equals(bed)) {
+					removeDummy(en.getKey());
+					p.sendMessage(Text.literal("Под одеялом кукла! Хозяин камеры где-то гуляет.").formatted(Formatting.GOLD));
+					return true;
+				}
+			}
+			return false;
+		}
+		if (d.role != Role.PRISONER || d.cell < 0) {
 			return false;
 		}
 		PrisonLayout.Cell cell = game.layout().cells.get(d.cell);
-		if (!cell.interior.expand(1).contains(bed)) {
-			return false;
-		}
-		ItemStack hand = p.getMainHandStack();
-		if (hand.isOf(CbContent.DUMMY)) {
-			if (dummies.containsKey(d.cell)) {
-				p.sendMessage(Text.literal("Кукла уже лежит в кровати.").formatted(Formatting.GRAY), true);
-				return true;
+		boolean own = cell.interior.expand(1).contains(bed);
+		if (holding) {
+			if (!own) {
+				p.sendMessage(Text.literal("Это не твоя кровать. Куклу кладут в свою камеру — в камеру " + (d.cell + 1) + ".")
+						.formatted(Formatting.RED));
+				return !dropped;
 			}
-			ArmorStandEntity stand = new ArmorStandEntity(world(), bed.getX() + 0.5, bed.getY() - 0.92, bed.getZ() + 0.5);
-			NbtCompound nbt = new NbtCompound();
-			stand.writeCustomDataToNbt(nbt);
-			nbt.putBoolean("Marker", true);
-			nbt.putBoolean("Invisible", true);
-			nbt.putBoolean("NoGravity", true);
-			nbt.putBoolean("Invulnerable", true);
-			stand.readCustomDataFromNbt(nbt);
-			stand.setHeadRotation(new EulerAngle(270, 0, 0));
-			stand.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.PLAYER_HEAD));
-			stand.addCommandTag(TAG_DUMMY);
-			world().spawnEntity(stand);
-			dummies.put(d.cell, stand.getUuid());
-			hand.decrement(1);
-			p.sendMessage(Text.literal("Ты уложил куклу под одеяло. Ночной обход может и не заметить...").formatted(Formatting.GREEN), true);
+			if (dummies.containsKey(d.cell)) {
+				p.sendMessage(Text.literal("Кукла уже лежит в кровати.").formatted(Formatting.GRAY));
+				return !dropped;
+			}
+			UUID standId = null;
+			if (!setDummy(bed, true)) {
+				ArmorStandEntity stand = new ArmorStandEntity(world(), bed.getX() + 0.5, bed.getY() - 0.92, bed.getZ() + 0.5);
+				NbtCompound nbt = new NbtCompound();
+				stand.writeCustomDataToNbt(nbt);
+				nbt.putBoolean("Marker", true);
+				nbt.putBoolean("Invisible", true);
+				nbt.putBoolean("NoGravity", true);
+				nbt.putBoolean("Invulnerable", true);
+				stand.readCustomDataFromNbt(nbt);
+				stand.setHeadRotation(new EulerAngle(270, 0, 0));
+				stand.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.PLAYER_HEAD));
+				stand.addCommandTag(TAG_DUMMY);
+				world().spawnEntity(stand);
+				standId = stand.getUuid();
+			}
+			dummies.put(d.cell, new DummyBed(bed, standId));
+			if (!dropped) {
+				hand.decrement(1);
+			}
+			world().playSound(null, bed, SoundEvents.BLOCK_WOOL_PLACE, SoundCategory.BLOCKS, 1.0F, 0.9F);
+			p.sendMessage(Text.literal("Ты уложил куклу под одеяло. Ночной обход может и не заметить... "
+					+ "Забрать: присядь и ПКМ по кровати пустой рукой.").formatted(Formatting.GREEN));
 			return true;
 		}
-		if (hand.isEmpty() && p.isSneaking() && dummies.containsKey(d.cell)) {
-			Entity e = world().getEntity(dummies.remove(d.cell));
-			if (e != null) {
-				e.discard();
-			}
+		if (own && hand.isEmpty() && p.isSneaking() && dummies.containsKey(d.cell)) {
+			removeDummy(d.cell);
 			p.giveItemStack(new ItemStack(CbContent.DUMMY));
-			p.sendMessage(Text.literal("Ты забрал куклу.").formatted(Formatting.GRAY), true);
+			p.sendMessage(Text.literal("Ты забрал куклу.").formatted(Formatting.GRAY));
 			return true;
 		}
 		return false;
+	}
+
+	/** Shows or hides the dummy in a prison bunk (both halves). False: not a bunk with a dummy model. */
+	private boolean setDummy(BlockPos head, boolean on) {
+		BlockState st = world().getBlockState(head);
+		if (!(st.getBlock() instanceof PrisonBedBlock)) {
+			return false;
+		}
+		BlockPos foot = head.offset(st.get(BedBlock.FACING).getOpposite());
+		world().setBlockState(head, st.with(PrisonBedBlock.DUMMY, on), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+		BlockState fs = world().getBlockState(foot);
+		if (fs.getBlock() instanceof PrisonBedBlock) {
+			world().setBlockState(foot, fs.with(PrisonBedBlock.DUMMY, on), Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+		}
+		return true;
+	}
+
+	private void removeDummy(int cell) {
+		DummyBed b = dummies.remove(cell);
+		if (b == null) {
+			return;
+		}
+		setDummy(b.head(), false);
+		if (b.stand() != null) {
+			Entity e = world().getEntity(b.stand());
+			if (e != null) {
+				e.discard();
+			}
+		}
+	}
+
+	/** A dummy thrown (Q) onto a bed lies down in it, as if laid by hand. */
+	private void droppedDummies() {
+		for (ItemEntity item : world().getEntitiesByClass(ItemEntity.class, game.npcArea(),
+				e -> e.getStack().isOf(CbContent.DUMMY) && e.isOnGround() && !e.getCommandTags().contains("cellbreak_dummy_tried"))) {
+			// One try per landing (no message spam); picking it up and throwing again tries again.
+			item.addCommandTag("cellbreak_dummy_tried");
+			if (!(item.getOwner() instanceof ServerPlayerEntity p)) {
+				continue;
+			}
+			BlockPos head = null;
+			for (BlockPos q : BlockPos.iterate(item.getBlockPos().add(-1, -1, -1), item.getBlockPos().add(1, 0, 1))) {
+				BlockState st = world().getBlockState(q);
+				if (st.getBlock() instanceof BedBlock) {
+					head = st.get(BedBlock.PART) == BedPart.HEAD ? q.toImmutable() : q.offset(st.get(BedBlock.FACING)).toImmutable();
+					break;
+				}
+			}
+			if (head != null && useBed(p, head, true)) {
+				item.getStack().decrement(1);
+				if (item.getStack().isEmpty()) {
+					item.discard();
+				}
+			}
+		}
 	}
 
 	/**
@@ -294,10 +399,7 @@ public class CellbreakExtras {
 		if (random().nextFloat() < 0.8F) {
 			return true;
 		}
-		Entity e = world().getEntity(dummies.remove(d.cell));
-		if (e != null) {
-			e.discard();
-		}
+		removeDummy(d.cell);
 		game.guardSays(guard, "Это же кукла! Подушка в одеяле!");
 		return false;
 	}
@@ -413,10 +515,20 @@ public class CellbreakExtras {
 		return true;
 	}
 
-	/** Rope with a hook thrown up a wall: four seconds of climbing (loud), then you are on top. */
+	/** The highest wall a rope reaches, in blocks above your feet. */
+	private static final int ROPE_REACH = 14;
+
+	/**
+	 * Rope with a hook thrown up a wall (at most {@link #ROPE_REACH} blocks high): the hook catches
+	 * two times in three; climbing takes 2 seconds plus one per block, is loud and in plain view
+	 * (outdoors the snipers take aim), and the rope stays up there.
+	 */
 	public boolean useRope(ServerPlayerEntity p, BlockHitResult hit) {
 		if (!game.isRunning() || hit.getSide().getAxis() == Direction.Axis.Y || !game.isPrisoner(p)) {
 			return false;
+		}
+		if (climbs.containsKey(p.getUuid()) || p.getItemCooldownManager().isCoolingDown(CbContent.ROPE_HOOK)) {
+			return true;
 		}
 		BlockPos wall = hit.getBlockPos();
 		BlockPos top = null;
@@ -427,13 +539,27 @@ public class CellbreakExtras {
 				break;
 			}
 		}
-		if (top == null || top.getY() - p.getBlockY() < 2) {
+		int height = top == null ? 0 : top.getY() - p.getBlockY();
+		if (top == null || height < 2) {
 			p.sendMessage(Text.literal("Тут не за что зацепиться.").formatted(Formatting.GRAY), true);
 			return true;
 		}
-		climbs.put(p.getUuid(), new Climb(top, p.getPos(), ticks() + 4 * 20));
+		if (height > ROPE_REACH) {
+			p.sendMessage(Text.literal("Слишком высоко: верёвки хватает на " + ROPE_REACH + " блоков.").formatted(Formatting.GRAY), true);
+			return true;
+		}
 		world().playSound(null, p.getBlockPos(), SoundEvents.ITEM_TRIDENT_THROW.value(), SoundCategory.PLAYERS, 1.0F, 0.8F);
-		p.sendMessage(Text.literal("Крюк зацепился. Лезешь вверх... не двигайся 4 секунды.").formatted(Formatting.GOLD), true);
+		game.makeNoise(p.getBlockPos(), p.getBlockPos());
+		game.suspiciousOutdoors(p, p.getBlockPos());
+		if (random().nextFloat() < 0.35F) {
+			p.getItemCooldownManager().set(CbContent.ROPE_HOOK, 40);
+			world().playSound(null, wall.up(height), SoundEvents.BLOCK_CHAIN_FALL, SoundCategory.PLAYERS, 1.2F, 0.8F);
+			p.sendMessage(Text.literal("Крюк не зацепился и с лязгом упал. Попробуй ещё.").formatted(Formatting.RED), true);
+			return true;
+		}
+		int seconds = 2 + height;
+		climbs.put(p.getUuid(), new Climb(top, p.getPos(), ticks() + seconds * 20L));
+		p.sendMessage(Text.literal("Крюк зацепился. Лезешь вверх... не двигайся " + seconds + " секунд.").formatted(Formatting.GOLD), true);
 		return true;
 	}
 
@@ -442,7 +568,7 @@ public class CellbreakExtras {
 			var e = it.next();
 			ServerPlayerEntity p = game.server.getPlayerManager().getPlayer(e.getKey());
 			Climb c = e.getValue();
-			if (p == null || p.getPos().squaredDistanceTo(c.start()) > 1.5) {
+			if (p == null || p.getPos().squaredDistanceTo(c.start()) > 1.5 || !game.isPrisoner(p)) {
 				if (p != null) {
 					p.sendMessage(Text.literal("Ты сорвался с верёвки.").formatted(Formatting.RED), true);
 				}
@@ -451,18 +577,26 @@ public class CellbreakExtras {
 			}
 			world().playSound(null, p.getBlockPos(), SoundEvents.BLOCK_CHAIN_STEP, SoundCategory.PLAYERS, 1.2F, 0.7F);
 			game.makeNoise(p.getBlockPos(), p.getBlockPos());
+			game.suspiciousOutdoors(p, p.getBlockPos());
 			if (ticks() >= c.until()) {
 				it.remove();
 				p.teleport(world(), c.top().getX() + 0.5, c.top().getY(), c.top().getZ() + 0.5, p.getYaw(), p.getPitch());
-				ItemStack rope = p.getMainHandStack();
-				if (rope.isOf(CbContent.ROPE_HOOK) && random().nextFloat() < 0.5F) {
+				ItemStack rope = p.getMainHandStack().isOf(CbContent.ROPE_HOOK) ? p.getMainHandStack() : findRope(p);
+				if (rope != null) {
 					rope.decrement(1);
-					p.sendMessage(Text.literal("Ты наверху! Верёвка оборвалась.").formatted(Formatting.GREEN), true);
-				} else {
-					p.sendMessage(Text.literal("Ты наверху!").formatted(Formatting.GREEN), true);
 				}
+				p.sendMessage(Text.literal("Ты наверху! Верёвка осталась висеть на стене.").formatted(Formatting.GREEN), true);
 			}
 		}
+	}
+
+	private static ItemStack findRope(ServerPlayerEntity p) {
+		for (int i = 0; i < p.getInventory().size(); i++) {
+			if (p.getInventory().getStack(i).isOf(CbContent.ROPE_HOOK)) {
+				return p.getInventory().getStack(i);
+			}
+		}
+		return null;
 	}
 
 	// ------------------------------------------------------------------ 6. guard dogs

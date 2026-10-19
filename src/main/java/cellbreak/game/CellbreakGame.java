@@ -1347,7 +1347,7 @@ public class CellbreakGame {
 	}
 
 	/** Remembers that the prisoner did something a sniper would shoot for, if they are outdoors. */
-	private void suspiciousOutdoors(ServerPlayerEntity p, BlockPos where) {
+	void suspiciousOutdoors(ServerPlayerEntity p, BlockPos where) {
 		PlayerData d = data(p);
 		if (d != null && (world().isSkyVisible(where.up()) || world().isSkyVisible(p.getBlockPos().up()))) {
 			d.suspiciousTick = ticks;

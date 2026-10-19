@@ -26,6 +26,7 @@ MAT = {
     "tool_side": "tool_cabinet_side", "tool_top": "tool_cabinet_top", "locker_front": "guard_locker_front",
     "locker_side": "guard_locker_side", "towels": "mat_towels", "table": "steel_table",
     "wood": "minecraft:block/spruce_planks", "concrete": "smooth_concrete", "board": "mat_backboard", "rim": "mat_rim", "net": "mat_net", "pad_blue": "mat_pad_blue",
+    "dface": "mat_dummy_face", "dhair": "mat_dummy_hair",
 }
 
 FACES = ("north", "south", "east", "west", "up", "down")
@@ -472,7 +473,8 @@ def scrap_bin():
     return m.json("scrap")
 
 
-def bed(part, blanket):
+def bed(part, blanket, dummy=False):
+    """dummy: the bed dummy laid in it (a head on the pillow, a body-shaped lump under the blanket)."""
     m = Model()
     if part == "head":
         for x in (0, 14.5):
@@ -485,6 +487,10 @@ def bed(part, blanket):
         m.box((1, 7, 1.5), (15, 10, 16), "mattress", full=("up",))
         m.box((3, 10, 2), (13, 12, 6.5), "pillow")
         m.box((0.8, 9.8, 9), (15.2, 10.6, 16), blanket)
+        if dummy:
+            m.box((5, 11.5, 2.5), (11, 15.5, 8.5), {"*": "dhair", "up": "dface", "south": "dface"}, full=("up",))
+            m.box((2.5, 10.6, 8), (13.5, 13.5, 16), blanket)
+            m.box((3.5, 13.5, 9.5), (12.5, 14, 16), blanket)
     else:
         for x in (0, 14.5):
             m.box((x, 0, 14.5), (x + 1.5, 9, 16), "frame")
@@ -494,6 +500,11 @@ def bed(part, blanket):
         m.box((0.8, 9.8, 0), (15.2, 10.6, 14.5), blanket)
         m.box((0.5, 6.5, 0), (0.8, 10.6, 14.5), blanket)
         m.box((15.2, 6.5, 0), (15.5, 10.6, 14.5), blanket)
+        if dummy:
+            m.box((3, 10.6, 0), (13, 13, 9), blanket)
+            m.box((3.5, 10.6, 9), (12.5, 12.2, 13), blanket)
+            m.box((4, 12.2, 10.5), (7.5, 13.5, 13), blanket)
+            m.box((8.5, 12.2, 10.5), (12, 13.5, 13), blanket)
     return m.json(blanket)
 
 
@@ -598,14 +609,16 @@ def main_052(root, write, bs_dir, bm_dir, im_dir):
     for name, blanket in (("prison_bed", "blanket_gray"), ("guard_bed", "blanket_blue"), ("infirmary_bed", "blanket_white")):
         for part in ("head", "foot"):
             write(bm_dir, "%s_%s" % (name, part), bed(part, blanket))
+            write(bm_dir, "%s_%s_dummy" % (name, part), bed(part, blanket, True))
         v = {}
         for facing, y in rot_y.items():
             for part in ("head", "foot"):
                 for occ in ("false", "true"):
-                    d = {"model": "%s%s_%s" % (b, name, part)}
-                    if y:
-                        d["y"] = y
-                    v["facing=%s,occupied=%s,part=%s" % (facing, occ, part)] = d
+                    for dm in ("false", "true"):
+                        d = {"model": "%s%s_%s%s" % (b, name, part, "_dummy" if dm == "true" else "")}
+                        if y:
+                            d["y"] = y
+                        v["dummy=%s,facing=%s,occupied=%s,part=%s" % (dm, facing, occ, part)] = d
         write(bs_dir, name, {"variants": v})
         write(im_dir, name, {"parent": "%s%s_head" % (b, name)})
     # Canteen stool (a stairs block: every shape is the stool).

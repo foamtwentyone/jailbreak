@@ -80,6 +80,18 @@ public class Cellbreak implements ModInitializer {
 			return true;
 		});
 
+		// Left click on a bed with the dummy: lay it in, same as a right click.
+		net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register((player, world, hand, pos, dir) -> {
+			BlockState state = world.getBlockState(pos);
+			if (!(state.getBlock() instanceof BedBlock) || !player.getMainHandStack().isOf(CbContent.DUMMY)) {
+				return ActionResult.PASS;
+			}
+			if (player instanceof ServerPlayerEntity sp) {
+				CellbreakGame.get(sp.getServer()).extras().useBed(sp, bedHead(pos, state), false);
+			}
+			return ActionResult.SUCCESS;
+		});
+
 		PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
 			if (player instanceof ServerPlayerEntity p && CbContent.WORK_TOOLS.contains(p.getMainHandStack().getItem())
 					&& !p.isCreative() && !CellbreakGame.get(p.getServer()).canWorkAt(pos)
@@ -175,12 +187,8 @@ public class Cellbreak implements ModInitializer {
 				return ActionResult.SUCCESS;
 			}
 			// A dummy in the bed (or taking it back).
-			if (state.getBlock() instanceof BedBlock && sp != null && game.isRunning()) {
-				BlockPos head = state.get(BedBlock.PART) == net.minecraft.block.enums.BedPart.HEAD ? pos
-						: pos.offset(state.get(BedBlock.FACING));
-				if (game.extras().useBed(sp, head)) {
-					return ActionResult.SUCCESS;
-				}
+			if (state.getBlock() instanceof BedBlock && sp != null && game.extras().useBed(sp, bedHead(pos, state), false)) {
+				return ActionResult.SUCCESS;
 			}
 			// No sleeping through the routine.
 			if (state.getBlock() instanceof BedBlock) {
@@ -483,6 +491,10 @@ public class Cellbreak implements ModInitializer {
 		game.data(p).wanted = false;
 		game.addHeat(p, IntegerArgumentType.getInteger(c, "value"));
 		return 1;
+	}
+
+	private static BlockPos bedHead(BlockPos pos, BlockState state) {
+		return state.get(BedBlock.PART) == net.minecraft.block.enums.BedPart.HEAD ? pos : pos.offset(state.get(BedBlock.FACING));
 	}
 
 	private static boolean nearIronDoor(net.minecraft.world.World world, BlockPos pos) {

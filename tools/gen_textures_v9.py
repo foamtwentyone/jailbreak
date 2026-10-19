@@ -651,6 +651,24 @@ def blanket(base, seed):
     return t
 
 
+def dummy_face():
+    """The bed dummy's face, lying on the pillow: hair at the top (north), shut eyes, a stitched mouth."""
+    t = flat((206, 160, 128), 95, (0.94, 0.98, 1.0, 1.02))
+    hair = flat((70, 48, 30), 96, (0.85, 0.95, 1.0, 1.08))
+    for y in range(5):
+        for x in range(S):
+            t.set(x, y, hair.img.getpixel((x, y)))
+    for x in (1, 2, 13, 14):
+        t.set(x, 5, hair.img.getpixel((x, 5)))
+    for x in (4, 5, 6, 9, 10, 11):
+        t.set(x, 8, (92, 60, 44))
+    for x in (6, 7, 8, 9):
+        t.set(x, 12, (120, 70, 60))
+    t.set(7, 10, (176, 128, 100))
+    t.set(8, 10, (176, 128, 100))
+    return t
+
+
 def washer_front():
     t = panel((226, 228, 230), 65)
     for x in range(1, 15):
@@ -811,6 +829,8 @@ def main(root):
     backboard().img.save(os.path.join(block_dir, "mat_backboard.png"))
     net().img.save(os.path.join(block_dir, "mat_net.png"))
     flat((226, 108, 30), 93).img.save(os.path.join(block_dir, "mat_rim.png"))
+    dummy_face().img.save(os.path.join(block_dir, "mat_dummy_face.png"))
+    flat((70, 48, 30), 96, (0.85, 0.95, 1.0, 1.08)).img.save(os.path.join(block_dir, "mat_dummy_hair.png"))
     flat((40, 76, 150), 94, (0.9, 0.96, 1.0, 1.04)).img.save(os.path.join(block_dir, "mat_pad_blue.png"))
 
 
