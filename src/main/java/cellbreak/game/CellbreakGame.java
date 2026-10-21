@@ -753,7 +753,7 @@ public class CellbreakGame {
 		}
 		if (phase == Phase.ROLL_CALL && ticks > 1) {
 			for (PrisonLayout.Cell c : layout.cells) {
-				fillChest(c.desk, 2);
+				topUpChest(c.desk, 2);
 			}
 			for (PrisonerNpcEntity npc : npcPrisoners()) {
 				npc.restock();
@@ -1724,20 +1724,6 @@ public class CellbreakGame {
 		}
 	}
 
-	private static List<Text> contrabandNames(PlayerEntity p) {
-		List<Text> names = new ArrayList<>();
-		List<Item> seen = new ArrayList<>();
-		PlayerInventory inv = p.getInventory();
-		for (int i = 0; i < inv.size(); i++) {
-			ItemStack stack = inv.getStack(i);
-			if (CbContent.isContraband(stack) && !seen.contains(stack.getItem())) {
-				seen.add(stack.getItem());
-				names.add(stack.getName());
-			}
-		}
-		return names;
-	}
-
 	private static Text joined(List<Text> parts) {
 		return net.minecraft.text.Texts.join(parts, Text.literal(", "));
 	}
@@ -2197,19 +2183,16 @@ public class CellbreakGame {
 		for (Object o : chosen) {
 			names.add(o instanceof ServerPlayerEntity p ? p.getName().getString() : ((PrisonerNpcEntity) o).getName().getString());
 		}
-		guardSays(countingGuard, "На обыск: " + String.join(", ", names) + ". Шаг вперёд!");
+		guardSays(countingGuard, "Обыск камер: " + String.join(", ", names) + ". Проверим, что у вас в тумбочках.");
 		for (Object o : chosen) {
 			if (o instanceof ServerPlayerEntity p) {
-				List<Text> found = contrabandNames(p);
+				// The cell is searched, not the prisoner: what they carry is the dogs' and the scanner's business.
 				String cellFind = searchCell(p);
-				if (!found.isEmpty()) {
-					p.sendMessage(Text.literal("При обыске у тебя нашли: ").append(joined(found)).formatted(Formatting.RED));
-					arrest(p, "запрещёнка найдена при обыске на перекличке");
-				} else if (cellFind != null) {
+				if (cellFind != null) {
 					p.sendMessage(Text.literal("Обыск в твоей камере: " + cellFind).formatted(Formatting.RED));
 					arrest(p, "обыск камеры: " + cellFind);
 				} else {
-					p.sendMessage(Text.literal("Тебя и твою камеру обыскали. Чисто.").formatted(Formatting.GREEN), false);
+					p.sendMessage(Text.literal("Твою камеру обыскали. Чисто.").formatted(Formatting.GREEN), false);
 				}
 			} else if (o instanceof PrisonerNpcEntity npc && world().random.nextInt(5) == 0) {
 				npc.solitaryUntil = ticks + SOLITARY_SECONDS * 20L;
@@ -4552,6 +4535,31 @@ public class CellbreakGame {
 			Item item = SCRAP[random.nextInt(SCRAP.length)];
 			chest.setStack(random.nextInt(chest.size()), new ItemStack(item, 1 + random.nextInt(2)));
 		}
+	}
+
+	/**
+	 * The morning top-up of a desk: a couple more things into free slots, what is already there
+	 * stays (and so does any contraband hidden in it). A full-ish desk gets nothing.
+	 */
+	private void topUpChest(BlockPos pos, int stacks) {
+		if (pos == null || !(world().getBlockEntity(pos) instanceof Inventory chest)) {
+			return;
+		}
+		Random random = world().random;
+		List<Integer> free = new ArrayList<>();
+		for (int i = 0; i < chest.size(); i++) {
+			if (chest.getStack(i).isEmpty()) {
+				free.add(i);
+			}
+		}
+		if (chest.size() - free.size() >= 6) {
+			return;
+		}
+		Collections.shuffle(free, new java.util.Random(random.nextLong()));
+		for (int i = 0; i < stacks && i < free.size(); i++) {
+			chest.setStack(free.get(i), new ItemStack(SCRAP[random.nextInt(SCRAP.length)], 1 + random.nextInt(2)));
+		}
+		chest.markDirty();
 	}
 
 	/** Iron doors of service rooms (every one but the cells' and the day doors): locked, keys only. */
