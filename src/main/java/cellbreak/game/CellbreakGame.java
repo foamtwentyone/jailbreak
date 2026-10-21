@@ -445,6 +445,7 @@ public class CellbreakGame {
 		ticks = 0;
 		day = 1;
 		stashes.clear();
+		spotted.clear();
 		regrowth.clear();
 		graffiti.clear();
 		clearSearchlights();
@@ -2343,6 +2344,7 @@ public class CellbreakGame {
 		}
 		if (witness != null || isSeen(p, npcGuards(), online(Role.GUARD))) {
 			// Breaking the prison in front of a guard: no warnings, the alarm goes up at once.
+			spotted.add(pos.toImmutable());
 			if (witness != null) {
 				witness.getLookControl().lookAt(p);
 				guardSays(witness, "Тревога! " + p.getName().getString() + " ломает стену! Взять его!");
@@ -2355,6 +2357,7 @@ public class CellbreakGame {
 		if (underTower || openSky(p.getBlockPos()) || openSky(pos.up())) {
 			for (GuardEntity sniper : snipers()) {
 				if (sniper.squaredDistanceTo(p) < 28 * 28) {
+					spotted.add(pos.toImmutable());
 					sniper.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, p.getEyePos());
 					addHeat(p, MAX_HEAT);
 					d.lastSeenTick = ticks;
@@ -2886,6 +2889,7 @@ public class CellbreakGame {
 			}
 			world.setBlockState(q, original);
 			damage.remove(q);
+			spotted.remove(q);
 			filled.add(q);
 		}
 		return filled;
@@ -2914,25 +2918,26 @@ public class CellbreakGame {
 		return tunnel.stream().anyMatch(q -> world().getBlockState(q).getBlock() instanceof FakeBlock);
 	}
 
-	/** Everything a caught prisoner broke is filled in (the guards search their route). */
+	/** Broken blocks the guards saw being broken (or a sniper heard): they know where to look. */
+	private final Set<BlockPos> spotted = new HashSet<>();
+
+	/** What a caught prisoner was seen breaking is filled in, with the whole tunnel it belongs to. */
 	private int repairDamageBy(UUID who) {
 		int n = 0;
 		ServerWorld world = world();
-		// Tunnels hidden behind a fake stay: the guards only fill in what they can find.
-		Set<BlockPos> hiddenTunnels = new HashSet<>();
+		// Only the tunnels the guards caught them at: the rest is for the rounds and searches to find.
+		Set<BlockPos> known = new HashSet<>();
 		for (Map.Entry<BlockPos, UUID> e : damageBy.entrySet()) {
-			if (e.getValue().equals(who) && !hiddenTunnels.contains(e.getKey())) {
-				Set<BlockPos> t = tunnel(e.getKey());
-				if (hidden(t)) {
-					hiddenTunnels.addAll(t);
-				}
+			if (e.getValue().equals(who) && spotted.contains(e.getKey()) && !known.contains(e.getKey())) {
+				known.addAll(tunnel(e.getKey()));
 			}
 		}
 		for (Iterator<Map.Entry<BlockPos, UUID>> it = damageBy.entrySet().iterator(); it.hasNext();) {
 			Map.Entry<BlockPos, UUID> e = it.next();
-			if (!e.getValue().equals(who) || hiddenTunnels.contains(e.getKey())) {
+			if (!e.getValue().equals(who) || !known.contains(e.getKey())) {
 				continue;
 			}
+			spotted.remove(e.getKey());
 			BlockState original = damage.get(e.getKey());
 			if (original != null && !(world.getBlockState(e.getKey()).getBlock() instanceof FakeBlock)
 					&& world.getEntitiesByClass(LivingEntity.class, new Box(e.getKey()), le -> le.isAlive()).isEmpty()) {
