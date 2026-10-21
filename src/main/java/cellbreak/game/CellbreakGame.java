@@ -2262,8 +2262,10 @@ public class CellbreakGame {
 		}
 		int fakes = 0;
 		for (BlockPos q : BlockPos.iterate(box.getMinX(), box.getMinY(), box.getMinZ(), box.getMaxX(), box.getMaxY(), box.getMaxZ())) {
-			if (world.getBlockState(q).getBlock() instanceof FakeBlock && damage.containsKey(q)) {
-				// A painted fake wall or vent over a hole: knocked out, the hole behind it filled.
+			if (world.getBlockState(q).getBlock() instanceof FakeBlock && damage.containsKey(q)
+					&& world.random.nextFloat() < FAKE_FOUND) {
+				// The guard taps the walls: a painted fake over a hole sounds hollow, is knocked out,
+				// and the hole behind it is filled. An untouched fake keeps its hole hidden.
 				world.setBlockState(q, Blocks.AIR.getDefaultState());
 				fakes++;
 			}
@@ -2274,7 +2276,7 @@ public class CellbreakGame {
 		int holes = 0;
 		for (BlockPos q : new ArrayList<>(damage.keySet())) {
 			if (box.contains(q) && damage.containsKey(q)) {
-				holes += repairTunnel(q).size();
+				holes += repairTunnel(q, false).size();
 			}
 		}
 		if (holes > 0) {
@@ -2838,7 +2840,7 @@ public class CellbreakGame {
 			}
 			if (finder != null) {
 				BlockState was = e.getValue();
-				Set<BlockPos> filled = repairTunnel(pos);
+				Set<BlockPos> filled = repairTunnel(pos, true);
 				holesFound++;
 				broadcast(Text.literal("Охрана нашла " + describe(was) + (filled.size() > 1 ? " — подкоп в " + filled.size() + " блоков" : "")
 						+ " (" + pos.toShortString() + ") и заделала. Будут искать виновного!").formatted(Formatting.RED));
@@ -2868,20 +2870,12 @@ public class CellbreakGame {
 	 * Fills a hole and every damaged block connected to it (a whole tunnel), except where someone
 	 * stands. Returns what was filled.
 	 */
-	private Set<BlockPos> repairTunnel(BlockPos start) {
+	private Set<BlockPos> repairTunnel(BlockPos start, boolean evenHidden) {
 		ServerWorld world = world();
-		Set<BlockPos> seen = new HashSet<>();
-		java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
-		queue.add(start);
-		seen.add(start);
-		while (!queue.isEmpty() && seen.size() < 400) {
-			BlockPos q = queue.poll();
-			for (Direction dir : Direction.values()) {
-				BlockPos n = q.offset(dir);
-				if (damage.containsKey(n) && seen.add(n)) {
-					queue.add(n);
-				}
-			}
+		Set<BlockPos> seen = tunnel(start);
+		if (!evenHidden && hidden(seen)) {
+			// Its way in is covered by a fake nobody found: the guards do not know it is there.
+			return Set.of();
 		}
 		Set<BlockPos> filled = new HashSet<>();
 		for (BlockPos q : seen) {
@@ -2897,13 +2891,46 @@ public class CellbreakGame {
 		return filled;
 	}
 
+	/** A dug tunnel: the broken blocks joined to this one. */
+	private Set<BlockPos> tunnel(BlockPos start) {
+		Set<BlockPos> seen = new HashSet<>();
+		java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
+		queue.add(start);
+		seen.add(start);
+		while (!queue.isEmpty() && seen.size() < 400) {
+			BlockPos q = queue.poll();
+			for (Direction dir : Direction.values()) {
+				BlockPos n = q.offset(dir);
+				if (damage.containsKey(n) && seen.add(n)) {
+					queue.add(n);
+				}
+			}
+		}
+		return seen;
+	}
+
+	/** Whether a tunnel is closed off by a fake wall or vent (and so hidden from the guards). */
+	private boolean hidden(Set<BlockPos> tunnel) {
+		return tunnel.stream().anyMatch(q -> world().getBlockState(q).getBlock() instanceof FakeBlock);
+	}
+
 	/** Everything a caught prisoner broke is filled in (the guards search their route). */
 	private int repairDamageBy(UUID who) {
 		int n = 0;
 		ServerWorld world = world();
+		// Tunnels hidden behind a fake stay: the guards only fill in what they can find.
+		Set<BlockPos> hiddenTunnels = new HashSet<>();
+		for (Map.Entry<BlockPos, UUID> e : damageBy.entrySet()) {
+			if (e.getValue().equals(who) && !hiddenTunnels.contains(e.getKey())) {
+				Set<BlockPos> t = tunnel(e.getKey());
+				if (hidden(t)) {
+					hiddenTunnels.addAll(t);
+				}
+			}
+		}
 		for (Iterator<Map.Entry<BlockPos, UUID>> it = damageBy.entrySet().iterator(); it.hasNext();) {
 			Map.Entry<BlockPos, UUID> e = it.next();
-			if (!e.getValue().equals(who)) {
+			if (!e.getValue().equals(who) || hiddenTunnels.contains(e.getKey())) {
 				continue;
 			}
 			BlockState original = damage.get(e.getKey());
@@ -2971,6 +2998,8 @@ public class CellbreakGame {
 	private final Map<Integer, SimpleInventory> stashes = new HashMap<>();
 	/** Chance that a cell search at roll call looks into the cistern too. */
 	private static final float STASH_FOUND = 0.25F;
+	/** Chance that a cell search taps a fake wall or vent and finds it hollow. */
+	private static final float FAKE_FOUND = 0.25F;
 
 	/**
 	 * Right click on the toilet of a cell: the stash in the cistern. A prisoner hides things there
