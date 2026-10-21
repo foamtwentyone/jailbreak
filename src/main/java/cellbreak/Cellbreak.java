@@ -202,6 +202,10 @@ public class Cellbreak implements ModInitializer {
 			if (sp != null && cellbreak.game.Seats.sit(sp, pos, state)) {
 				return ActionResult.SUCCESS;
 			}
+			// The stash in the toilet cistern of a cell.
+			if (state.isOf(cellbreak.CbDecor.STEEL_TOILET)) {
+				return sp == null || game.useToilet(sp, pos) ? ActionResult.SUCCESS : ActionResult.PASS;
+			}
 			// A dummy in the bed (or taking it back).
 			if (state.getBlock() instanceof BedBlock && sp != null && game.extras().useBed(sp, bedHead(pos, state), false)) {
 				return ActionResult.SUCCESS;

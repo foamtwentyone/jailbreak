@@ -940,7 +940,7 @@ public class CellbreakExtras {
 
 	// ------------------------------------------------------------------ 6. guard dogs
 
-	private static final String[] DOG_NAMES = { "Мухтар", "Рекс" };
+	private static final String[] DOG_NAMES = { "Мартис", "Рекс" };
 
 	private void spawnDogs() {
 		BlockPos at = game.layout().npcGuardSpawn;
@@ -1009,6 +1009,10 @@ public class CellbreakExtras {
 	}
 
 	/** At roll call the dogs walk along the line-up and sniff every prisoner for contraband. */
+	/** A dog in the line-up smells contraband on a prisoner this often, and how much it costs them. */
+	private static final float SNIFF_CHANCE = 0.4F;
+	private static final int SNIFF_HEAT = 20;
+
 	private void sniffLineup(GuardDogEntity dog, int index) {
 		List<ServerPlayerEntity> line = new ArrayList<>(game.online(Role.PRISONER));
 		// Only who stands in the line-up: the missing are the counting guard's business, not the dogs'.
@@ -1026,11 +1030,11 @@ public class CellbreakExtras {
 		}
 		sniffed.add(next.getUuid());
 		dog.getLookControl().lookAt(next);
-		if (CellbreakGame.countContraband(next) > 0) {
+		if (CellbreakGame.countContraband(next) > 0 && random().nextFloat() < SNIFF_CHANCE) {
 			dog.playSound(SoundEvents.ENTITY_WOLF_GROWL, 2.0F, 0.9F);
 			world().playSound(null, dog.getBlockPos(), SoundEvents.ENTITY_WOLF_AMBIENT, SoundCategory.HOSTILE, 2.0F, 1.2F);
-			game.addHeat(next, 40);
-			next.sendMessage(Text.literal(dog.getName().getString() + " учуял у тебя что-то запрещённое! Подозрение +40")
+			game.addHeat(next, SNIFF_HEAT);
+			next.sendMessage(Text.literal(dog.getName().getString() + " учуял у тебя что-то запрещённое! Подозрение +" + SNIFF_HEAT)
 					.formatted(Formatting.RED));
 		} else {
 			dog.playSound(SoundEvents.ENTITY_WOLF_PANT, 0.8F, 1.0F);

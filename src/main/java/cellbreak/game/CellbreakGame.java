@@ -37,6 +37,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.item.Item;
+import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
@@ -443,6 +444,7 @@ public class CellbreakGame {
 		running = true;
 		ticks = 0;
 		day = 1;
+		stashes.clear();
 		regrowth.clear();
 		graffiti.clear();
 		clearSearchlights();
@@ -2245,6 +2247,19 @@ public class CellbreakGame {
 		if (items > 0) {
 			found.add("запрещённое в тумбочке (" + items + ")");
 		}
+		SimpleInventory stash = stashes.get(d.cell);
+		if (stash != null && !stash.isEmpty() && world.random.nextFloat() < STASH_FOUND) {
+			int hidden = 0;
+			for (int i = 0; i < stash.size(); i++) {
+				if (CbContent.isContraband(stash.getStack(i))) {
+					hidden += stash.getStack(i).getCount();
+					stash.setStack(i, ItemStack.EMPTY);
+				}
+			}
+			if (hidden > 0) {
+				found.add("тайник в бачке унитаза (" + hidden + ")");
+			}
+		}
 		int fakes = 0;
 		for (BlockPos q : BlockPos.iterate(box.getMinX(), box.getMinY(), box.getMinZ(), box.getMaxX(), box.getMaxY(), box.getMaxZ())) {
 			if (world.getBlockState(q).getBlock() instanceof FakeBlock && damage.containsKey(q)) {
@@ -2950,6 +2965,38 @@ public class CellbreakGame {
 			}
 		}
 		return null;
+	}
+
+	/** The stash in each cell's toilet cistern, by cell. */
+	private final Map<Integer, SimpleInventory> stashes = new HashMap<>();
+	/** Chance that a cell search at roll call looks into the cistern too. */
+	private static final float STASH_FOUND = 0.25F;
+
+	/**
+	 * Right click on the toilet of a cell: the stash in the cistern. A prisoner hides things there
+	 * (their own cell or someone else's); a guard looks in and takes what he likes.
+	 */
+	public boolean useToilet(ServerPlayerEntity p, BlockPos pos) {
+		if (!running || !(isPrisoner(p) || isGuard(p))) {
+			return false;
+		}
+		List<PrisonLayout.Cell> cells = layout().cells;
+		int cell = -1;
+		for (int i = 0; i < cells.size(); i++) {
+			if (cells.get(i).interior.expand(1).contains(pos)) {
+				cell = i;
+				break;
+			}
+		}
+		if (cell < 0) {
+			return false;
+		}
+		SimpleInventory stash = stashes.computeIfAbsent(cell, k -> new SimpleInventory(9));
+		p.openHandledScreen(new net.minecraft.screen.SimpleNamedScreenHandlerFactory(
+				(id, inv, pl) -> new net.minecraft.screen.GenericContainerScreenHandler(net.minecraft.screen.ScreenHandlerType.GENERIC_9X1, id, inv, stash, 1),
+				Text.literal(isGuard(p) ? "Бачок унитаза (проверка)" : "Тайник в бачке унитаза")));
+		world().playSound(null, pos, SoundEvents.BLOCK_STONE_BUTTON_CLICK_ON, SoundCategory.BLOCKS, 0.6F, 0.7F);
+		return true;
 	}
 
 	/** End of round: put the prison back the way it was. */
@@ -4449,9 +4496,9 @@ public class CellbreakGame {
 		return n;
 	}
 
+	/** What turns up in the desks: allowed things only (iron comes from the work field, traders, parcels). */
 	private static final Item[] SCRAP = { Items.STICK, Items.STICK, Items.STICK, Items.STRING, Items.STRING,
-			Items.STRING, Items.FLINT, Items.FLINT, Items.IRON_NUGGET, Items.IRON_NUGGET, Items.IRON_NUGGET,
-			Items.PAPER, Items.PAPER, Items.PAPER, Items.CLAY_BALL, Items.BREAD };
+			Items.STRING, Items.FLINT, Items.FLINT, Items.PAPER, Items.PAPER, Items.PAPER, Items.CLAY_BALL, Items.BREAD };
 
 	private void refillScrap() {
 		for (BlockPos pos : layout().scrapChests) {
