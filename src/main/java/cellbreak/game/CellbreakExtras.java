@@ -52,6 +52,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.EulerAngle;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.RaycastContext;
@@ -826,9 +827,8 @@ public class CellbreakExtras {
 				x = c.start.x + (c.foot.x - c.start.x) * k;
 				z = c.start.z + (c.foot.z - c.start.z) * k;
 			} else {
-				// Hand over hand: a pull every half second.
-				double phase = ((t - 10) % 10) / 10.0;
-				c.y += c.upSpeed * (phase < 0.4 ? 2.5 : 0);
+				// Hand over hand, at an even pace.
+				c.y += c.upSpeed;
 				if (c.y >= c.top.getY() - 0.9) {
 					it.remove();
 					p.teleport(world(), c.top.getX() + 0.5, c.top.getY(), c.top.getZ() + 0.5, p.getYaw(), p.getPitch());
@@ -844,9 +844,14 @@ public class CellbreakExtras {
 					continue;
 				}
 			}
-			// Pulled to where they should be by velocity: the camera stays the player's own.
-			Vec3d want = new Vec3d(x, c.y, z);
-			p.setVelocity(want.subtract(p.getPos()).multiply(0.8));
+			// Moved by velocity, so the camera stays the player's own. The client is a few ticks
+			// behind what the server sees: an even speed along the rope plus a soft pull back onto
+			// it, never a hard chase of the target point (that throws the climber up and down).
+			Vec3d err = new Vec3d(x, c.y, z).subtract(p.getPos());
+			double along = c.down ? -SLIDE_SPEED : t < 10 ? 0 : c.upSpeed;
+			p.setVelocity(MathHelper.clamp(err.x * 0.2, -0.12, 0.12),
+					along + MathHelper.clamp(err.y * 0.15, -0.1, 0.1),
+					MathHelper.clamp(err.z * 0.2, -0.12, 0.12));
 			p.velocityModified = true;
 			p.fallDistance = 0;
 		}
